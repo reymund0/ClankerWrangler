@@ -7,9 +7,9 @@ When invoked, follow this workflow exactly.
 
 ## Purpose
 
-Use Claude to create the initial implementation plan, use the local Codex CLI as a second-opinion reviewer, then reconcile the feedback into a final implementation plan before implementation begins.
+Use the invoking agent to create the initial implementation plan, use the local Codex CLI as a second-opinion reviewer, then reconcile the feedback into a final implementation plan before implementation begins.
 
-Codex is a reviewer, not the owner of the plan. Claude owns the final implementation plan.
+Codex is a reviewer, not the owner of the plan. The invoking agent owns the final implementation plan.
 
 This skill is only for implementation plan construction. It does not perform implementation.
 
@@ -32,29 +32,46 @@ Keep Codex in `read-only` sandbox mode for all review steps.
 2. Produce a concise implementation plan with these sections:
    - Goal
    - Assumptions
+   - Out of scope
    - Files likely to change
    - Step-by-step implementation sequence
    - Risks / edge cases
+   - Open questions / blockers
+   - Validation criteria
    - Test plan
 
-3. Write the plan to `.claude\tmp\codex-plan.md`.
+3. Write the planning inputs to `.clanker\tmp`.
    - Create the directory if it does not exist.
+   - Save the user's request to `.clanker\tmp\codex-request.md`.
+   - Save a concise repo-context summary to `.clanker\tmp\codex-context.md`.
+   - Save the draft plan to `.clanker\tmp\codex-plan.md`.
 
 4. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for plan review:
 
-    New-Item -ItemType Directory -Force .claude\tmp | Out-Null
+    New-Item -ItemType Directory -Force .clanker\tmp | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
     $fallbackModel = "gpt-5.4"
-    $plan = Get-Content .claude\tmp\codex-plan.md -Raw
+    $reviewOutput = ".clanker\tmp\codex-review.txt"
+    $modelOutput = ".clanker\tmp\codex-review-model.txt"
+    $usedCodexModel = $null
+
+    Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
+
+    $request = Get-Content .clanker\tmp\codex-request.md -Raw
+    $repoContext = Get-Content .clanker\tmp\codex-context.md -Raw
+    $plan = Get-Content .clanker\tmp\codex-plan.md -Raw
 
     $prompt = @"
     Review this implementation plan for a software change.
     Be critical and practical.
 
     Look for:
+    - mismatch between the user request and the plan
+    - missing repo context or ignored repository conventions
     - missing edge cases
     - overengineering
     - risky assumptions
@@ -68,6 +85,12 @@ PowerShell command for plan review:
     3. Suggested changes to the plan
     4. Should implementation proceed as-is?
 
+    User request:
+    $request
+
+    Repo context:
+    $repoContext
+
     Plan:
     $plan
     "@
@@ -77,30 +100,45 @@ PowerShell command for plan review:
       --sandbox read-only `
       -c model_reasoning_effort=xhigh `
       -c model_verbosity=medium `
-      --output-last-message .claude\tmp\codex-review.txt `
+      --output-last-message $reviewOutput `
       -
 
-    if ($LASTEXITCODE -ne 0 -and $codexModel -ne $fallbackModel) {
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
+      $usedCodexModel = $codexModel
+    }
+    elseif ($codexModel -ne $fallbackModel) {
       Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
+      Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
+
       $prompt | codex exec `
         --model $fallbackModel `
         --sandbox read-only `
         -c model_reasoning_effort=xhigh `
         -c model_verbosity=medium `
-        --output-last-message .claude\tmp\codex-review.txt `
+        --output-last-message $reviewOutput `
         -
+
+      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
+        $usedCodexModel = $fallbackModel
+      }
     }
 
-5. Read `.claude\tmp\codex-review.txt`.
+    if ($null -eq $usedCodexModel) {
+      throw "Codex review failed; no current review output was created."
+    }
+
+    Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
+
+5. Read `.clanker\tmp\codex-review.txt`.
 
 6. Summarize Codex's feedback in the conversation.
-   - Mention whether Codex used `gpt-5.5` or fell back to `gpt-5.4`.
+   - Read `.clanker\tmp\codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 7. Revise the plan based only on useful feedback.
    - Keep feedback that is concrete, relevant, and actionable.
    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
 
-8. Save final plan to `.claude\tmp\codex-plan-final.md` and present the revised plan under this exact heading:
+8. Save final plan to `.clanker\tmp\codex-plan-final.md` and present the revised plan under this exact heading:
 
     FINAL IMPLEMENTATION PLAN
 
@@ -109,7 +147,7 @@ PowerShell command for plan review:
 ## Rules
 
 - Treat Codex as a reviewer, not the owner of the plan.
-- Claude owns the final implementation plan.
+- The invoking agent owns the final implementation plan.
 - Prefer the repo's existing patterns over generic best practices when they conflict.
 - Keep scope tight.
 - Do not let Codex feedback cause unnecessary redesign unless it identifies a meaningful risk.

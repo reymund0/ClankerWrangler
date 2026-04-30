@@ -13,7 +13,7 @@ This workflow should act as a pre-planning quality gate.
 
 Do not allow ambiguous tickets to proceed without clearly flagging blockers.
 
-Codex is a reviewer, not the owner of the ticket refinement. Claude owns the final refined ticket.
+Codex is a reviewer, not the owner of the ticket refinement. The invoking agent owns the final refined ticket.
 
 ## Model Selection
 
@@ -31,8 +31,7 @@ Keep Codex in `read-only` sandbox mode for all review steps.
 
 - Preferred usage: `/clanker-refine-ticket-with-codex MR-42`
 - If no Jira ticket key is provided, ask the user for the ticket key before continuing.
-- If Jira data cannot be fetched, fall back to manual ticket text if available.
-- If neither Jira data nor manual ticket text is available, stop and ask for ticket information.
+- If Jira data cannot be fetched, report that the Jira connection failed, include any error message encountered, and stop the skill run.
 
 ## Workflow
 
@@ -62,9 +61,9 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - aggressively compress long comment threads
 
 5. If Jira fetch fails:
-   - fall back to manual ticket text
-   - clearly state Jira context was unavailable
-   - continue only if sufficient information exists
+   - report that the Jira connection failed
+   - include any error message encountered
+   - stop the skill run
 
 6. Inspect the local repository:
    - identify likely impacted modules
@@ -89,9 +88,15 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - Risks
    - Ambiguities
    - Acceptance Criteria
+   - Readiness Validation
    - Validation / Test Requirements
    - Blocking Questions
    - Suggested Decisions Needed
+
+   Each assumption must include:
+   - source: `Jira`, `repo context`, or `inference`
+   - impact: `low`, `medium`, or `high`
+   - confidence: `low`, `medium`, or `high`
 
 8. Strict validation requirements
 
@@ -109,6 +114,13 @@ Before marking the ticket ready, explicitly validate all of the following:
    - Are auth / permissions requirements clear?
    - Are testing expectations clear?
    - Is rollback / risk mitigation needed?
+
+In the **Readiness Validation** section, mark each item as:
+   - `Satisfied`
+   - `Missing`
+   - `Not applicable`
+
+Include a brief reason for each status.
 
 9. If any unresolved ambiguity could materially change architecture, implementation sequence, schema, UX flow, or testing strategy:
 
@@ -153,31 +165,54 @@ Default to:
 
     NEEDS DECISION BEFORE PLANNING
 
-unless all material implementation blockers are resolved.
+READY FOR PLANNING is allowed only when:
+   - all material readiness validation items are `Satisfied` or `Not applicable`
+   - the **Blocking Questions** section is `None`
+   - no medium-impact or high-impact assumption is based only on inference
 
-16. Save the draft refined ticket to `.claude\tmp\refined-ticket.md`.
+Otherwise, use:
+
+    NEEDS DECISION BEFORE PLANNING
+
+16. Save the Codex review inputs to `.clanker\tmp`.
     - Create the directory if it does not exist.
+    - Save the draft refined ticket to `.clanker\tmp\refined-ticket.md`.
+    - Save summarized Jira decision-making context to `.clanker\tmp\refined-ticket-jira-context.md`.
+    - Save summarized repo context to `.clanker\tmp\refined-ticket-repo-context.md`.
 
 17. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for ticket refinement review:
 
-    New-Item -ItemType Directory -Force .claude\tmp | Out-Null
+    New-Item -ItemType Directory -Force .clanker\tmp | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
     $fallbackModel = "gpt-5.4"
-    $refinedTicket = Get-Content .claude\tmp\refined-ticket.md -Raw
+    $reviewOutput = ".clanker\tmp\refined-ticket-codex-review.txt"
+    $modelOutput = ".clanker\tmp\refined-ticket-codex-review-model.txt"
+    $usedCodexModel = $null
+
+    Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
+
+    $refinedTicket = Get-Content .clanker\tmp\refined-ticket.md -Raw
+    $jiraContext = Get-Content .clanker\tmp\refined-ticket-jira-context.md -Raw
+    $repoContext = Get-Content .clanker\tmp\refined-ticket-repo-context.md -Raw
 
     $prompt = @"
     Review this refined engineering ticket.
     Be critical and practical.
 
     Look for:
+    - Jira decisions, scope changes, or constraints omitted from the refined ticket
+    - repo context that is omitted, misrepresented, or inconsistent with the refined ticket
     - missing acceptance criteria
     - unclear desired behavior
     - unresolved ambiguity hidden as an assumption
     - missing implementation-impacting questions
     - missing repository constraints
+    - missing readiness validation statuses or reasons
+    - assumptions missing source, impact, or confidence
     - missing validation or test requirements
     - scope that is too broad or too vague
     - verdict mismatch, especially tickets marked ready despite blockers
@@ -188,6 +223,12 @@ PowerShell command for ticket refinement review:
     3. Suggested changes to the refined ticket
     4. Is the readiness verdict justified?
 
+    Jira decision-making context:
+    $jiraContext
+
+    Repo context:
+    $repoContext
+
     Refined ticket:
     $refinedTicket
     "@
@@ -197,31 +238,46 @@ PowerShell command for ticket refinement review:
       --sandbox read-only `
       -c model_reasoning_effort=xhigh `
       -c model_verbosity=medium `
-      --output-last-message .claude\tmp\refined-ticket-codex-review.txt `
+      --output-last-message $reviewOutput `
       -
 
-    if ($LASTEXITCODE -ne 0 -and $codexModel -ne $fallbackModel) {
+    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
+      $usedCodexModel = $codexModel
+    }
+    elseif ($codexModel -ne $fallbackModel) {
       Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
+      Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
+
       $prompt | codex exec `
         --model $fallbackModel `
         --sandbox read-only `
         -c model_reasoning_effort=xhigh `
         -c model_verbosity=medium `
-        --output-last-message .claude\tmp\refined-ticket-codex-review.txt `
+        --output-last-message $reviewOutput `
         -
+
+      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
+        $usedCodexModel = $fallbackModel
+      }
     }
 
-18. Read `.claude\tmp\refined-ticket-codex-review.txt`.
+    if ($null -eq $usedCodexModel) {
+      throw "Codex review failed; no current review output was created."
+    }
+
+    Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
+
+18. Read `.clanker\tmp\refined-ticket-codex-review.txt`.
 
 19. Summarize Codex's feedback in the conversation.
-    - Mention whether Codex used `gpt-5.5` or fell back to `gpt-5.4`.
+    - Read `.clanker\tmp\refined-ticket-codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 20. Revise the refined ticket based only on useful feedback.
     - Keep feedback that is concrete, relevant, and actionable.
     - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
     - Do not let Codex convert material uncertainty into assumptions.
 
-21. Save the final refined ticket to `.claude\tmp\refined-ticket-final.md` and present it under this exact heading:
+21. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md` and present it under this exact heading:
 
     FINAL REFINED TICKET
 
@@ -240,10 +296,11 @@ Optimize for preventing rework.
 
 - Strict mode is a quality gate
 - Codex is a reviewer, not the owner of the refined ticket
-- Claude owns the final refined ticket
+- The invoking agent owns the final refined ticket
 - ambiguity should be surfaced, not assumed away
 - do not convert major ambiguity into assumptions
 - assumptions are allowed only for low-impact details
+- every assumption must include source, impact, and confidence
 - major product / technical uncertainty must become blocking questions
 - repo constraints should override generic best practices
 - prioritize correctness and implementation clarity over speed

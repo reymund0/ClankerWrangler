@@ -19,8 +19,7 @@ Do not allow ambiguous tickets to proceed without clearly flagging blockers.
 
 - Preferred usage: `/clanker-refine-ticket MR-42`
 - If no Jira ticket key is provided, ask the user for the ticket key before continuing.
-- If Jira data cannot be fetched, fall back to manual ticket text if available.
-- If neither Jira data nor manual ticket text is available, stop and ask for ticket information.
+- If Jira data cannot be fetched, report that the Jira connection failed, include any error message encountered, and stop the skill run.
 
 ## Workflow
 
@@ -50,9 +49,9 @@ Do not allow ambiguous tickets to proceed without clearly flagging blockers.
    - aggressively compress long comment threads
 
 5. If Jira fetch fails:
-   - fall back to manual ticket text
-   - clearly state Jira context was unavailable
-   - continue only if sufficient information exists
+   - report that the Jira connection failed
+   - include any error message encountered
+   - stop the skill run
 
 6. Inspect the local repository:
    - identify likely impacted modules
@@ -77,9 +76,15 @@ Do not allow ambiguous tickets to proceed without clearly flagging blockers.
    - Risks
    - Ambiguities
    - Acceptance Criteria
+   - Readiness Validation
    - Validation / Test Requirements
    - Blocking Questions
    - Suggested Decisions Needed
+
+   Each assumption must include:
+   - source: `Jira`, `repo context`, or `inference`
+   - impact: `low`, `medium`, or `high`
+   - confidence: `low`, `medium`, or `high`
 
 8. Strict validation requirements
 
@@ -97,6 +102,13 @@ Before marking the ticket ready, explicitly validate all of the following:
    - Are auth / permissions requirements clear?
    - Are testing expectations clear?
    - Is rollback / risk mitigation needed?
+
+In the **Readiness Validation** section, mark each item as:
+   - `Satisfied`
+   - `Missing`
+   - `Not applicable`
+
+Include a brief reason for each status.
 
 9. If any unresolved ambiguity could materially change architecture, implementation sequence, schema, UX flow, or testing strategy:
 
@@ -141,7 +153,14 @@ Default to:
 
     NEEDS DECISION BEFORE PLANNING
 
-unless all material implementation blockers are resolved.
+READY FOR PLANNING is allowed only when:
+   - all material readiness validation items are `Satisfied` or `Not applicable`
+   - the **Blocking Questions** section is `None`
+   - no medium-impact or high-impact assumption is based only on inference
+
+Otherwise, use:
+
+    NEEDS DECISION BEFORE PLANNING
 
 ## Output style
 
@@ -160,6 +179,7 @@ Optimize for preventing rework.
 - ambiguity should be surfaced, not assumed away
 - do not convert major ambiguity into assumptions
 - assumptions are allowed only for low-impact details
+- every assumption must include source, impact, and confidence
 - major product / technical uncertainty must become blocking questions
 - repo constraints should override generic best practices
 - prioritize correctness and implementation clarity over speed

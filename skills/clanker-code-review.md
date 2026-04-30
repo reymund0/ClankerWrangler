@@ -16,12 +16,21 @@ Do not use this skill for ticket refinement or implementation planning.
 1. Inspect the current repository state.
 
 Review:
-- current git diff
-- staged changes
-- unstaged changes
-- newly created files
-- deleted files
-- modified tests
+- changed files between the current branch and `main`
+- implementation diff between the current branch and `main`
+- test changes between the current branch and `main`
+
+Use this command to identify touched files:
+
+```powershell
+git diff --name-status main...HEAD
+```
+
+Use the branch diff for the full review:
+
+```powershell
+git diff main...HEAD
+```
 
 2. Identify all changed files.
 
@@ -78,6 +87,9 @@ Avoid low-value lint or style commentary unless it materially affects maintainab
 
 Return exactly these sections.
 
+## CHANGED FILES
+List each changed file from `git diff --name-status main...HEAD` and its likely purpose.
+
 ## CRITICAL ISSUES
 Must-fix bugs, regressions, data integrity risks, or architecture violations.
 
@@ -85,7 +97,7 @@ Must-fix bugs, regressions, data integrity risks, or architecture violations.
 Cleanup, readability, maintainability, or optional improvements.
 
 ## TEST GAPS
-Specific missing test scenarios.
+Specific missing test scenarios. State `None found` when no meaningful test gap exists.
 
 ## FINAL VERDICT
 Use exactly one of:
@@ -93,12 +105,18 @@ Use exactly one of:
 - APPROVED WITH FIXES
 - REQUIRES CHANGES
 
+Verdict criteria:
+- Use `REQUIRES CHANGES` for correctness, regression, data integrity, API contract, or security risks.
+- Use `APPROVED WITH FIXES` for non-blocking improvements or meaningful test gaps.
+- Use `APPROVED` only when no material issues remain.
+
 ## Rules
 
 - Be concise.
 - Prioritize correctness.
 - Focus on root cause.
+- Every issue must include location, observed problem, user impact or risk, and suggested fix.
 - Do not rewrite code unless asked.
 - Surface backend risks aggressively.
 - Highlight database and API contract issues.
-- Identify missing tests every time.
+- Always evaluate test coverage and state `None found` when no meaningful test gap exists.
