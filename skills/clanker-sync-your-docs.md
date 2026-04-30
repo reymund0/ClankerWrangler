@@ -1,9 +1,9 @@
 ---
-name: sync-ai-context-docs
+name: clanker-sync-your-docs
 description: Keep CLAUDE.md and docs/conventions/ in sync with meaningful repository changes. Run this skill at the end of a task to review what changed and update documentation if needed. Use this whenever you've completed a task involving architecture changes, new conventions, utilities, build/test workflows, auth/data flow changes, or persistence patterns. The skill will analyze the git diff, determine if updates are needed, propose specific changes, and ask for approval before modifying files.
 ---
 
-# Sync AI Context Docs
+# Clanker Sync Your Docs
 
 At the end of a task, review the changes you made and update repository documentation to keep AI guidance in sync with the codebase.
 

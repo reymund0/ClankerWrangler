@@ -1,5 +1,5 @@
 ---
-name: refine-ticket-strict
+name: clanker-refine-ticket
 description: Fetch a Jira ticket through the Atlassian MCP server, combine it with local repo context, and rewrite it into a planning-ready engineering ticket using strict validation rules.
 ---
 
@@ -17,7 +17,7 @@ Do not allow ambiguous tickets to proceed without clearly flagging blockers.
 
 ## Invocation behavior
 
-- Preferred usage: `/refine-ticket-strict MR-42`
+- Preferred usage: `/clanker-refine-ticket MR-42`
 - If no Jira ticket key is provided, ask the user for the ticket key before continuing.
 - If Jira data cannot be fetched, fall back to manual ticket text if available.
 - If neither Jira data nor manual ticket text is available, stop and ask for ticket information.

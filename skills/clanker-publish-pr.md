@@ -1,9 +1,9 @@
 ---
-name: publish-pr
+name: clanker-publish-pr
 description: Create GitHub pull requests with a standardized title derived from the current branch name and a concise description grounded in the actual branch diff. Use when the user asks to publish, open, or create a pull request, including draft/help-first PR preparation.
 ---
 
-# Publish PR
+# Clanker Publish PR
 
 When the user asks to publish, open, or create a pull request, follow this workflow.
 

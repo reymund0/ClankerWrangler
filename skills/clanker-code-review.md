@@ -1,9 +1,9 @@
 ---
-name: codex-review
+name: clanker-code-review
 description: Review existing code changes in a repository for bugs, regressions, missing tests, maintainability risks, and implementation drift. Use after implementation work is complete, before committing, before opening a PR, after large refactors, after backend or database changes, and after UI and API integration work.
 ---
 
-# Codex Review
+# Clanker Code Review
 
 ## Purpose
 

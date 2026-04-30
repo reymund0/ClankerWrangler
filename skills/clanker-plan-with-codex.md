@@ -1,6 +1,6 @@
 ---
-name: codex-review-loop
-description: Create an implementation plan, send it to the local Codex CLI for review using GPT-5.5 when available, reconcile the feedback, and optionally implement.
+name: clanker-plan-with-codex
+description: Create an implementation plan, send it to the local Codex CLI for review using GPT-5.5 when available, and reconcile the feedback into a final plan before implementation begins.
 ---
 
 When invoked, follow this workflow exactly.
@@ -10,6 +10,8 @@ When invoked, follow this workflow exactly.
 Use Claude to create the initial implementation plan, use the local Codex CLI as a second-opinion reviewer, then reconcile the feedback into a final implementation plan before implementation begins.
 
 Codex is a reviewer, not the owner of the plan. Claude owns the final implementation plan.
+
+This skill is only for implementation plan construction. It does not perform implementation.
 
 ## Model Selection
 
@@ -102,71 +104,7 @@ PowerShell command for plan review:
 
     FINAL IMPLEMENTATION PLAN
 
-9. Do not begin implementation unless the user asked to proceed.
-
-10. If implementation proceeds:
-    - implement the final plan
-    - follow existing repo conventions
-    - avoid unnecessary refactors outside the ticket scope
-    - run relevant tests when possible
-
-11. After implementation, run a second Codex review.
-
-PowerShell command for post-implementation review:
-
-    New-Item -ItemType Directory -Force .claude\tmp | Out-Null
-
-    $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
-    $fallbackModel = "gpt-5.4"
-
-    $prompt = @"
-    Review the implemented changes in this repository.
-
-    Focus on:
-    - bugs
-    - regressions
-    - missing tests
-    - maintainability issues
-    - risky changes
-    - anything that does not match the intended plan
-
-    Return exactly these sections:
-    1. Critical issues
-    2. Non-critical issues
-    3. Recommended fixes
-    4. Overall verdict
-    "@
-
-    $prompt | codex exec `
-      --model $codexModel `
-      --sandbox read-only `
-      -c model_reasoning_effort=high `
-      -c model_verbosity=medium `
-      --output-last-message .claude\tmp\codex-post-review.txt `
-      -
-
-    if ($LASTEXITCODE -ne 0 -and $codexModel -ne $fallbackModel) {
-      Write-Host "Codex post-implementation review with $codexModel failed. Retrying with $fallbackModel..."
-      $prompt | codex exec `
-        --model $fallbackModel `
-        --sandbox read-only `
-        -c model_reasoning_effort=high `
-        -c model_verbosity=medium `
-        --output-last-message .claude\tmp\codex-post-review.txt `
-        -
-    }
-
-12. Read `.claude\tmp\codex-post-review.txt`.
-
-13. Apply worthwhile fixes from the post-implementation review.
-    - Prioritize correctness, regressions, and missing test coverage.
-    - Ignore low-value nitpicks unless they materially improve maintainability.
-
-14. End with a concise summary containing:
-    - what was implemented
-    - which Codex model reviewed it
-    - what Codex caught
-    - what changed after review
+9. Do not begin implementation unless the user separately asks to proceed after reviewing the final plan.
 
 ## Rules
 
@@ -179,3 +117,4 @@ PowerShell command for post-implementation review:
 - Fall back to `gpt-5.4` if `gpt-5.5` is unavailable.
 - Keep Codex in `read-only` mode for review steps.
 - Do not use `--full-auto` for review steps because it implies `workspace-write` sandboxing.
+- Do not implement changes as part of this skill.
