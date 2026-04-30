@@ -21,7 +21,7 @@ If `gpt-5.5` is not available in the local Codex account, authentication mode, o
 
 Allow overriding the review model with the `CODEX_REVIEW_MODEL` environment variable.
 
-Use `model_reasoning_effort=high` by default. Use `xhigh` only if the user explicitly asks for the deepest possible review.
+Use `model_reasoning_effort=xhigh` by default. Use `high` only if the user explicitly asks for a lower reasoning model.
 
 Keep Codex in `read-only` sandbox mode for all review steps.
 
@@ -75,7 +75,7 @@ PowerShell command for plan review:
     $prompt | codex exec `
       --model $codexModel `
       --sandbox read-only `
-      -c model_reasoning_effort=high `
+      -c model_reasoning_effort=xhigh `
       -c model_verbosity=medium `
       --output-last-message .claude\tmp\codex-review.txt `
       -
@@ -85,7 +85,7 @@ PowerShell command for plan review:
       $prompt | codex exec `
         --model $fallbackModel `
         --sandbox read-only `
-        -c model_reasoning_effort=high `
+        -c model_reasoning_effort=xhigh `
         -c model_verbosity=medium `
         --output-last-message .claude\tmp\codex-review.txt `
         -

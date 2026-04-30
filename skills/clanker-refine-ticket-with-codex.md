@@ -1,0 +1,253 @@
+---
+name: clanker-refine-ticket-with-codex
+description: Fetch a Jira ticket through the Atlassian MCP server, combine it with local repo context, rewrite it into a planning-ready engineering ticket using strict validation rules, and use the local Codex CLI to review and improve the refined output.
+---
+
+When invoked, follow this workflow exactly.
+
+## Purpose
+
+Turn a Jira ticket into a planning-ready engineering ticket with strict validation, then use Codex as a second-opinion reviewer before presenting the final result.
+
+This workflow should act as a pre-planning quality gate.
+
+Do not allow ambiguous tickets to proceed without clearly flagging blockers.
+
+Codex is a reviewer, not the owner of the ticket refinement. Claude owns the final refined ticket.
+
+## Model Selection
+
+Use `gpt-5.5` by default for Codex review steps.
+
+If `gpt-5.5` is not available in the local Codex account, authentication mode, or rollout state, retry once with `gpt-5.4`.
+
+Allow overriding the review model with the `CODEX_REVIEW_MODEL` environment variable.
+
+Use `model_reasoning_effort=xhigh` by default. Use `high` only if the user explicitly asks for a lower reasoning model.
+
+Keep Codex in `read-only` sandbox mode for all review steps.
+
+## Invocation behavior
+
+- Preferred usage: `/clanker-refine-ticket-with-codex MR-42`
+- If no Jira ticket key is provided, ask the user for the ticket key before continuing.
+- If Jira data cannot be fetched, fall back to manual ticket text if available.
+- If neither Jira data nor manual ticket text is available, stop and ask for ticket information.
+
+## Workflow
+
+1. Identify the Jira ticket key from user input.
+
+2. Use the Atlassian MCP tools to fetch the Jira issue.
+
+3. Pull ticket context:
+   - ticket key
+   - summary / title
+   - description
+   - acceptance criteria
+   - status
+   - priority
+   - labels
+   - epic / parent
+   - subtasks
+   - linked issues
+   - comments
+   - attachments metadata
+
+4. Keep context focused:
+   - summarize comments unless only a few short comments exist
+   - list linked issues by default
+   - expand only directly relevant dependencies / blockers
+   - mention attachments without deeply expanding unless clearly critical
+   - aggressively compress long comment threads
+
+5. If Jira fetch fails:
+   - fall back to manual ticket text
+   - clearly state Jira context was unavailable
+   - continue only if sufficient information exists
+
+6. Inspect the local repository:
+   - identify likely impacted modules
+   - locate similar existing implementations
+   - capture technical constraints
+   - note existing conventions and architecture boundaries
+   - call out likely files or layers affected
+
+7. Rewrite the ticket into this structure:
+
+   - Title
+   - Jira Source
+   - Objective
+   - Business / Product Context
+   - Current Behavior
+   - Desired Behavior
+   - Scope
+   - Out of Scope
+   - Assumptions
+   - Relevant Repo Context
+   - Likely Impacted Areas
+   - Risks
+   - Ambiguities
+   - Acceptance Criteria
+   - Validation / Test Requirements
+   - Blocking Questions
+   - Suggested Decisions Needed
+
+8. Strict validation requirements
+
+Before marking the ticket ready, explicitly validate all of the following:
+
+   - Is the expected behavior clearly defined?
+   - Is success measurable?
+   - Is scope bounded?
+   - Are edge cases called out?
+   - Are failure states understood?
+   - Are dependencies / linked tickets known?
+   - Are UX expectations clear if this is a UI ticket?
+   - Are API contracts / request-response expectations clear?
+   - Are DB / migration impacts understood?
+   - Are auth / permissions requirements clear?
+   - Are testing expectations clear?
+   - Is rollback / risk mitigation needed?
+
+9. If any unresolved ambiguity could materially change architecture, implementation sequence, schema, UX flow, or testing strategy:
+
+   DO NOT mark as ready
+
+10. Instead, produce a **Blocking Questions** section.
+
+These questions should be:
+   - concise
+   - implementation-relevant
+   - decision-focused
+   - prioritized by impact
+
+11. Extract comment-driven decisions:
+   - product clarifications
+   - scope shifts
+   - PM / stakeholder decisions
+   - technical constraints mentioned later in comments
+
+12. When linked issues exist:
+    - identify blockers
+    - identify prerequisite work
+    - identify shared dependencies
+    - highlight cross-ticket coupling risks
+
+13. When attachments exist:
+    - mention them
+    - indicate they were not deeply inspected
+    - explicitly recommend inspection if UI behavior depends on them
+
+14. End the draft refined ticket with one of these exact verdicts:
+
+    READY FOR PLANNING
+
+    or
+
+    NEEDS DECISION BEFORE PLANNING
+
+15. Strict verdict rule
+
+Default to:
+
+    NEEDS DECISION BEFORE PLANNING
+
+unless all material implementation blockers are resolved.
+
+16. Save the draft refined ticket to `.claude\tmp\refined-ticket.md`.
+    - Create the directory if it does not exist.
+
+17. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
+
+PowerShell command for ticket refinement review:
+
+    New-Item -ItemType Directory -Force .claude\tmp | Out-Null
+
+    $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
+    $fallbackModel = "gpt-5.4"
+    $refinedTicket = Get-Content .claude\tmp\refined-ticket.md -Raw
+
+    $prompt = @"
+    Review this refined engineering ticket.
+    Be critical and practical.
+
+    Look for:
+    - missing acceptance criteria
+    - unclear desired behavior
+    - unresolved ambiguity hidden as an assumption
+    - missing implementation-impacting questions
+    - missing repository constraints
+    - missing validation or test requirements
+    - scope that is too broad or too vague
+    - verdict mismatch, especially tickets marked ready despite blockers
+
+    Return exactly these sections:
+    1. Major concerns
+    2. Minor concerns
+    3. Suggested changes to the refined ticket
+    4. Is the readiness verdict justified?
+
+    Refined ticket:
+    $refinedTicket
+    "@
+
+    $prompt | codex exec `
+      --model $codexModel `
+      --sandbox read-only `
+      -c model_reasoning_effort=xhigh `
+      -c model_verbosity=medium `
+      --output-last-message .claude\tmp\refined-ticket-codex-review.txt `
+      -
+
+    if ($LASTEXITCODE -ne 0 -and $codexModel -ne $fallbackModel) {
+      Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
+      $prompt | codex exec `
+        --model $fallbackModel `
+        --sandbox read-only `
+        -c model_reasoning_effort=xhigh `
+        -c model_verbosity=medium `
+        --output-last-message .claude\tmp\refined-ticket-codex-review.txt `
+        -
+    }
+
+18. Read `.claude\tmp\refined-ticket-codex-review.txt`.
+
+19. Summarize Codex's feedback in the conversation.
+    - Mention whether Codex used `gpt-5.5` or fell back to `gpt-5.4`.
+
+20. Revise the refined ticket based only on useful feedback.
+    - Keep feedback that is concrete, relevant, and actionable.
+    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
+    - Do not let Codex convert material uncertainty into assumptions.
+
+21. Save the final refined ticket to `.claude\tmp\refined-ticket-final.md` and present it under this exact heading:
+
+    FINAL REFINED TICKET
+
+## Output style
+
+- concise
+- engineering-focused
+- decision-oriented
+- planning-ready
+- high signal
+
+Do not optimize for speed.
+Optimize for preventing rework.
+
+## Rules
+
+- Strict mode is a quality gate
+- Codex is a reviewer, not the owner of the refined ticket
+- Claude owns the final refined ticket
+- ambiguity should be surfaced, not assumed away
+- do not convert major ambiguity into assumptions
+- assumptions are allowed only for low-impact details
+- major product / technical uncertainty must become blocking questions
+- repo constraints should override generic best practices
+- prioritize correctness and implementation clarity over speed
+- Use `gpt-5.5` by default.
+- Fall back to `gpt-5.4` if `gpt-5.5` is unavailable.
+- Keep Codex in `read-only` mode for review steps.
+- Do not use `--full-auto` for review steps because it implies `workspace-write` sandboxing.
