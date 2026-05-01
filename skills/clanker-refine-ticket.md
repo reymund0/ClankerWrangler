@@ -162,6 +162,11 @@ Otherwise, use:
 
     NEEDS DECISION BEFORE PLANNING
 
+16. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md`.
+    - Create the directory if it does not exist.
+    - Do not output the final refined ticket contents in the conversation.
+    - Tell the user the final refined ticket was saved and provide the file path so they can view it themselves.
+
 ## Output style
 
 - concise

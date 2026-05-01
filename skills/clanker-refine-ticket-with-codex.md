@@ -277,9 +277,9 @@ PowerShell command for ticket refinement review:
     - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
     - Do not let Codex convert material uncertainty into assumptions.
 
-21. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md` and present it under this exact heading:
-
-    FINAL REFINED TICKET
+21. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md`.
+    - Do not output the final refined ticket contents in the conversation.
+    - Tell the user the final refined ticket was saved and provide the file path so they can view it themselves.
 
 ## Output style
 
