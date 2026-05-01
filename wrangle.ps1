@@ -11,63 +11,27 @@ $RepoRoot = $PSScriptRoot
 $SkillsSource = Join-Path $RepoRoot "skills"
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 
-function Resolve-ExistingPath {
-    param([Parameter(Mandatory)][string]$InputPath)
-
-    if (Test-Path -LiteralPath $InputPath) {
-        return (Resolve-Path -LiteralPath $InputPath).ProviderPath
-    }
-
-    return $null
-}
-
-function Test-SymlinkTarget {
+function Copy-SafeFile {
     param(
-        [Parameter(Mandatory)][string]$LinkPath,
-        [Parameter(Mandatory)][string]$TargetPath
+        [Parameter(Mandatory)][string]$DestinationPath,
+        [Parameter(Mandatory)][string]$SourcePath
     )
 
-    $item = Get-Item -LiteralPath $LinkPath -Force -ErrorAction SilentlyContinue
-    if ($null -eq $item -or -not ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
-        return $false
-    }
-
-    $linkTarget = @($item.Target)[0]
-    $resolvedTarget = Resolve-ExistingPath -InputPath $TargetPath
-    $resolvedLinkTarget = Resolve-ExistingPath -InputPath $linkTarget
-
-    return $null -ne $resolvedTarget -and $resolvedTarget -eq $resolvedLinkTarget
-}
-
-function New-SafeSymlink {
-    param(
-        [Parameter(Mandatory)][string]$LinkPath,
-        [Parameter(Mandatory)][string]$TargetPath
-    )
-
-    $existingItem = Get-Item -LiteralPath $LinkPath -Force -ErrorAction SilentlyContinue
+    $existingItem = Get-Item -LiteralPath $DestinationPath -Force -ErrorAction SilentlyContinue
     if ($null -ne $existingItem) {
-        if (Test-SymlinkTarget -LinkPath $LinkPath -TargetPath $TargetPath) {
-            Write-Host "Already linked: $LinkPath"
-            return
+        if ($existingItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+            Remove-Item -LiteralPath $DestinationPath -Force
         }
-
-        if (-not $Force) {
-            Write-Warning "Skipping existing path: $LinkPath (pass -Force to replace it)"
-            return
+        elseif ($existingItem.PSIsContainer) {
+            throw "Cannot replace directory with file: $DestinationPath"
         }
-
-        Remove-Item -LiteralPath $LinkPath -Force
     }
 
-    try {
-        New-Item -ItemType SymbolicLink -Path $LinkPath -Target $TargetPath | Out-Null
-    }
-    catch [System.UnauthorizedAccessException] {
-        throw "Unable to create symbolic link: $LinkPath. Enable Windows Developer Mode or run this script from an elevated PowerShell session."
-    }
+    $destinationDirectory = Split-Path -Parent $DestinationPath
+    New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
 
-    Write-Host "Linked: $LinkPath -> $TargetPath"
+    Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+    Write-Host "Copied: $DestinationPath <- $SourcePath"
 }
 
 function ConvertTo-SkillDisplayName {
@@ -157,14 +121,15 @@ function Install-AgentLinks {
         $skillLink = Join-Path $skillDirectory "SKILL.md"
 
         New-Item -ItemType Directory -Path $skillDirectory -Force | Out-Null
-        New-SafeSymlink -LinkPath $skillLink -TargetPath $skillFile.FullName
+
+        Copy-SafeFile -DestinationPath $skillLink -SourcePath $skillFile.FullName
 
         if ($AgentName -eq "Codex") {
             New-CodexOpenAIYaml -SkillDirectory $skillDirectory -SkillName $skillName
         }
     }
 
-    New-SafeSymlink -LinkPath $rulesLink -TargetPath $GlobalRulesSource
+    Copy-SafeFile -DestinationPath $rulesLink -SourcePath $GlobalRulesSource
 }
 
 function Install-WindsurfRules {
@@ -175,7 +140,7 @@ function Install-WindsurfRules {
     Write-Host "Configuring Windsurf memories at $MemoriesRoot"
 
     New-Item -ItemType Directory -Path $MemoriesRoot -Force | Out-Null
-    New-SafeSymlink -LinkPath $rulesLink -TargetPath $GlobalRulesSource
+    Copy-SafeFile -DestinationPath $rulesLink -SourcePath $GlobalRulesSource
 }
 
 if (-not (Test-Path -LiteralPath $SkillsSource -PathType Container)) {
