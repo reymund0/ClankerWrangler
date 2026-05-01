@@ -54,9 +54,11 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - attachments metadata
 
 4. Keep context focused:
-   - summarize comments unless only a few short comments exist
+   - summarize at most 5 decision-relevant comments
+   - omit or count the rest unless they contain scope, acceptance criteria, blockers, or technical constraints
    - list linked issues by default
    - expand only directly relevant dependencies / blockers
+   - do not expand more than 3 linked issues without asking the user
    - mention attachments without deeply expanding unless clearly critical
    - aggressively compress long comment threads
 
@@ -88,7 +90,7 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - Risks
    - Ambiguities
    - Acceptance Criteria
-   - Readiness Validation
+   - Readiness Validation, only when one or more validation items are `Missing`
    - Validation / Test Requirements
    - Blocking Questions
    - Suggested Decisions Needed
@@ -115,12 +117,13 @@ Before marking the ticket ready, explicitly validate all of the following:
    - Are testing expectations clear?
    - Is rollback / risk mitigation needed?
 
-In the **Readiness Validation** section, mark each item as:
+Track each readiness validation item internally as:
    - `Satisfied`
    - `Missing`
    - `Not applicable`
 
-Include a brief reason for each status.
+Only include the **Readiness Validation** section in the final refined ticket when one or more items are `Missing`.
+When included, list only the `Missing` items with brief reasons. Do not display `Satisfied` or `Not applicable` items.
 
 9. If any unresolved ambiguity could materially change architecture, implementation sequence, schema, UX flow, or testing strategy:
 
@@ -211,7 +214,7 @@ PowerShell command for ticket refinement review:
     - unresolved ambiguity hidden as an assumption
     - missing implementation-impacting questions
     - missing repository constraints
-    - missing readiness validation statuses or reasons
+    - missing readiness validation blockers or reasons
     - assumptions missing source, impact, or confidence
     - missing validation or test requirements
     - scope that is too broad or too vague

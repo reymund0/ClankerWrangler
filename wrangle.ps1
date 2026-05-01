@@ -70,6 +70,71 @@ function New-SafeSymlink {
     Write-Host "Linked: $LinkPath -> $TargetPath"
 }
 
+function ConvertTo-SkillDisplayName {
+    param([Parameter(Mandatory)][string]$SkillName)
+
+    $acronyms = @("API", "CI", "CLI", "MCP", "PR", "UI")
+    $smallWords = @("and", "or", "to", "up", "with")
+
+    $words = $SkillName -split "-" | Where-Object { $_ }
+    $displayWords = for ($i = 0; $i -lt $words.Count; $i++) {
+        $word = $words[$i]
+        $upperWord = $word.ToUpperInvariant()
+        $lowerWord = $word.ToLowerInvariant()
+
+        if ($acronyms -contains $upperWord) {
+            $upperWord
+        }
+        elseif ($i -gt 0 -and $smallWords -contains $lowerWord) {
+            $lowerWord
+        }
+        else {
+            $word.Substring(0, 1).ToUpperInvariant() + $word.Substring(1).ToLowerInvariant()
+        }
+    }
+
+    return ($displayWords -join " ")
+}
+
+function ConvertTo-YamlQuotedString {
+    param([Parameter(Mandatory)][string]$Value)
+
+    return '"' + ($Value -replace '\\', '\\' -replace '"', '\"' -replace "`n", '\n') + '"'
+}
+
+function New-CodexOpenAIYaml {
+    param(
+        [Parameter(Mandatory)][string]$SkillDirectory,
+        [Parameter(Mandatory)][string]$SkillName
+    )
+
+    $agentsDirectory = Join-Path $SkillDirectory "agents"
+    $openAIYaml = Join-Path $agentsDirectory "openai.yaml"
+    $displayName = ConvertTo-SkillDisplayName -SkillName $SkillName
+    $shortDescription = "Help with $displayName workflows"
+    $defaultPrompt = "Use `$$SkillName to help with this task."
+
+    if ($shortDescription.Length -gt 64) {
+        $shortDescription = "$displayName helper"
+    }
+
+    New-Item -ItemType Directory -Path $agentsDirectory -Force | Out-Null
+
+    $content = @(
+        "interface:"
+        "  display_name: $(ConvertTo-YamlQuotedString -Value $displayName)"
+        "  short_description: $(ConvertTo-YamlQuotedString -Value $shortDescription)"
+        "  default_prompt: $(ConvertTo-YamlQuotedString -Value $defaultPrompt)"
+        ""
+        "policy:"
+        "  allow_implicit_invocation: true"
+        ""
+    )
+
+    Set-Content -LiteralPath $openAIYaml -Value $content -Encoding utf8
+    Write-Host "Generated: $openAIYaml"
+}
+
 function Install-AgentLinks {
     param(
         [Parameter(Mandatory)][string]$AgentName,
@@ -93,6 +158,10 @@ function Install-AgentLinks {
 
         New-Item -ItemType Directory -Path $skillDirectory -Force | Out-Null
         New-SafeSymlink -LinkPath $skillLink -TargetPath $skillFile.FullName
+
+        if ($AgentName -eq "Codex") {
+            New-CodexOpenAIYaml -SkillDirectory $skillDirectory -SkillName $skillName
+        }
     }
 
     New-SafeSymlink -LinkPath $rulesLink -TargetPath $GlobalRulesSource
