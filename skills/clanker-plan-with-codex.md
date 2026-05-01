@@ -138,9 +138,9 @@ PowerShell command for plan review:
    - Keep feedback that is concrete, relevant, and actionable.
    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
 
-8. Save final plan to `.clanker\tmp\codex-plan-final.md` and present the revised plan under this exact heading:
-
-    FINAL IMPLEMENTATION PLAN
+8. Save final plan to `.clanker\tmp\codex-plan-final.md`.
+   - Do not output the final plan contents in the conversation.
+   - Tell the user the final plan was saved and provide the file path so they can view it themselves.
 
 9. Do not begin implementation unless the user separately asks to proceed after reviewing the final plan.
 
