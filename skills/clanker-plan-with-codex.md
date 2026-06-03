@@ -40,30 +40,30 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - Validation criteria
    - Test plan
 
-3. Write the planning inputs to `.clanker\tmp`.
+3. Write the planning inputs to `.clanker/tmp`.
    - Create the directory if it does not exist.
-   - Save the user's request to `.clanker\tmp\codex-request.md`.
-   - Save a concise repo-context summary to `.clanker\tmp\codex-context.md`.
-   - Save the draft plan to `.clanker\tmp\codex-plan.md`.
+   - Save the user's request to `.clanker/tmp/codex-request.md`.
+   - Save a concise repo-context summary to `.clanker/tmp/codex-context.md`.
+   - Save the draft plan to `.clanker/tmp/codex-plan.md`.
 
 4. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for plan review:
 
-    New-Item -ItemType Directory -Force .clanker\tmp | Out-Null
+    New-Item -ItemType Directory -Force .clanker/tmp | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
     $fallbackModel = "gpt-5.4"
-    $reviewOutput = ".clanker\tmp\codex-review.txt"
-    $modelOutput = ".clanker\tmp\codex-review-model.txt"
+    $reviewOutput = ".clanker/tmp/codex-review.txt"
+    $modelOutput = ".clanker/tmp/codex-review-model.txt"
     $usedCodexModel = $null
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
-    $request = Get-Content .clanker\tmp\codex-request.md -Raw
-    $repoContext = Get-Content .clanker\tmp\codex-context.md -Raw
-    $plan = Get-Content .clanker\tmp\codex-plan.md -Raw
+    $request = Get-Content .clanker/tmp/codex-request.md -Raw
+    $repoContext = Get-Content .clanker/tmp/codex-context.md -Raw
+    $plan = Get-Content .clanker/tmp/codex-plan.md -Raw
 
     $prompt = @"
     Review this implementation plan for a software change.
@@ -129,16 +129,16 @@ PowerShell command for plan review:
 
     Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
 
-5. Read `.clanker\tmp\codex-review.txt`.
+5. Read `.clanker/tmp/codex-review.txt`.
 
 6. Summarize Codex's feedback in the conversation.
-   - Read `.clanker\tmp\codex-review-model.txt` and mention the exact Codex model that produced the review.
+   - Read `.clanker/tmp/codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 7. Revise the plan based only on useful feedback.
    - Keep feedback that is concrete, relevant, and actionable.
    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
 
-8. Save final plan to `.clanker\tmp\codex-plan-final.md`.
+8. Save final plan to `.clanker/tmp/codex-plan-final.md`.
    - Do not output the final plan contents in the conversation.
    - Tell the user the final plan was saved and provide the file path so they can view it themselves.
 
