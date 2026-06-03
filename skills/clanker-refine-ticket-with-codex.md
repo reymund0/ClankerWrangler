@@ -177,30 +177,30 @@ Otherwise, use:
 
     NEEDS DECISION BEFORE PLANNING
 
-16. Save the Codex review inputs to `.clanker\tmp`.
+16. Save the Codex review inputs to `.clanker/tmp`.
     - Create the directory if it does not exist.
-    - Save the draft refined ticket to `.clanker\tmp\refined-ticket.md`.
-    - Save summarized Jira decision-making context to `.clanker\tmp\refined-ticket-jira-context.md`.
-    - Save summarized repo context to `.clanker\tmp\refined-ticket-repo-context.md`.
+    - Save the draft refined ticket to `.clanker/tmp/refined-ticket.md`.
+    - Save summarized Jira decision-making context to `.clanker/tmp/refined-ticket-jira-context.md`.
+    - Save summarized repo context to `.clanker/tmp/refined-ticket-repo-context.md`.
 
 17. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for ticket refinement review:
 
-    New-Item -ItemType Directory -Force .clanker\tmp | Out-Null
+    New-Item -ItemType Directory -Force .clanker/tmp | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
     $fallbackModel = "gpt-5.4"
-    $reviewOutput = ".clanker\tmp\refined-ticket-codex-review.txt"
-    $modelOutput = ".clanker\tmp\refined-ticket-codex-review-model.txt"
+    $reviewOutput = ".clanker/tmp/refined-ticket-codex-review.txt"
+    $modelOutput = ".clanker/tmp/refined-ticket-codex-review-model.txt"
     $usedCodexModel = $null
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
-    $refinedTicket = Get-Content .clanker\tmp\refined-ticket.md -Raw
-    $jiraContext = Get-Content .clanker\tmp\refined-ticket-jira-context.md -Raw
-    $repoContext = Get-Content .clanker\tmp\refined-ticket-repo-context.md -Raw
+    $refinedTicket = Get-Content .clanker/tmp/refined-ticket.md -Raw
+    $jiraContext = Get-Content .clanker/tmp/refined-ticket-jira-context.md -Raw
+    $repoContext = Get-Content .clanker/tmp/refined-ticket-repo-context.md -Raw
 
     $prompt = @"
     Review this refined engineering ticket.
@@ -270,17 +270,17 @@ PowerShell command for ticket refinement review:
 
     Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
 
-18. Read `.clanker\tmp\refined-ticket-codex-review.txt`.
+18. Read `.clanker/tmp/refined-ticket-codex-review.txt`.
 
 19. Summarize Codex's feedback in the conversation.
-    - Read `.clanker\tmp\refined-ticket-codex-review-model.txt` and mention the exact Codex model that produced the review.
+    - Read `.clanker/tmp/refined-ticket-codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 20. Revise the refined ticket based only on useful feedback.
     - Keep feedback that is concrete, relevant, and actionable.
     - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
     - Do not let Codex convert material uncertainty into assumptions.
 
-21. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md`.
+21. Save the final refined ticket to `.clanker/tmp/refined-ticket-final.md`.
     - Do not output the final refined ticket contents in the conversation.
     - Tell the user the final refined ticket was saved and provide the file path so they can view it themselves.
 
