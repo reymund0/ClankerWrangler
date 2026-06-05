@@ -8,10 +8,16 @@ I was getting tired of configuring all my different coding agents across my mach
 
 ## How To Run
 
-Open an Administrator PowerShell window from this repo and run:
+**Windows** — Open an Administrator PowerShell window from this repo and run:
 
 ```powershell
 .\wrangle.ps1
+```
+
+**Mac / Unix** — Open a terminal from this repo and run:
+
+```bash
+./wrangle.sh
 ```
 
 The script wires the shared rules and skills into the supported agent config locations.

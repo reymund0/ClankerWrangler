@@ -37,8 +37,10 @@ to_skill_display_name() {
     for word in "${words[@]}"; do
         [[ -z "$word" ]] && continue
 
-        local upper="${word^^}"
-        local lower="${word,,}"
+        local upper
+        upper="$(echo "$word" | tr '[:lower:]' '[:upper:]')"
+        local lower
+        lower="$(echo "$word" | tr '[:upper:]' '[:lower:]')"
         local matched_acronym=false
         local matched_small=false
 
