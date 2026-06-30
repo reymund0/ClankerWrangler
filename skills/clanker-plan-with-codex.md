@@ -15,9 +15,7 @@ This skill is only for implementation plan construction. It does not perform imp
 
 ## Model Selection
 
-Use `gpt-5.5` by default for Codex review steps.
-
-If `gpt-5.5` is not available in the local Codex account, authentication mode, or rollout state, retry once with `gpt-5.4`.
+Use `gpt-5.5` for Codex review steps.
 
 Allow overriding the review model with the `CODEX_REVIEW_MODEL` environment variable.
 
@@ -55,13 +53,9 @@ PowerShell command for plan review:
     New-Item -ItemType Directory -Force $runFolder | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
-    $fallbackModel = "gpt-5.4"
     $reviewOutput = "$runFolder/codex-review.txt"
-    $modelOutput = "$runFolder/codex-review-model.txt"
-    $usedCodexModel = $null
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
     $request = Get-Content "$runFolder/codex-request.md" -Raw
     $repoContext = Get-Content "$runFolder/codex-context.md" -Raw
@@ -105,36 +99,13 @@ PowerShell command for plan review:
       --output-last-message $reviewOutput `
       -
 
-    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-      $usedCodexModel = $codexModel
+    if (-not ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput))) {
+      throw "Codex review failed; no review output was created."
     }
-    elseif ($codexModel -ne $fallbackModel) {
-      Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
-      Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-
-      $prompt | codex exec `
-        --model $fallbackModel `
-        --sandbox read-only `
-        -c model_reasoning_effort=xhigh `
-        -c model_verbosity=medium `
-        --output-last-message $reviewOutput `
-        -
-
-      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-        $usedCodexModel = $fallbackModel
-      }
-    }
-
-    if ($null -eq $usedCodexModel) {
-      throw "Codex review failed; no current review output was created."
-    }
-
-    Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
 
 5. Read `.clanker/DATE_TICKETNUM/codex-review.txt`.
 
 6. Summarize Codex's feedback in the conversation.
-   - Read `.clanker/DATE_TICKETNUM/codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 7. Revise the plan based only on useful feedback.
    - Keep feedback that is concrete, relevant, and actionable.
@@ -153,8 +124,7 @@ PowerShell command for plan review:
 - Prefer the repo's existing patterns over generic best practices when they conflict.
 - Keep scope tight.
 - Do not let Codex feedback cause unnecessary redesign unless it identifies a meaningful risk.
-- Use `gpt-5.5` by default.
-- Fall back to `gpt-5.4` if `gpt-5.5` is unavailable.
+- Use `gpt-5.5`.
 - Keep Codex in `read-only` mode for review steps.
 - Do not use `--full-auto` for review steps because it implies `workspace-write` sandboxing.
 - Do not implement changes as part of this skill.

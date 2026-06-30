@@ -17,9 +17,7 @@ Codex is a reviewer, not the owner of the ticket refinement. The invoking agent 
 
 ## Model Selection
 
-Use `gpt-5.5` by default for Codex review steps.
-
-If `gpt-5.5` is not available in the local Codex account, authentication mode, or rollout state, retry once with `gpt-5.4`.
+Use `gpt-5.5` for Codex review steps.
 
 Allow overriding the review model with the `CODEX_REVIEW_MODEL` environment variable.
 
@@ -192,13 +190,9 @@ PowerShell command for ticket refinement review:
     New-Item -ItemType Directory -Force $runFolder | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
-    $fallbackModel = "gpt-5.4"
     $reviewOutput = "$runFolder/refined-ticket-codex-review.txt"
-    $modelOutput = "$runFolder/refined-ticket-codex-review-model.txt"
-    $usedCodexModel = $null
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
     $refinedTicket = Get-Content "$runFolder/refined-ticket.md" -Raw
     $jiraContext = Get-Content "$runFolder/refined-ticket-jira-context.md" -Raw
@@ -246,36 +240,13 @@ PowerShell command for ticket refinement review:
       --output-last-message $reviewOutput `
       -
 
-    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-      $usedCodexModel = $codexModel
+    if (-not ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput))) {
+      throw "Codex review failed; no review output was created."
     }
-    elseif ($codexModel -ne $fallbackModel) {
-      Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
-      Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-
-      $prompt | codex exec `
-        --model $fallbackModel `
-        --sandbox read-only `
-        -c model_reasoning_effort=xhigh `
-        -c model_verbosity=medium `
-        --output-last-message $reviewOutput `
-        -
-
-      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-        $usedCodexModel = $fallbackModel
-      }
-    }
-
-    if ($null -eq $usedCodexModel) {
-      throw "Codex review failed; no current review output was created."
-    }
-
-    Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
 
 18. Read `.clanker/DATE_TICKETNUM/refined-ticket-codex-review.txt`.
 
 19. Summarize Codex's feedback in the conversation.
-    - Read `.clanker/DATE_TICKETNUM/refined-ticket-codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 20. Revise the refined ticket based only on useful feedback.
     - Keep feedback that is concrete, relevant, and actionable.
@@ -309,7 +280,6 @@ Optimize for preventing rework.
 - major product / technical uncertainty must become blocking questions
 - repo constraints should override generic best practices
 - prioritize correctness and implementation clarity over speed
-- Use `gpt-5.5` by default.
-- Fall back to `gpt-5.4` if `gpt-5.5` is unavailable.
+- Use `gpt-5.5`.
 - Keep Codex in `read-only` mode for review steps.
 - Do not use `--full-auto` for review steps because it implies `workspace-write` sandboxing.
