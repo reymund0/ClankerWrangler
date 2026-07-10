@@ -15,9 +15,7 @@ This skill is only for implementation plan construction. It does not perform imp
 
 ## Model Selection
 
-Use `gpt-5.5` by default for Codex review steps.
-
-If `gpt-5.5` is not available in the local Codex account, authentication mode, or rollout state, retry once with `gpt-5.4`.
+Use `gpt-5.5` for Codex review steps.
 
 Allow overriding the review model with the `CODEX_REVIEW_MODEL` environment variable.
 
@@ -40,30 +38,28 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - Validation criteria
    - Test plan
 
-3. Write the planning inputs to `.clanker/tmp`.
+3. Write the planning inputs to `.clanker/DATE_TICKETNUM`.
+   - `DATE_TICKETNUM` is derived from the current session: use the date as `YYYYMMDD` and the ticket key used in the current session (e.g. `20260605_MR-42`). If no ticket key is available in the session, use `YYYYMMDD_plan`.
    - Create the directory if it does not exist.
-   - Save the user's request to `.clanker/tmp/codex-request.md`.
-   - Save a concise repo-context summary to `.clanker/tmp/codex-context.md`.
-   - Save the draft plan to `.clanker/tmp/codex-plan.md`.
+   - Save the user's request to `.clanker/DATE_TICKETNUM/codex-request.md`.
+   - Save a concise repo-context summary to `.clanker/DATE_TICKETNUM/codex-context.md`.
+   - Save the draft plan to `.clanker/DATE_TICKETNUM/codex-plan.md`.
 
 4. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for plan review:
 
-    New-Item -ItemType Directory -Force .clanker/tmp | Out-Null
+    $runFolder = ".clanker/$DATE_TICKETNUM"  # replace DATE_TICKETNUM with the actual folder name derived in step 3
+    New-Item -ItemType Directory -Force $runFolder | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
-    $fallbackModel = "gpt-5.4"
-    $reviewOutput = ".clanker/tmp/codex-review.txt"
-    $modelOutput = ".clanker/tmp/codex-review-model.txt"
-    $usedCodexModel = $null
+    $reviewOutput = "$runFolder/codex-review.txt"
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-    Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
-    $request = Get-Content .clanker/tmp/codex-request.md -Raw
-    $repoContext = Get-Content .clanker/tmp/codex-context.md -Raw
-    $plan = Get-Content .clanker/tmp/codex-plan.md -Raw
+    $request = Get-Content "$runFolder/codex-request.md" -Raw
+    $repoContext = Get-Content "$runFolder/codex-context.md" -Raw
+    $plan = Get-Content "$runFolder/codex-plan.md" -Raw
 
     $prompt = @"
     Review this implementation plan for a software change.
@@ -103,42 +99,19 @@ PowerShell command for plan review:
       --output-last-message $reviewOutput `
       -
 
-    if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-      $usedCodexModel = $codexModel
-    }
-    elseif ($codexModel -ne $fallbackModel) {
-      Write-Host "Codex review with $codexModel failed. Retrying with $fallbackModel..."
-      Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
-
-      $prompt | codex exec `
-        --model $fallbackModel `
-        --sandbox read-only `
-        -c model_reasoning_effort=xhigh `
-        -c model_verbosity=medium `
-        --output-last-message $reviewOutput `
-        -
-
-      if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput)) {
-        $usedCodexModel = $fallbackModel
-      }
+    if (-not ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $reviewOutput))) {
+      throw "Codex review failed; no review output was created."
     }
 
-    if ($null -eq $usedCodexModel) {
-      throw "Codex review failed; no current review output was created."
-    }
-
-    Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
-
-5. Read `.clanker/tmp/codex-review.txt`.
+5. Read `.clanker/DATE_TICKETNUM/codex-review.txt`.
 
 6. Summarize Codex's feedback in the conversation.
-   - Read `.clanker/tmp/codex-review-model.txt` and mention the exact Codex model that produced the review.
 
 7. Revise the plan based only on useful feedback.
    - Keep feedback that is concrete, relevant, and actionable.
    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
 
-8. Save final plan to `.clanker/tmp/codex-plan-final.md`.
+8. Save final plan to `.clanker/DATE_TICKETNUM/codex-plan-final.md`.
    - Do not output the final plan contents in the conversation.
    - Tell the user the final plan was saved and provide the file path so they can view it themselves.
 
@@ -151,8 +124,7 @@ PowerShell command for plan review:
 - Prefer the repo's existing patterns over generic best practices when they conflict.
 - Keep scope tight.
 - Do not let Codex feedback cause unnecessary redesign unless it identifies a meaningful risk.
-- Use `gpt-5.5` by default.
-- Fall back to `gpt-5.4` if `gpt-5.5` is unavailable.
+- Use `gpt-5.5`.
 - Keep Codex in `read-only` mode for review steps.
 - Do not use `--full-auto` for review steps because it implies `workspace-write` sandboxing.
 - Do not implement changes as part of this skill.
