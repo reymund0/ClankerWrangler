@@ -7,6 +7,7 @@ WINDSURF_MEMORIES_ROOT="${WINDSURF_MEMORIES_ROOT:-$HOME/.codeium/windsurf/memori
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SOURCE="$REPO_ROOT/skills"
+LEGACY_SKILLS_SOURCE="$SKILLS_SOURCE/legacy"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
 
 copy_safe_file() {
@@ -114,6 +115,26 @@ EOF
     echo "Generated: $openai_yaml"
 }
 
+remove_legacy_skills() {
+    local agent_skills_root="$1"
+
+    if [[ ! -d "$LEGACY_SKILLS_SOURCE" ]]; then
+        return
+    fi
+
+    while IFS= read -r -d '' legacy_file; do
+        local base
+        base="$(basename "$legacy_file")"
+        local skill_name="${base%.md}"
+        local skill_dir="$agent_skills_root/$skill_name"
+
+        if [[ -d "$skill_dir" ]]; then
+            rm -rf "$skill_dir"
+            echo "Removed legacy skill: $skill_dir"
+        fi
+    done < <(find "$LEGACY_SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
+}
+
 install_agent_links() {
     local agent_name="$1"
     local agent_root="$2"
@@ -126,6 +147,8 @@ install_agent_links() {
 
     mkdir -p "$agent_root"
     mkdir -p "$agent_skills_root"
+
+    remove_legacy_skills "$agent_skills_root"
 
     while IFS= read -r -d '' skill_file; do
         local base
