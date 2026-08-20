@@ -2,7 +2,7 @@ param(
     [string]$ClaudeRoot = (Join-Path $HOME ".claude"),
     [string]$CodexRoot = (Join-Path $HOME ".codex"),
     [string]$WindsurfMemoriesRoot = (Join-Path $HOME ".codeium\windsurf\memories"),
-    [switch]$Force
+    [switch]$Force  # retained for call-site compatibility; Copy-SafeFile always overwrites
 )
 
 $ErrorActionPreference = "Stop"
