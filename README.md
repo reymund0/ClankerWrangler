@@ -16,6 +16,10 @@ Open an Administrator PowerShell window from this repo and run:
 
 The script wires the shared rules and skills into the supported agent config locations.
 
+## Legacy Skills
+
+Deprecated skills live in `skills/legacy/`. They are not installed, and `wrangle.ps1` deletes any previously installed copy of them from each agent's skills folder on the next run.
+
 ## Step 4
 
 💰 PROFIT. 💰
