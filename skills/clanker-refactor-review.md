@@ -1,183 +1,122 @@
 ---
 name: clanker-refactor-review
-description: Analyze the changes on the current branch and propose refactors for the code those changes touch. Scope is anchored to the branch diff and the code directly related to it. Identifies function extraction, conditional complexity, DRY opportunities, magic values, naming clarity, local convention drift, orphaned or dead code, large files worth splitting, and file organization improvements. Use after implementation work is done and you want refactor suggestions before committing or opening a PR. This is a planning skill only; it does not implement changes and is not a correctness code review.
+description: Propose refactors for the code the current branch touches, anchored to the branch diff and directly related code. Covers function extraction, conditional complexity, duplication, magic values, naming, local convention drift, dead code, oversized files, and file placement. Use after implementation work is done and before committing or opening a pull request, when you want improvement proposals rather than a defect hunt. Plans only; it does not implement changes. Use clanker-code-review for correctness, regressions, and requirement coverage; use clanker-refactor-sisyphus for repo-wide structural debt.
 ---
 
-When invoked, follow this workflow exactly.
+# Clanker Refactor Review
 
 ## Purpose
 
-Propose refactors for the code the current branch touches.
+Propose refactors for the code the current branch touches. This skill plans improvements; it does not implement them.
 
-This skill plans improvements. It does not implement them.
+This is not a correctness review. Do not hunt for bugs, regressions, or test gaps — mention a defect only when it is glaringly obvious while analyzing a refactor candidate, and hand correctness work to `clanker-code-review`.
 
-This is not a code review skill. Do not hunt for bugs, regressions, or test gaps.
-Only mention correctness when a defect is glaringly obvious while analyzing a refactor candidate.
+Scope discipline is the point of this skill. Every proposal must be anchored to the branch diff and the code directly related to it.
 
-The single most important rule is scope discipline. Anchor every proposal to the branch diff and the code directly related to it. Do not propose changes across the broader codebase.
+## Step 1 — Establish the diff under review
 
-## Invocation behavior
+```bash
+git status --short --branch
+```
 
-- Preferred usage: `/clanker-refactor-review`
-- Default base branch is `main`. Allow overriding the base branch if the user supplies one.
-- If the branch has no diff against the base branch, report that there is nothing to analyze and stop the skill run.
+- Use the base branch the user names. Otherwise prefer `main`, else `master`. Verify it exists with `git rev-parse --verify <base>` before using it.
+- On a feature branch, analyze `<base>...HEAD` (merge-base diff).
+- If the branch has no commits ahead of base, analyze the working tree instead: `git diff HEAD` plus `git diff --cached`, and say so in the output.
+- If both are empty, report that there is nothing to analyze and stop.
 
-## Scope rules
+```bash
+git diff --stat <base>...HEAD
+git diff --name-status <base>...HEAD
+git diff <base>...HEAD
+```
 
-These rules define what is in scope. Apply them strictly.
+Diff budget: if the branch exceeds roughly 40 files or 2000 changed lines, do not pull the whole diff at once. Work file-by-file with `git diff <base>...HEAD -- <path>`, ordered by how much each file changed. Tracing related code in Step 3 costs more context than the diff itself, so leave room for it. Any file you did not read in full must be listed as `not analyzed` in the output.
+
+Never propose refactors for lockfiles, generated or vendored code, snapshots, minified assets, or files whose diff is pure formatting churn. Skip them silently.
+
+## Step 2 — Apply the scope rules
 
 In scope:
-- code added, removed, or modified in the branch diff
-- code that directly relates to the diff:
-  - callers and callees of changed functions or methods
-  - other code in the same file as a change
-  - code that duplicates a pattern introduced or modified by the diff
-  - code left orphaned or unreachable by a removal in the diff
+
+- code added, removed, or modified in the diff
+- callers and callees of changed functions or methods
+- other code in the same file as a change
+- code that duplicates a pattern the diff introduced or modified
+- code left orphaned or unreachable by a removal in the diff
 
 Out of scope:
+
 - pre-existing code unrelated to the diff
-- refactors in files the branch did not touch, unless the file contains a direct caller, callee, or duplicate of changed code
+- files the branch did not touch, unless they contain a direct caller, callee, or duplicate of changed code
 - broad architectural rewrites
 - speculative or stylistic preferences not grounded in the diff
 
-When a proposal would reach beyond directly related code, do not make it. State the boundary instead.
+When a proposal would reach beyond directly related code, do not make it. Record the boundary under `OUT OF SCOPE NOTED` instead.
 
-## Workflow
+## Step 3 — Trace directly related code
 
-1. Inspect the branch state.
+For the changed code only, locate callers and callees of changed functions, duplicated or near-duplicated logic the change introduced or touched, and code a removal may have orphaned. Read only what is needed to confirm the relationship to the diff. Do not survey the whole codebase.
 
-Identify the touched files:
+## Step 4 — Look for these refactor candidates
 
-```bash
-git diff --name-status main...HEAD
-```
+Judge size and complexity against the code around them, not against an abstract ideal. "Long," "nested," and "large" mean long, nested, or large relative to the other functions in the same file and the other files in the same module. This keeps proposals aligned with the repository's own conventions.
 
-Read the full branch diff:
+**Function extraction** — functions or methods the diff added or grew that are now long or deeply nested relative to their neighbors. Suggest extracting cohesive pieces into well-named units.
 
-```bash
-git diff main...HEAD
-```
+**Conditional complexity** — nested conditionals or repeated branching the change introduced. Suggest guard clauses, a lookup table, or polymorphism where it genuinely simplifies the change.
 
-If a base branch other than `main` was provided, substitute it in both commands.
+**Duplication** — logic the diff repeats that could be consolidated. Prefer extending an existing utility over creating a new one.
 
-2. Build a focused understanding of what changed.
+**Magic values** — literals the change introduced that should be named constants. Prefer an existing constant or config location over a new one.
 
-For each changed file, note its likely purpose and what the diff did to it (added, modified, removed).
+**Naming clarity** — symbols the diff introduced or renamed that are misleading or inconsistent with their neighbors. Suggest names aligned with the surrounding code.
 
-3. Trace directly related code.
+**Local convention drift** — code in the diff that handles errors, logging, async style, or return shapes differently from the rest of its file or module. Recommend aligning with the prevailing local convention.
 
-For the changed code only, locate:
-- callers and callees of changed functions or methods
-- duplicated or near-duplicated logic the change introduced or touched
-- code that a removal may have orphaned
+**Orphaned or dead code** — functions, exports, imports, variables, or files left unused by a removal in the diff, and code paths the change made unreachable.
 
-Read only what is needed to confirm a relationship to the diff. Do not survey the whole codebase.
+**Oversized files** — files the diff pushed past the size or responsibility boundary of their peers in the same module, but only when the change is what made the file unwieldy or expanded an already large one.
 
-4. Identify refactor candidates in these categories.
+**File organization** — helpers, types, or constants the change introduced that would be clearer in a different existing module.
 
-## Function extraction
-- functions or methods the diff added or grew that are now too long or too deeply nested
-- suggest extracting cohesive pieces into well-named units
+## Step 5 — Judge each candidate before proposing it
 
-## Conditional complexity
-- nested conditionals or repeated branching the change introduced
-- suggest guard clauses, a lookup table, or polymorphism where it simplifies the change
+- **Repository conventions win.** Do not propose a new pattern or abstraction unless the diff already moved in that direction.
+- **Note the safety net.** For each proposal, state whether the code it touches has test coverage that would catch a mistake during the refactor: `protected` (tests cover this code), `unprotected` (no covering tests), or `n/a` (a rename or move with no behavior surface). An unprotected refactor is not disqualified, but the reader needs to know a test comes first.
+- **Calibrate effort by blast radius.** `low` — contained to a single function or file. `medium` — touches several call sites within one module. `high` — crosses module boundaries or changes a shared interface.
+- **Stay proportional.** Prefer a few high-value proposals over an exhaustive list. Around eight is a sensible ceiling; if more survive, keep the highest-value ones and note the rest under `OUT OF SCOPE NOTED`.
 
-## DRY opportunities
-- logic the diff duplicates that could be consolidated into an existing or new shared utility
-- repeated patterns introduced by the change
-- prefer extending an existing utility over creating a new one
+## Step 6 — Save the proposals
 
-## Magic values
-- literals the change introduced that should become named constants
-- prefer an existing constant or config location over a new one
+Write the full required output to `.clanker/refactor/{YYYY-MM-DD}-{scope}.md`.
 
-## Naming clarity
-- symbols the diff introduced or renamed that are misleading or inconsistent with their neighbors
-- suggest names aligned with the surrounding code
+- `{scope}` is the active OpenSpec change id when the repository has an `openspec/` directory and `openspec list --json` reports a single active change. Otherwise use the current branch name, lowercased with non-alphanumeric characters replaced by hyphens.
+- Create the directory if it does not exist.
+- Then summarize the proposals concisely in the conversation and give the user the file path for the full detail.
 
-## Local convention drift
-- code in the diff that does something differently than the rest of the same file or module
-- examples: error handling, logging, async style, return shapes
-- recommend aligning with the module's prevailing convention
+## Required output
 
-## Orphaned or dead code
-- functions, exports, imports, variables, or files left unused by a removal in the diff
-- code paths the change made unreachable
+**CHANGED FILES**
+Each changed file with its purpose in one line. Mark any file `not analyzed` if you did not read it in full.
 
-## Large file splits
-- files the diff pushed past a reasonable size or responsibility boundary
-- only when the change is what made the file unwieldy or expanded an already large file
+**PROPOSALS**
+A single list ordered by value — benefit weighed against effort, highest first. Omit categories entirely when they produced nothing; do not emit empty placeholders. Each entry:
 
-## File organization
-- code that would be clearer in a different existing module
-- misplaced helpers, types, or constants introduced by the change
+- **category** — one of: function extraction, conditional complexity, duplication, magic values, naming clarity, local convention drift, orphaned or dead code, oversized files, file organization
+- **location** — file and, where relevant, symbol or line range
+- **relation to the diff** — why this code is directly related to the change
+- **proposal** — the concrete refactor
+- **benefit** — what improves
+- **effort** — `low`, `medium`, or `high`
+- **test safety** — `protected`, `unprotected`, or `n/a`
 
-5. Let repository conventions override generic best practices.
+If nothing survives Step 5, state: `No refactor proposals — the branch diff is clean relative to its surroundings.`
 
-Prefer the repo's existing structure, naming, and patterns. Do not introduce new patterns or abstractions as proposals unless the diff already moved in that direction.
-
-6. Keep proposals practical and proportional.
-
-Favor a small number of high-value proposals over a long list. If no meaningful refactor exists in a category, say so.
-
-7. Save the proposals to `.clanker/DATE_TICKETNUM/refactor-proposals.md`.
-   - `DATE_TICKETNUM` is derived from the current session: use the date as `YYYYMMDD` and the ticket key used in the current session (e.g. `20260605_MR-42`). If no ticket key is available in the session, use `YYYYMMDD_refactor`.
-   - Create the directory if it does not exist.
-   - Write the full **Required Output** to this file.
-   - Summarize the proposals concisely in the conversation and provide the file path so the user can view the full detail.
-
-## Required Output
-
-Return exactly these sections.
-
-## CHANGED FILES
-List each changed file from `git diff --name-status main...HEAD` and its likely purpose.
-
-## FUNCTION EXTRACTION
-Overly long or deeply nested functions the change grew, with suggested extractions. State `None found` when none exist.
-
-## CONDITIONAL COMPLEXITY
-Branching the change introduced that could be simplified. State `None found` when none exist.
-
-## DRY OPPORTUNITIES
-Consolidation proposals grounded in the diff. State `None found` when none exist.
-
-## MAGIC VALUES
-Literals the change introduced that should become named constants. State `None found` when none exist.
-
-## NAMING CLARITY
-Misleading or inconsistent names the diff introduced or renamed. State `None found` when none exist.
-
-## LOCAL CONVENTION DRIFT
-Places the change diverges from the surrounding file or module's conventions. State `None found` when none exist.
-
-## ORPHANED / DEAD CODE
-Code left unused or unreachable by the change. State `None found` when none exist.
-
-## LARGE FILE SPLITS
-Files the change made worth splitting, with a suggested split boundary. State `None found` when none exist.
-
-## FILE ORGANIZATION
-Placement or module-boundary improvements grounded in the diff. State `None found` when none exist.
-
-## OUT OF SCOPE NOTED
-Briefly list anything you deliberately did not propose because it fell outside the diff and its directly related code. State `None` when nothing was set aside.
-
-Each proposal must include:
-- location: file and, where relevant, the symbol or line range
-- relation to the diff: why this code is directly related to the change
-- proposal: the concrete refactor
-- benefit: what improves
-- effort: `low`, `medium`, or `high`
+**OUT OF SCOPE NOTED**
+Anything you deliberately set aside because it fell outside the diff and its directly related code, or because it lost the proportionality cut. One line each. State `None` when nothing was set aside.
 
 ## Rules
 
-- Anchor every proposal to the branch diff and directly related code.
-- Do not propose changes across the broader codebase.
-- Do not implement any changes; this skill only plans.
-- Do not perform a correctness review; mention defects only when glaringly obvious.
-- Prefer extending existing utilities and following existing conventions over new abstractions.
-- Favor a few high-value proposals over an exhaustive list.
-- State `None found` for any empty category rather than inventing proposals.
-- Every proposal must include location, relation to the diff, proposal, benefit, and effort.
+- Do not implement any change; this skill only plans.
+- Never invent a proposal to fill a category.
+- Anchor every proposal to the diff, and say what that anchor is.

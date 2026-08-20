@@ -1,6 +1,6 @@
 ---
 name: clanker-code-review
-description: Review existing code changes against OpenSpec artifacts and repository conventions, covering correctness bugs, regressions, requirement coverage, spec and scope drift, and missing tests. Use after implementation work is complete, before committing, before opening a pull request, before archiving an OpenSpec change, and after refactors, backend, database, or API integration work.
+description: Review existing code changes against OpenSpec artifacts and repository conventions, covering correctness bugs, regressions, requirement coverage, spec and scope drift, and missing tests. Use after implementation work is complete, before committing, before opening a pull request, before archiving an OpenSpec change, and after refactors, backend, database, or API integration work. Use clanker-refactor-review for improvement proposals rather than defects.
 ---
 
 # Clanker Code Review
@@ -95,7 +95,7 @@ Review for:
 
 **Security and data integrity** — injection and unsanitized input, authorization checks missing on new paths, secrets or credentials in code or logs, unbounded queries and writes, non-idempotent operations on retryable paths, personal data in logs or URLs.
 
-**Maintainability** — duplicated logic where a repository utility already exists, dead code, functions doing too much to test, naming that diverges from the surrounding module.
+**Maintainability that carries risk** — duplicated logic that can drift out of sync, dead code that misleads later changes, functions too tangled to test. Pure improvement proposals with no correctness or regression risk belong to `clanker-refactor-review`; do not duplicate them here.
 
 **Tests** — missing unit, integration, edge case, negative path, and regression coverage. Assess whether the tests actually assert the scenario's THEN, not merely that the code runs.
 
