@@ -27,9 +27,15 @@ Keep Codex in `read-only` sandbox mode for all review steps.
 
 ## Workflow
 
-1. Read the user's request and inspect the codebase as needed.
+1. Determine the ticket key and date for the scoped tmp directory.
+   - If this skill is being run in the same chat session where `clanker-refine-ticket` or `clanker-refine-ticket-with-codex` was used, the ticket key and date are already known from that session — use them.
+   - If the ticket key or date is not known (e.g. this skill is run in a new chat), ask the user: "Which Jira ticket is this plan for? (e.g. MR-42)" before continuing. Use today's date.
+   - The ticket-scoped tmp directory is `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}` (e.g. `.clanker\tmp\2026-05-20-MR-42`).
 
-2. Produce a concise implementation plan with these sections:
+2. Read the user's request and inspect the codebase as needed.
+   - If a refined ticket exists at `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\refined-ticket-final.md`, read it and use it as primary input context.
+
+3. Produce a concise implementation plan with these sections:
    - Goal
    - Assumptions
    - Out of scope
@@ -40,30 +46,31 @@ Keep Codex in `read-only` sandbox mode for all review steps.
    - Validation criteria
    - Test plan
 
-3. Write the planning inputs to `.clanker\tmp`.
+4. Write the planning inputs to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}`.
    - Create the directory if it does not exist.
-   - Save the user's request to `.clanker\tmp\codex-request.md`.
-   - Save a concise repo-context summary to `.clanker\tmp\codex-context.md`.
-   - Save the draft plan to `.clanker\tmp\codex-plan.md`.
+   - Save the user's request to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\codex-request.md`.
+   - Save a concise repo-context summary to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\codex-context.md`.
+   - Save the draft plan to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\codex-plan.md`.
 
-4. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
+5. Run the local Codex CLI from PowerShell in non-interactive, read-only mode.
 
 PowerShell command for plan review:
 
-    New-Item -ItemType Directory -Force .clanker\tmp | Out-Null
+    $tmpDir = ".clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}"  # replace with actual ticket key and date
+    New-Item -ItemType Directory -Force $tmpDir | Out-Null
 
     $codexModel = if ($env:CODEX_REVIEW_MODEL) { $env:CODEX_REVIEW_MODEL } else { "gpt-5.5" }
     $fallbackModel = "gpt-5.4"
-    $reviewOutput = ".clanker\tmp\codex-review.txt"
-    $modelOutput = ".clanker\tmp\codex-review-model.txt"
+    $reviewOutput = "$tmpDir\codex-review.txt"
+    $modelOutput = "$tmpDir\codex-review-model.txt"
     $usedCodexModel = $null
 
     Remove-Item -LiteralPath $reviewOutput -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $modelOutput -Force -ErrorAction SilentlyContinue
 
-    $request = Get-Content .clanker\tmp\codex-request.md -Raw
-    $repoContext = Get-Content .clanker\tmp\codex-context.md -Raw
-    $plan = Get-Content .clanker\tmp\codex-plan.md -Raw
+    $request = Get-Content "$tmpDir\codex-request.md" -Raw
+    $repoContext = Get-Content "$tmpDir\codex-context.md" -Raw
+    $plan = Get-Content "$tmpDir\codex-plan.md" -Raw
 
     $prompt = @"
     Review this implementation plan for a software change.
@@ -129,20 +136,20 @@ PowerShell command for plan review:
 
     Set-Content -LiteralPath $modelOutput -Value $usedCodexModel
 
-5. Read `.clanker\tmp\codex-review.txt`.
+6. Read `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\codex-review.txt`.
 
-6. Summarize Codex's feedback in the conversation.
-   - Read `.clanker\tmp\codex-review-model.txt` and mention the exact Codex model that produced the review.
+7. Summarize Codex's feedback in the conversation.
+   - Read `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\codex-review-model.txt` and mention the exact Codex model that produced the review.
 
-7. Revise the plan based only on useful feedback.
+8. Revise the plan based only on useful feedback.
    - Keep feedback that is concrete, relevant, and actionable.
    - Reject feedback that is vague, unnecessary, or inconsistent with the repo's existing patterns.
 
-8. Save final plan to `.clanker\tmp\codex-plan-final.md`.
+9. Save the final plan to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\plan-final.md`.
    - Do not output the final plan contents in the conversation.
-   - Tell the user the final plan was saved and provide the file path so they can view it themselves.
+   - Tell the user the final plan was saved and provide the exact file path so they can view it themselves.
 
-9. Do not begin implementation unless the user separately asks to proceed after reviewing the final plan.
+10. Do not begin implementation unless the user separately asks to proceed after reviewing the final plan.
 
 ## Rules
 

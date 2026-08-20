@@ -165,10 +165,15 @@ Otherwise, use:
 
     NEEDS DECISION BEFORE PLANNING
 
-16. Save the final refined ticket to `.clanker\tmp\refined-ticket-final.md`.
+16. Determine the ticket-scoped tmp directory.
+    - Format: `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}` using today's date (e.g. `.clanker\tmp\2026-05-20-MR-42`).
     - Create the directory if it does not exist.
+
+17. Save the final refined ticket to `.clanker\tmp\{YYYY-MM-DD}-{TICKET_KEY}\refined-ticket-final.md`.
     - Do not output the final refined ticket contents in the conversation.
-    - Tell the user the final refined ticket was saved and provide the file path so they can view it themselves.
+    - Tell the user the final refined ticket was saved and provide the exact file path so they can view it themselves.
+    - State the verdict in the conversation: `READY FOR PLANNING` or `NEEDS DECISION BEFORE PLANNING`.
+    - If the verdict is `NEEDS DECISION BEFORE PLANNING`, list all Blocking Questions from the refined ticket directly in the conversation so the user can act on them without opening the file.
 
 ## Output style
 
