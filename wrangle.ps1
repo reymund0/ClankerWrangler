@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = $PSScriptRoot
 $SkillsSource = Join-Path $RepoRoot "skills"
+$LegacySkillsSource = Join-Path $SkillsSource "legacy"
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 
 function Copy-SafeFile {
@@ -99,6 +100,27 @@ function New-CodexOpenAIYaml {
     Write-Host "Generated: $openAIYaml"
 }
 
+function Remove-LegacySkills {
+    param(
+        [Parameter(Mandatory)][string]$AgentSkillsRoot
+    )
+
+    if (-not (Test-Path -LiteralPath $LegacySkillsSource -PathType Container)) {
+        return
+    }
+
+    $legacyFiles = Get-ChildItem -LiteralPath $LegacySkillsSource -Filter "*.md" -File
+    foreach ($legacyFile in $legacyFiles) {
+        $skillName = [System.IO.Path]::GetFileNameWithoutExtension($legacyFile.Name)
+        $skillDirectory = Join-Path $AgentSkillsRoot $skillName
+
+        if (Test-Path -LiteralPath $skillDirectory) {
+            Remove-Item -LiteralPath $skillDirectory -Recurse -Force -Confirm:$false
+            Write-Host "Removed legacy skill: $skillDirectory"
+        }
+    }
+}
+
 function Install-AgentLinks {
     param(
         [Parameter(Mandatory)][string]$AgentName,
@@ -113,6 +135,8 @@ function Install-AgentLinks {
 
     New-Item -ItemType Directory -Path $AgentRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $agentSkillsRoot -Force | Out-Null
+
+    Remove-LegacySkills -AgentSkillsRoot $agentSkillsRoot
 
     $skillFiles = Get-ChildItem -LiteralPath $SkillsSource -Filter "*.md" -File
     foreach ($skillFile in $skillFiles) {
