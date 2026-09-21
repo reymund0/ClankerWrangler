@@ -10,7 +10,11 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = $PSScriptRoot
 $SkillsSource = Join-Path $RepoRoot "skills"
 $LegacySkillsSource = Join-Path $SkillsSource "legacy"
+$SubagentsSource = Join-Path $RepoRoot "subagents"
+$OrchestrationSkillName = "clanker-orchestration-nation"
+$OrchestrationCoordinatorSource = Join-Path $SubagentsSource "$OrchestrationSkillName.md"
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
+$CrossReviewLauncherSource = Join-Path $SubagentsSource "scripts\claude_cross_review.py"
 
 function Copy-SafeFile {
     param(
@@ -121,11 +125,108 @@ function Remove-LegacySkills {
     }
 }
 
+function Assert-PathWithinRoot {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Description
+    )
+
+    $fullPath = [System.IO.Path]::GetFullPath($Path)
+    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $rootPrefix = $fullRoot + [System.IO.Path]::DirectorySeparatorChar
+
+    if (-not $fullPath.StartsWith($rootPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "$Description must remain within ${fullRoot}: $fullPath"
+    }
+
+    return $fullPath
+}
+
+function Install-OrchestrationNationBundle {
+    param(
+        [Parameter(Mandatory)][string]$AgentName,
+        [Parameter(Mandatory)][string]$AgentSkillsRoot,
+        [Parameter(Mandatory)][System.IO.FileInfo[]]$SpecialistSourceFiles
+    )
+
+    $bundleDirectory = Join-Path $AgentSkillsRoot $OrchestrationSkillName
+    $referencesDirectory = Join-Path $bundleDirectory "references"
+    $bundleSkill = Join-Path $bundleDirectory "SKILL.md"
+
+    New-Item -ItemType Directory -Path $referencesDirectory -Force | Out-Null
+    Copy-SafeFile -DestinationPath $bundleSkill -SourcePath $OrchestrationCoordinatorSource
+
+    foreach ($specialistSourceFile in $SpecialistSourceFiles) {
+        $referencePath = Join-Path $referencesDirectory $specialistSourceFile.Name
+        Copy-SafeFile -DestinationPath $referencePath -SourcePath $specialistSourceFile.FullName
+    }
+
+    $scriptsDirectory = Join-Path $bundleDirectory "scripts"
+    $scriptsItem = Get-Item -LiteralPath $scriptsDirectory -Force -ErrorAction SilentlyContinue
+    if ($null -ne $scriptsItem -and ($scriptsItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Refusing to install through a linked scripts directory: $scriptsDirectory"
+    }
+    Copy-SafeFile -DestinationPath (Join-Path $scriptsDirectory "claude_cross_review.py") -SourcePath $CrossReviewLauncherSource
+
+    if ($AgentName -eq "Codex") {
+        New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
+    }
+}
+
+function Move-OrchestrationSpecialistDirectories {
+    param(
+        [Parameter(Mandatory)][string]$AgentRoot,
+        [Parameter(Mandatory)][string]$AgentSkillsRoot,
+        [Parameter(Mandatory)][System.IO.FileInfo[]]$SpecialistSourceFiles
+    )
+
+    $backupBase = Join-Path $AgentRoot "backups"
+    $backupRoot = Join-Path $backupBase "orchestration-nation"
+
+    foreach ($specialistSourceFile in $SpecialistSourceFiles) {
+        $specialistName = [System.IO.Path]::GetFileNameWithoutExtension($specialistSourceFile.Name)
+        $sourceDirectory = Join-Path $AgentSkillsRoot $specialistName
+        $sourceItem = Get-Item -LiteralPath $sourceDirectory -Force -ErrorAction SilentlyContinue
+
+        if ($null -eq $sourceItem) {
+            continue
+        }
+
+        if (-not $sourceItem.PSIsContainer -and -not ($sourceItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Cannot migrate non-directory specialist entry: $sourceDirectory"
+        }
+
+        foreach ($backupDirectory in @($backupBase, $backupRoot)) {
+            $backupItem = Get-Item -LiteralPath $backupDirectory -Force -ErrorAction SilentlyContinue
+            if ($null -ne $backupItem -and ($backupItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+                throw "Refusing to migrate through a linked backup directory: $backupDirectory"
+            }
+        }
+        New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+
+        $sourceFullPath = Assert-PathWithinRoot -Path $sourceDirectory -Root $AgentSkillsRoot -Description "Specialist source path"
+        $destinationBase = Join-Path $backupRoot $specialistName
+        $destinationPath = $destinationBase
+        $backupIndex = 2
+
+        while ($null -ne (Get-Item -LiteralPath $destinationPath -Force -ErrorAction SilentlyContinue)) {
+            $destinationPath = "$destinationBase-$backupIndex"
+            $backupIndex++
+        }
+
+        $destinationFullPath = Assert-PathWithinRoot -Path $destinationPath -Root $backupRoot -Description "Specialist backup path"
+        Move-Item -LiteralPath $sourceFullPath -Destination $destinationFullPath -ErrorAction Stop
+        Write-Host "Moved standalone specialist skill to backup: $sourceFullPath -> $destinationFullPath"
+    }
+}
+
 function Install-AgentLinks {
     param(
         [Parameter(Mandatory)][string]$AgentName,
         [Parameter(Mandatory)][string]$AgentRoot,
-        [Parameter(Mandatory)][string]$RulesFileName
+        [Parameter(Mandatory)][string]$RulesFileName,
+        [Parameter(Mandatory)][System.IO.FileInfo[]]$SpecialistSourceFiles
     )
 
     $agentSkillsRoot = Join-Path $AgentRoot "skills"
@@ -153,6 +254,9 @@ function Install-AgentLinks {
         }
     }
 
+    Install-OrchestrationNationBundle -AgentName $AgentName -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
+    Move-OrchestrationSpecialistDirectories -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
+
     Copy-SafeFile -DestinationPath $rulesLink -SourcePath $GlobalRulesSource
 }
 
@@ -171,10 +275,24 @@ if (-not (Test-Path -LiteralPath $SkillsSource -PathType Container)) {
     throw "Skills source directory not found: $SkillsSource"
 }
 
+if (-not (Test-Path -LiteralPath $SubagentsSource -PathType Container)) {
+    throw "Subagents source directory not found: $SubagentsSource"
+}
+
+if (-not (Test-Path -LiteralPath $OrchestrationCoordinatorSource -PathType Leaf)) {
+    throw "Orchestration coordinator source file not found: $OrchestrationCoordinatorSource"
+}
+
 if (-not (Test-Path -LiteralPath $GlobalRulesSource -PathType Leaf)) {
     throw "Global rules file not found: $GlobalRulesSource"
 }
 
-Install-AgentLinks -AgentName "Claude Code" -AgentRoot $ClaudeRoot -RulesFileName "CLAUDE.md"
-Install-AgentLinks -AgentName "Codex" -AgentRoot $CodexRoot -RulesFileName "AGENTS.md"
+if (-not (Test-Path -LiteralPath $CrossReviewLauncherSource -PathType Leaf)) {
+    throw "Claude cross-review launcher not found: $CrossReviewLauncherSource"
+}
+
+$SpecialistSourceFiles = @(Get-ChildItem -LiteralPath $SubagentsSource -Filter "*.md" -File | Where-Object { $_.Name -ne "$OrchestrationSkillName.md" } | Sort-Object Name)
+
+Install-AgentLinks -AgentName "Claude Code" -AgentRoot $ClaudeRoot -RulesFileName "CLAUDE.md" -SpecialistSourceFiles $SpecialistSourceFiles
+Install-AgentLinks -AgentName "Codex" -AgentRoot $CodexRoot -RulesFileName "AGENTS.md" -SpecialistSourceFiles $SpecialistSourceFiles
 Install-WindsurfRules -MemoriesRoot $WindsurfMemoriesRoot

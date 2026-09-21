@@ -8,7 +8,10 @@ WINDSURF_MEMORIES_ROOT="${WINDSURF_MEMORIES_ROOT:-$HOME/.codeium/windsurf/memori
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SOURCE="$REPO_ROOT/skills"
 LEGACY_SKILLS_SOURCE="$SKILLS_SOURCE/legacy"
+SUBAGENTS_SOURCE="$REPO_ROOT/subagents"
+ORCHESTRATION_NAME="clanker-orchestration-nation"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
+CROSS_REVIEW_LAUNCHER_SOURCE="$SUBAGENTS_SOURCE/scripts/claude_cross_review.py"
 
 copy_safe_file() {
     local dest="$1"
@@ -135,6 +138,62 @@ remove_legacy_skills() {
     done < <(find "$LEGACY_SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 }
 
+install_orchestration_bundle() {
+    local agent_name="$1"
+    local agent_root
+    agent_root="$(cd "$2" && pwd -P)"
+    local agent_skills_root="$agent_root/skills"
+    local bundle_dir="$agent_skills_root/$ORCHESTRATION_NAME"
+    local references_dir="$bundle_dir/references"
+
+    copy_safe_file "$bundle_dir/SKILL.md" "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md"
+    while IFS= read -r -d '' specialist; do
+        local base
+        base="$(basename "$specialist")"
+        [[ "$base" == "$ORCHESTRATION_NAME.md" ]] && continue
+        copy_safe_file "$references_dir/$base" "$specialist"
+    done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
+    if [[ -L "$bundle_dir/scripts" ]]; then
+        echo "Error: Cannot install through a linked scripts directory: $bundle_dir/scripts" >&2
+        exit 1
+    fi
+    copy_safe_file "$bundle_dir/scripts/claude_cross_review.py" "$CROSS_REVIEW_LAUNCHER_SOURCE"
+    if [[ "$agent_name" == "Codex" ]]; then
+        new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
+    fi
+
+    # Preserve old standalone entries outside skill discovery after the bundle is ready.
+    local backup_base="$agent_root/backups"
+    local backup_root="$backup_base/orchestration-nation"
+    while IFS= read -r -d '' specialist; do
+        local base
+        base="$(basename "$specialist")"
+        [[ "$base" == "$ORCHESTRATION_NAME.md" ]] && continue
+        local name="${base%.md}"
+        local standalone_dir="$agent_skills_root/$name"
+        [[ -e "$standalone_dir" || -L "$standalone_dir" ]] || continue
+        if [[ ! -d "$standalone_dir" && ! -L "$standalone_dir" ]]; then
+            echo "Error: Cannot migrate non-directory specialist entry: $standalone_dir" >&2
+            exit 1
+        fi
+        if [[ -L "$backup_base" || -L "$backup_root" ]]; then
+            echo "Error: Cannot migrate through a linked backup directory: $backup_root" >&2
+            exit 1
+        fi
+        mkdir -p "$backup_root"
+        local backup_dir="$backup_root/$name"
+        local suffix=2
+        while [[ -e "$backup_dir" || -L "$backup_dir" ]]; do
+            backup_dir="$backup_root/$name-$suffix"
+            suffix=$((suffix + 1))
+        done
+        case "$standalone_dir" in "$agent_skills_root/"*) ;; *) exit 1 ;; esac
+        case "$backup_dir" in "$backup_root/"*) ;; *) exit 1 ;; esac
+        mv "$standalone_dir" "$backup_dir"
+        echo "Moved standalone specialist skill to backup: $standalone_dir -> $backup_dir"
+    done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
+}
+
 install_agent_links() {
     local agent_name="$1"
     local agent_root="$2"
@@ -165,6 +224,8 @@ install_agent_links() {
         fi
     done < <(find "$SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 
+    install_orchestration_bundle "$agent_name" "$agent_root"
+
     copy_safe_file "$rules_link" "$GLOBAL_RULES_SOURCE"
 }
 
@@ -183,8 +244,18 @@ if [[ ! -d "$SKILLS_SOURCE" ]]; then
     exit 1
 fi
 
+if [[ ! -d "$SUBAGENTS_SOURCE" || ! -f "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md" ]]; then
+    echo "Error: Orchestration source directory or coordinator not found: $SUBAGENTS_SOURCE" >&2
+    exit 1
+fi
+
 if [[ ! -f "$GLOBAL_RULES_SOURCE" ]]; then
     echo "Error: Global rules file not found: $GLOBAL_RULES_SOURCE" >&2
+    exit 1
+fi
+
+if [[ ! -f "$CROSS_REVIEW_LAUNCHER_SOURCE" ]]; then
+    echo "Error: Claude cross-review launcher not found: $CROSS_REVIEW_LAUNCHER_SOURCE" >&2
     exit 1
 fi
 

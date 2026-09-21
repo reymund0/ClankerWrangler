@@ -1,0 +1,126 @@
+{
+  "coverage": [
+    {
+      "evidence": "Plan specifies can_accept(expires_at:int, now:int)->bool, accepts only when now < expires_at, rejects equality and later; tests for earlier, equal, later. Matches requirement; no side effects, no migration.",
+      "status": "covered",
+      "subject": "plan.md"
+    },
+    {
+      "evidence": "Read: review-only, packet-only, no commands/edits/web/delegation, no OpenSpec change exists, map to coverage/findings/limitations/verdict. Followed.",
+      "status": "covered",
+      "subject": "rules.md"
+    },
+    {
+      "evidence": "Read snapshot at _clanker_packet/guidance/00-clanker-claude-cross-review.md; applied plan review criteria (don't flag absent code/tests, distinguish confirmed vs plausible, no claims of test execution).",
+      "status": "covered",
+      "subject": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md"
+    },
+    {
+      "evidence": "plan.md states 'Accept only when now < expires_at; equality and later times are rejected' and plans tests for earlier, equal, later instants, which directly covers the strict-inequality boundary.",
+      "status": "covered",
+      "subject": "can_accept returns true only when now is strictly earlier than expires_at; equality and later instants return false."
+    }
+  ],
+  "created_at": "2026-09-21T20:36:27+00:00",
+  "execution_status": "completed",
+  "findings": [],
+  "limitations": [
+    "No tests were run (per verification evidence); the plan's verification strategy is assessed on design only.",
+    "No implementation or repository code supplied; review limited to plan.md.",
+    "Plan does not address non-integer/negative inputs or bool-as-int, but this is out of stated scope (epoch-second ints) and not a defect.",
+    "Git diff in packet is empty, so no diff content was reviewed beyond the file contents."
+  ],
+  "observed_settings": {
+    "model_usage": {
+      "claude-sonnet-5": {
+        "cacheCreationInputTokens": 10742,
+        "cacheReadInputTokens": 12430,
+        "canonicalModel": "claude-sonnet-5",
+        "contextWindow": 1000000,
+        "costBasis": "list",
+        "costUSD": 0.055276,
+        "inputTokens": 6,
+        "maxOutputTokens": 64000,
+        "outputTokens": 981,
+        "provider": "firstParty",
+        "thinkingTokens": 0,
+        "webSearchRequests": 0
+      }
+    },
+    "terminal_reason": "completed",
+    "turns": 6
+  },
+  "phase": "plan",
+  "requested_settings": {
+    "effort": "low",
+    "max_turns": 20,
+    "model": null,
+    "timeout_seconds": 300
+  },
+  "runtime": {
+    "authentication": {
+      "logged_in": true,
+      "method": "claude.ai",
+      "provider": "firstParty",
+      "subscription_type": "pro"
+    },
+    "executable": "C:\\Users\\Raymo\\.local\\bin\\claude.exe",
+    "requested_effort": "low",
+    "requested_model": null,
+    "version": "2.1.278 (Claude Code)"
+  },
+  "scope_fingerprint": "71393ba971c8c8fedb19b11a1fc99f7eeda60835c59ec02fcc779cd2eeda41a6",
+  "source_evidence": {
+    "baseline": "cc42a43ebb3a306a5a4e5f5ee377b9722af2e98a",
+    "exclusions": [],
+    "file_fingerprint": "fb4e7b7e7973fb60888e8fde1d2231357edf00aab3535106451cfb660130b99a",
+    "files": [
+      {
+        "bytes": 333,
+        "path": "plan.md",
+        "sha256": "739322adee8f02521c68e89c8d31a299cc15df124f6595f5d8f25ac722a6efa1",
+        "state": "included"
+      },
+      {
+        "bytes": 263,
+        "path": "rules.md",
+        "sha256": "98e0790fc6cae0414c17f017ecedcf668301a97cf746578f1534872edf84cabd",
+        "state": "included"
+      },
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md",
+        "sha256": "2c71ed581f77433b64fbbafd02854d07daf3f6860e6606a57a9e8a5f284f32a1",
+        "snapshot_path": "_clanker_packet/guidance/00-clanker-claude-cross-review.md",
+        "state": "guidance"
+      },
+      {
+        "baseline": "cc42a43ebb3a306a5a4e5f5ee377b9722af2e98a",
+        "path": "@git",
+        "paths": [
+          "plan.md"
+        ],
+        "sha256": "e86274dbf8841cf9e5ff18f1c1d4b96e1bbc42c3b2c08d55f0d20a0eb871ce13",
+        "state": "git"
+      }
+    ],
+    "fingerprint": "fb4e7b7e7973fb60888e8fde1d2231357edf00aab3535106451cfb660130b99a",
+    "guidance": [
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md",
+        "sha256": "2c71ed581f77433b64fbbafd02854d07daf3f6860e6606a57a9e8a5f284f32a1",
+        "snapshot_path": "_clanker_packet/guidance/00-clanker-claude-cross-review.md",
+        "state": "guidance"
+      }
+    ],
+    "manifest_path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\plan.json",
+    "manifest_sha256": "fbccf9fc26bd95ff88e3f54c98b86d5693929c41243e1b73cd9b6db5bd682302",
+    "repository": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\fixture",
+    "requirements": [
+      "can_accept returns true only when now is strictly earlier than expires_at; equality and later instants return false."
+    ],
+    "verification_evidence": [
+      "No tests have been run in this isolated fixture."
+    ]
+  },
+  "verdict": "clean"
+}
