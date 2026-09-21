@@ -1,6 +1,6 @@
 ---
 name: clanker-refactor-sisyphus
-description: Survey the whole repository for high-leverage refactor opportunities and propose a bounded, ranked plan. Scope is anchored to hotspots (files ranked by git churn and size/complexity), not an exhaustive scan, and output is capped to the highest-leverage findings. Targets duplication clusters, god files and functions, inconsistent patterns, and module boundary or dead-code issues. Use when you want to plan down structural debt across the repo, not changes tied to a branch diff. This is a planning skill only; it does not implement changes and is not a correctness code review.
+description: Survey the whole repository for high-leverage refactor opportunities and propose a bounded, ranked plan. Scope is anchored to hotspots (files ranked by git churn and size/complexity), not an exhaustive scan, and output is capped to the highest-leverage findings. Targets duplication clusters, god files and functions, inconsistent patterns, and module boundary or dead-code issues. Use when you want to plan down structural debt across the repo, not changes tied to a branch diff. This is a planning skill only; it does not implement changes and is not a correctness code review. Use clanker-refactor-review for refactors scoped to the current branch diff; use clanker-code-review for correctness and requirement coverage.
 ---
 
 When invoked, follow this workflow exactly.
@@ -82,10 +82,10 @@ Score each candidate by impact divided by effort. Keep only the highest-leverage
 
 Prefer the repo's existing structure, naming, and patterns. Do not propose new architectural patterns or abstractions unless they reduce a clearly demonstrated, recurring pain.
 
-6. Save the proposals to `.clanker/DATE-repo-refactor-proposals.md`.
-   - `DATE` is the current date as `YYYYMMDD` (e.g. `20260605-repo-refactor-proposals.md`).
-   - This is a single flat file; do not create a per-run subdirectory.
-   - Create the `.clanker` directory if it does not exist.
+6. Save the proposals to `.clanker/refactor/{YYYY-MM-DD}-repo.md`.
+   - Use the current date (e.g. `.clanker/refactor/2026-06-05-repo.md`).
+   - One file per run; do not create a per-run subdirectory.
+   - Create the `.clanker/refactor` directory if it does not exist.
    - Write the full **Required Output** to this file.
    - Summarize the proposals concisely in the conversation and provide the file path so the user can view the full detail.
 
