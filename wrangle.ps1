@@ -15,6 +15,11 @@ $OrchestrationSkillName = "clanker-orchestration-nation"
 $OrchestrationCoordinatorSource = Join-Path $SubagentsSource "$OrchestrationSkillName.md"
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 $CrossReviewLauncherSource = Join-Path $SubagentsSource "scripts\claude_cross_review.py"
+$RoutingPolicySource = Join-Path $SubagentsSource "scripts\routing_policy.py"
+$RoutingEditorSource = Join-Path $SubagentsSource "scripts\routing_editor.py"
+$ModelDiscoverySource = Join-Path $SubagentsSource "scripts\model_discovery.py"
+$RoutingDataSource = Join-Path $SubagentsSource "routing"
+$RoutingEditorDistSource = Join-Path $RepoRoot "routing-editor\dist"
 
 function Copy-SafeFile {
     param(
@@ -143,6 +148,72 @@ function Assert-PathWithinRoot {
     return $fullPath
 }
 
+function Assert-NoReparsePath {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Description
+    )
+
+    $fullPath = Assert-PathWithinRoot -Path $Path -Root $Root -Description $Description
+    $fullRoot = [System.IO.Path]::GetFullPath($Root).TrimEnd([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $relativePath = $fullPath.Substring($fullRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
+    $currentPath = $fullRoot
+    $rootItem = Get-Item -LiteralPath $currentPath -Force -ErrorAction SilentlyContinue
+    if ($null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw "Refusing to install through a linked $Description root: $currentPath"
+    }
+    foreach ($part in ($relativePath -split '[\\/]')) {
+        if (-not $part) { continue }
+        $currentPath = Join-Path $currentPath $part
+        $item = Get-Item -LiteralPath $currentPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item -and ($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+            throw "Refusing to install through a linked $Description path: $currentPath"
+        }
+    }
+    return $fullPath
+}
+
+function Remove-RoutingEditorAssets {
+    param(
+        [Parameter(Mandatory)][string]$EditorDirectory,
+        [Parameter(Mandatory)][string]$BundleDirectory
+    )
+
+    foreach ($name in @("index.html", "compatibility.json", "assets")) {
+        $assetPath = Assert-NoReparsePath -Path (Join-Path $EditorDirectory $name) -Root $BundleDirectory -Description "routing editor"
+        $item = Get-Item -LiteralPath $assetPath -Force -ErrorAction SilentlyContinue
+        if ($null -ne $item) {
+            if ($item.PSIsContainer) {
+                foreach ($child in Get-ChildItem -LiteralPath $assetPath -Recurse -Force) {
+                    if ($child.Attributes -band [System.IO.FileAttributes]::ReparsePoint) {
+                        throw "Refusing to remove linked editor asset: $($child.FullName)"
+                    }
+                }
+            }
+            Remove-Item -LiteralPath $assetPath -Recurse -Force -Confirm:$false
+            Write-Host "Removed packaged routing editor asset: $assetPath"
+        }
+    }
+}
+
+function Copy-RoutingDirectory {
+    param(
+        [Parameter(Mandatory)][string]$SourceDirectory,
+        [Parameter(Mandatory)][string]$DestinationDirectory,
+        [Parameter(Mandatory)][string]$BundleDirectory,
+        [Parameter(Mandatory)][string]$Description
+    )
+
+    foreach ($sourceFile in Get-ChildItem -LiteralPath $SourceDirectory -File -Recurse | Where-Object {
+        $_.Extension -ne ".pyc" -and $_.FullName -notmatch '[\\/]__pycache__[\\/]'
+    } | Sort-Object FullName) {
+        $relativePath = $sourceFile.FullName.Substring($SourceDirectory.Length).TrimStart([char[]]@('\', '/'))
+        $destinationPath = Assert-NoReparsePath -Path (Join-Path $DestinationDirectory $relativePath) -Root $BundleDirectory -Description $Description
+        Copy-SafeFile -DestinationPath $destinationPath -SourcePath $sourceFile.FullName
+    }
+}
+
 function Install-OrchestrationNationBundle {
     param(
         [Parameter(Mandatory)][string]$AgentName,
@@ -153,6 +224,7 @@ function Install-OrchestrationNationBundle {
     $bundleDirectory = Join-Path $AgentSkillsRoot $OrchestrationSkillName
     $referencesDirectory = Join-Path $bundleDirectory "references"
     $bundleSkill = Join-Path $bundleDirectory "SKILL.md"
+    $null = Assert-NoReparsePath -Path $bundleDirectory -Root $AgentSkillsRoot -Description "orchestration bundle"
 
     New-Item -ItemType Directory -Path $referencesDirectory -Force | Out-Null
     Copy-SafeFile -DestinationPath $bundleSkill -SourcePath $OrchestrationCoordinatorSource
@@ -168,6 +240,26 @@ function Install-OrchestrationNationBundle {
         throw "Refusing to install through a linked scripts directory: $scriptsDirectory"
     }
     Copy-SafeFile -DestinationPath (Join-Path $scriptsDirectory "claude_cross_review.py") -SourcePath $CrossReviewLauncherSource
+    foreach ($routingScript in @($RoutingPolicySource, $RoutingEditorSource, $ModelDiscoverySource)) {
+        $destination = Assert-NoReparsePath -Path (Join-Path $scriptsDirectory ([System.IO.Path]::GetFileName($routingScript))) -Root $bundleDirectory -Description "routing scripts"
+        Copy-SafeFile -DestinationPath $destination -SourcePath $routingScript
+    }
+
+    $routingDirectory = Join-Path $bundleDirectory "routing"
+    Copy-RoutingDirectory -SourceDirectory $RoutingDataSource -DestinationDirectory $routingDirectory -BundleDirectory $bundleDirectory -Description "routing data"
+
+    $editorDirectory = Join-Path $bundleDirectory "editor"
+    Remove-RoutingEditorAssets -EditorDirectory $editorDirectory -BundleDirectory $bundleDirectory
+    if (Test-Path -LiteralPath $RoutingEditorDistSource -PathType Container) {
+        $compatibilitySource = Join-Path $RoutingEditorDistSource "compatibility.json"
+        if (-not (Test-Path -LiteralPath $compatibilitySource -PathType Leaf)) {
+            throw "Routing editor build is missing compatibility.json: $RoutingEditorDistSource"
+        }
+        Copy-RoutingDirectory -SourceDirectory $RoutingEditorDistSource -DestinationDirectory $editorDirectory -BundleDirectory $bundleDirectory -Description "routing editor"
+    }
+    else {
+        Write-Host "Routing editor build unavailable; installed routing helpers without editor assets."
+    }
 
     if ($AgentName -eq "Codex") {
         New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
@@ -289,6 +381,15 @@ if (-not (Test-Path -LiteralPath $GlobalRulesSource -PathType Leaf)) {
 
 if (-not (Test-Path -LiteralPath $CrossReviewLauncherSource -PathType Leaf)) {
     throw "Claude cross-review launcher not found: $CrossReviewLauncherSource"
+}
+
+foreach ($routingSource in @($RoutingPolicySource, $RoutingEditorSource, $ModelDiscoverySource)) {
+    if (-not (Test-Path -LiteralPath $routingSource -PathType Leaf)) {
+        throw "Routing helper source file not found: $routingSource"
+    }
+}
+if (-not (Test-Path -LiteralPath $RoutingDataSource -PathType Container)) {
+    throw "Routing data source directory not found: $RoutingDataSource"
 }
 
 $SpecialistSourceFiles = @(Get-ChildItem -LiteralPath $SubagentsSource -Filter "*.md" -File | Where-Object { $_.Name -ne "$OrchestrationSkillName.md" } | Sort-Object Name)

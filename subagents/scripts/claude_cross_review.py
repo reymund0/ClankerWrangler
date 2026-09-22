@@ -20,10 +20,11 @@ import signal
 import subprocess
 import sys
 import tempfile
+import uuid
 from typing import Any
 
 
-DEFAULT_TIMEOUT_SECONDS = 600
+DEFAULT_TIMEOUT_SECONDS = 2700
 DEFAULT_REVIEW_MODEL = "claude-opus-5"
 MODEL_ENVIRONMENT_KEYS = {
     "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
@@ -427,12 +428,18 @@ def validate_model_report(value: Any, phase: str) -> dict[str, Any]:
     return {"verdict": verdict, "coverage": coverage, "findings": findings, "limitations": limitations, "observed_settings": value.get("observed_settings", {})}
 
 
-def start_review_process(command: list[str], snapshot: pathlib.Path) -> subprocess.Popen[str]:
+def start_review_process(command: list[str], snapshot: pathlib.Path, *, environment: dict[str, str] | None = None) -> subprocess.Popen[str]:
+    """Start an owned contained process with a per-child environment."""
+    child_environment = os.environ if environment is None else environment
     options = dict(cwd=snapshot, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                    text=True, encoding="utf-8", errors="replace", start_new_session=os.name != "nt",
-                   env={name: value for name, value in os.environ.items() if name not in MODEL_ENVIRONMENT_KEYS})
+                   env={name: value for name, value in child_environment.items() if name not in MODEL_ENVIRONMENT_KEYS})
     if os.name != "nt":
         return subprocess.Popen(command, **options)
+    startup = subprocess.STARTUPINFO()
+    startup.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startup.wShowWindow = subprocess.SW_HIDE
+    options["startupinfo"] = startup
     # Create suspended: the process must join our kill-on-close job before it can
     # launch descendants. Resume its threads only after assignment succeeds.
     import ctypes
@@ -659,6 +666,62 @@ def check_current(path: pathlib.Path) -> int:
     return 3 if stale else 0
 
 
+def reservation_root() -> pathlib.Path:
+    return pathlib.Path.home() / ".clanker" / "review-reservations"
+
+
+def reserve_review(repository: pathlib.Path, manifest: dict[str, Any], manifest_path: pathlib.Path,
+                   report_path: pathlib.Path) -> pathlib.Path:
+    """Publish the intended scope before snapshotting; callers must quiesce writers first."""
+    paths = [resolve_under(repository, p) for p in
+             manifest["selected_paths"] + manifest.get("context_paths", [])]
+    paths += [pathlib.Path(p).resolve() for p in manifest.get("guidance_paths", [])]
+    paths.append(manifest_path.resolve())
+    scope = [{"path": str(p), "sha256": sha256_file(p) if p.is_file() else None}
+             for p in dict.fromkeys(paths)]
+    root = reservation_root()
+    root.mkdir(parents=True, exist_ok=True)
+    destination = root / (str(uuid.uuid4()) + ".json")
+    pending = destination.with_suffix(".pending")
+    try:
+        pending.write_text(json.dumps({"pid": os.getpid(), "created_at": utc_now(),
+            "repository": str(repository), "report_directory": str(report_path),
+            "files": scope}, indent=2), encoding="utf-8")
+        pending.replace(destination)
+    finally:
+        pending.unlink(missing_ok=True)
+    return destination
+
+
+def check_write_reservations(paths: list[str]) -> dict[str, Any]:
+    """Check files or directory operations against all local review reservations."""
+    candidates = []
+    for raw in paths:
+        path = pathlib.Path(raw)
+        if not path.is_absolute():
+            raise ReviewError("Write checks require absolute paths")
+        candidates.append(path.resolve())
+    conflicts = []
+    try:
+        records = sorted(p for p in reservation_root().iterdir() if p.suffix == ".json")
+    except FileNotFoundError:
+        records = []
+    for record in records:
+        data = load_json(record)
+        files = data.get("files")
+        if not isinstance(files, list):
+            raise ReviewError("Invalid review reservation; coordinator recovery required")
+        for item in files:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not pathlib.Path(item["path"]).is_absolute():
+                raise ReviewError("Invalid review reservation; coordinator recovery required")
+            reserved = pathlib.Path(item["path"]).resolve()
+            for candidate in candidates:
+                if candidate == reserved or candidate in reserved.parents or reserved in candidate.parents:
+                    conflicts.append({"requested_path": str(candidate), "reserved_path": str(reserved),
+                                      "reservation": str(record), "pid": data.get("pid")})
+    return {"allowed": not conflicts, "conflicts": conflicts}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run a bounded, read-only Claude Code review from a JSON manifest.")
     parser.add_argument("--manifest", type=pathlib.Path)
@@ -666,9 +729,20 @@ def main() -> int:
     parser.add_argument("--claude-exe")
     parser.add_argument("--model", default=DEFAULT_REVIEW_MODEL, help="Review model override (default: claude-opus-5)")
     parser.add_argument("--effort", help="Explicit review effort selected from scope/risk or user override; no default")
-    parser.add_argument("--timeout-seconds", type=finite_positive, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument("--timeout-seconds", type=finite_positive, default=DEFAULT_TIMEOUT_SECONDS, help="Wall-clock review limit in seconds (default: 2700 / 45 minutes)")
     parser.add_argument("--check-current", type=pathlib.Path)
+    parser.add_argument("--check-writes", nargs="+", metavar="ABSOLUTE_PATH")
     args = parser.parse_args()
+    if args.check_writes:
+        if args.manifest or args.output_dir or args.check_current:
+            parser.error("--check-writes cannot be combined with review or freshness operations")
+        try:
+            result = check_write_reservations(args.check_writes)
+            print(json.dumps(result))
+            return 0 if result["allowed"] else 3
+        except (ReviewError, OSError) as error:
+            print(json.dumps({"allowed": False, "error": str(error)}), file=sys.stderr)
+            return 2
     if args.check_current:
         if args.manifest or args.output_dir:
             parser.error("--check-current cannot be combined with --manifest or --output-dir")
@@ -683,6 +757,7 @@ def main() -> int:
         parser.error("--effort is required for review execution; select it from scope/risk or a user override")
     directory = None
     snapshot = None
+    reservation = None
     report = {"execution_status": "failed", "phase": "unknown", "scope_fingerprint": None,
               "requested_settings": {"model": args.model, "effort": args.effort, "timeout_seconds": args.timeout_seconds},
               "observed_settings": {}, "runtime": {}, "source_evidence": {}, "verdict": "incomplete",
@@ -701,6 +776,8 @@ def main() -> int:
         args.model = runtime["requested_model"]
         report["requested_settings"]["model"] = args.model
         report["runtime"] = runtime
+        reservation = reserve_review(repository, manifest, args.manifest, directory)
+        report["reservation"] = str(reservation)
         snapshot, files, fingerprint = collect_snapshot(repository, selected, manifest)
         report["scope_fingerprint"] = sha256_bytes((fingerprint + manifest_hash).encode())
         report["source_evidence"].update(files=files, fingerprint=fingerprint, file_fingerprint=fingerprint,
@@ -717,6 +794,7 @@ def main() -> int:
         report["execution_status"] = "completed"
         if current_fingerprint(repository, files) != fingerprint or sha256_file(args.manifest) != manifest_hash:
             report.update(execution_status="stale", verdict="incomplete")
+            report["limitations"].append("Review completed, but inputs changed; a fresh review is required")
     except KeyboardInterrupt:
         report.update(execution_status="interrupted", verdict="incomplete")
         report["limitations"].append("Review interrupted")
@@ -726,6 +804,12 @@ def main() -> int:
         report.update(execution_status=status, verdict="incomplete")
         report["limitations"].append(error)
     finally:
+        if reservation is not None:
+            try:
+                reservation.unlink(missing_ok=True)
+            except OSError:
+                report.update(execution_status="failed", verdict="incomplete")
+                report["limitations"].append("Review reservation cleanup failed; coordinator recovery required: " + str(reservation))
         if snapshot is not None:
             try:
                 cleanup_snapshot(snapshot)

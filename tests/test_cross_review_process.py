@@ -7,6 +7,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 MODULE = pathlib.Path(__file__).parents[1] / "subagents" / "scripts" / "claude_cross_review.py"
 spec = importlib.util.spec_from_file_location("claude_cross_review_process", MODULE)
@@ -53,6 +54,36 @@ class ReviewProcessTests(unittest.TestCase):
                 return
             time.sleep(0.05)
         self.fail(f"owned child process {pid} survived cleanup")
+
+    def test_child_environment_is_explicit_and_strips_model_overrides(self):
+        model_key = next(iter(review.MODEL_ENVIRONMENT_KEYS))
+        marker = "CLANKER_PROCESS_ENV_REGRESSION"
+        code = "import json,os; print(json.dumps({k: os.environ.get(k) for k in __import__('sys').argv[1:]}))"
+
+        def launch(environment=None):
+            with tempfile.TemporaryDirectory() as temporary:
+                process = review.start_review_process(
+                    [sys.executable, "-c", code, model_key, marker],
+                    pathlib.Path(temporary),
+                    environment=environment,
+                )
+                try:
+                    stdout, stderr = process.communicate(timeout=3)
+                    self.assertEqual(process.returncode, 0, stderr)
+                    return __import__("json").loads(stdout)
+                finally:
+                    review.close_review_job(process)
+
+        with patch.dict(os.environ, {model_key: "ambient-model", marker: "default-value"}):
+            parent = {model_key: os.environ[model_key], marker: os.environ[marker]}
+            default = launch()
+            supplied = dict(os.environ)
+            supplied[model_key] = "supplied-model"
+            supplied[marker] = "supplied-value"
+            explicit = launch(supplied)
+            self.assertEqual(default, {model_key: None, marker: "default-value"})
+            self.assertEqual(explicit, {model_key: None, marker: "supplied-value"})
+            self.assertEqual({model_key: os.environ[model_key], marker: os.environ[marker]}, parent)
 
     def test_owned_active_parent_and_child_are_terminated(self):
         with tempfile.TemporaryDirectory() as temporary:

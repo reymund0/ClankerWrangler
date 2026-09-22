@@ -1,0 +1,9 @@
+{
+  "name": "clanker-wrangler",
+  "private": true,
+  "scripts": {
+    "editor": "node scripts/editor.mjs start",
+    "editor:dev": "node scripts/editor.mjs dev",
+    "editor:build": "node scripts/editor.mjs build"
+  }
+}

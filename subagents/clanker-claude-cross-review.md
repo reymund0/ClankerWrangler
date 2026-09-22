@@ -72,19 +72,39 @@ and confirmed subscription login. It resolves a verified absolute executable eve
 PATH is stale. Read its `--help` before invocation and use supported flags.
 
 Model selection is independent of the Codex parent and Sol/Terra worker defaults.
-Default the review model to Claude Opus 5 (claude-opus-5), independently of ambient
-Claude settings. Honor an explicit per-review model override, and select effort using
+Resolve the packet's `claude-review` route using the coordinator run snapshot and
+`routing/usage.md`. With no saved or explicit override, the model remains Claude
+Opus 5 (claude-opus-5), independently of ambient Claude settings. Pass the resolved
+model explicitly; direct launcher commands without --model retain Opus 5. Honor an explicit per-review model override, and select effort using
 the policy below unless the user overrides it. Keep persistent Claude settings unchanged. Log unknown effective settings as unknown. No automatic fallback, API-key billing, persistent configuration edits, login,
 or installation is authorized by a review request. If preflight blocks, report the
 specific prerequisite; never bypass restrictions to obtain a result.
 
-Use a finite wall-clock timeout (default: 600 seconds). The launcher supplies a snapshot,
+Use a finite wall-clock timeout (default: 2700 seconds / 45 minutes). The launcher supplies a snapshot,
 read/search tools, disabled ambient customizations/MCP, and noninteractive permission
 denial. No `--bare`, bypass-permissions, unrestricted shell, editor, browser, or nested
 agent capabilities. Resolve resources using the package actually loaded and supply
 instructions explicitly because safe mode skips automatic discovery.
 
+## Waiting efficiently
+
+Launch each review once and retain its process/session handle. Prefer completion
+notifications where the host supports them; otherwise use bounded waits rather than
+rapid status polling. Do independent work while the review runs, without changing
+files in its snapshot packet. Collect the compact final report once, then inspect
+findings as needed. Do not repeatedly dump unchanged logs, restart a healthy review,
+or spawn a native agent solely to wait. The wall-clock limit can be overridden with
+`--timeout-seconds`; no turn limit is imposed.
+
 ## Select reasoning effort
+
+For orchestrated reviews use the shared resolver; configured fixed effort, model-specific
+Adaptive maps and ceilings override the default table below, with explicit session
+requests taking precedence. Several specialist instruction files still use one
+`claude-review` route. A result requiring launcher preflight permits only invoking
+the existing restricted launcher: it validates subscription and CLI controls before
+executing the model. Neither the resolver nor editor performs that preflight or calls
+a model. Log requested settings and the launcher's observed result separately.
 
 First decide whether Claude review is warranted; small low-risk work still skips it
 unless explicitly requested. For each selected plan or implementation review, assess
@@ -99,7 +119,7 @@ complexity, uncertainty, and consequences rather than counting files or lines:
 | Authentication, authorization, migrations, or data integrity | High |
 | Deployment/recovery changes or complex performance behavior | High |
 
-An explicit supported user effort overrides this selection. A two-line authorization
+A configured route or explicit supported user effort overrides this default selection. A two-line authorization
 change can still warrant high. For a recheck, reassess the remaining scope and risk:
 a purely mechanical remainder may use low; unresolved security/data concerns retain
 high. Never lower or raise effort solely because it is a recheck. Preserve the existing
@@ -187,3 +207,19 @@ existing run ID and original log date. Link the unique report and summarize sele
 requested/observed settings, actual coverage, failures, dispositions, and waivers.
 Preserve all attempts. Claude and the launcher must not update the shared log or
 OpenSpec task state. Report unsuccessful saves and unrun verification honestly.
+
+## Active review reservations
+
+The launcher reserves selected paths (including missing/deleted files), context,
+external guidance, and the manifest in the per-user directory
+`~/.clanker/review-reservations/`. Records contain absolute paths, initial hashes,
+owner PID, creation time, and report directory, but no file contents. Writers must
+use `python <package>/scripts/claude_cross_review.py --check-writes <absolute paths>`
+before editing. Directory checks also detect reserved descendants. Exit codes are
+0 (no overlap), 3 (defer overlapping writes), and 2 (check failed; investigate).
+These reservations coordinate participating agents, not arbitrary filesystem writes.
+The coordinator must quiesce existing writers before launch. Final fingerprints
+remain authoritative; changed inputs produce a stale/incomplete report, separately
+from a failed model execution. Normal exits release reservations; after a hard kill,
+the coordinator verifies the entire owned review has stopped before deleting an
+orphan record. Unrelated work may continue throughout the review.

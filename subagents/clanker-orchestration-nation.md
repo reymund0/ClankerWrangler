@@ -56,10 +56,41 @@ is unknown, say it is unknown. Parent choice does not guarantee worker availabil
 do not silently substitute an unavailable worker model, effort, or delegation
 capability, and never claim a worker ran when dispatch did not succeed.
 
-Choose worker effort from the current task: low for mechanical work, medium for bounded
-implementation or routine planning, high for unclear interfaces, complex logic, data
-or security risk, and demanding review. Use xhigh or above only for an identified
-reason and a supported model. Record the reason; do not escalate effort automatically.
+Before the first assignment, read `routing/usage.md` relative to the coordinator
+package (source checkout: `subagents/routing/usage.md`). Use the package's
+`scripts/routing_policy.py` with Python 3.10+ to create an immutable run snapshot
+of bundled defaults, `~/.clanker/orchestration-routing.json`, and the target
+project's optional `.clanker/orchestration-routing.json`. Missing Python or invalid
+present configuration blocks routing; do not silently revert to this table.
+
+Resolve every assignment from that snapshot using one of `planning`,
+`implementation`, `native-review`, `visual-review`, or `claude-review`, plus the
+selected native specialist where applicable. Precedence is bundled defaults,
+global interaction, global agent default, global activity-specific specialist,
+project interaction, project agent default, project activity-specific specialist,
+then explicit per-assignment user overrides. Agent defaults are optional; without them
+phase defaults remain unchanged. Every assignment still resolves its own activity. Parent session settings are not worker
+overrides. Disclose active project sources and effective changes at run start.
+Only explicit user instruction permits bypassing an entire named invalid file.
+
+Assess mechanical, routine, complex, or exceptional scope with a concise reason.
+Security, data integrity, and recovery risk imply at least complex. Exceptional
+needs a concrete reason beyond the model choice. Fixed effort is authoritative;
+Adaptive applies the effective model profile and user ceiling. An omitted ceiling
+uses that model's profile default; an explicit inherited ceiling remains in force
+when only the model changes. Log limitations rather than silently raising effort
+or switching models. Profiles are provisional policy, not quality guarantees.
+
+For native dispatch, supply model/effort capabilities actually advertised by the
+active collaboration tool, with its source recorded as parent-attested evidence.
+Only dispatch a supported resolved pair. A saved catalog is not runtime or account
+proof. Claude routes without evidence permit only the existing guarded launcher,
+whose built-in preflight runs before any model request. Its final report remains
+authoritative for execution; no preview constitutes a completed review.
+
+Saved preference changes affect new runs. Reload only on explicit user direction,
+create a new snapshot ordinal, and log it before future assignments. Never rewrite
+past snapshot decisions or alter running workers.
 
 Use native delegation with actual arguments supported by the active runtime, for example:
 
@@ -123,8 +154,8 @@ Put the resolved absolute instruction path in the worker assignment and instruct
 worker to read it before domain work. These files steer workers; native delegation
 creates the subagent and the parent supplies its model, effort, and bounded context.
 Require the result to identify the instruction file actually read and log that path.
-Native planning/review phases default to Sol and implementation phases to Terra, including when one
-specialty participates in both phases. Instructions must not override the assigned
+Unconfigured native planning/review defaults to Sol and implementation to Terra, including when one
+specialty participates in both phases. Apply the resolved interaction/specialist route when configured. Instructions must not override the assigned
 phase, file ownership, repository instructions, or existing user authorization.
 
 ## Delegation rules
@@ -168,7 +199,7 @@ record baseline, method, comparable result, and limitations. For DevOps, retain 
 user's authorization boundary and do not deploy unless expressly requested.
 
 For visual acceptance after UI changes, select `clanker-ui-ux-reviewer` in the review
-phase on Sol. Supply the running application or documented startup workflow, target
+interaction, defaulting to Sol without overrides. Supply the running application or documented startup workflow, target
 routes, design/acceptance context, viewports, and artifact locations. Require actual
 rendered inspection and evidence; source-only review cannot pass visual acceptance.
 Run it after the relevant UI changes are integrated and available in the target build.
@@ -194,13 +225,14 @@ Skip small low-risk edits by default. Honor explicit requests and opt-outs and l
 reason. A planning-only request authorizes only the planning checkpoint. Do not add a
 Claude call after every task or treat review as authorization to implement/deploy.
 
-Default Claude reviews to Opus 5 (`claude-opus-5`); honor an explicit per-review
-model override without changing persistent Claude configuration.
+Resolve the `claude-review` interaction once for the packet, without native specialist
+route overrides. Its unconfigured model is Opus 5 (`claude-opus-5`); explicit user
+overrides take precedence. Pass the resolved model explicitly without changing persistent
+Claude configuration.
 
-Before each Claude dispatch, use the cross-review reference's scope/risk effort policy:
-low for requested mechanical checks, medium for routine bounded reviews, high for
-complex or consequential reviews. Honor user overrides, pass --effort explicitly, and
-log the phase, choice, and reason. Reassess effort for a recheck from its remaining
+Before each Claude dispatch, resolve fixed or Adaptive effort from the same run snapshot.
+Without overrides, the Claude profile maps mechanical/routine/complex to low/medium/high.
+Pass --effort explicitly and log the phase, choice, ceiling effects, and reason. Reassess effort for a recheck from its remaining
 scope/risk; do not automatically inherit, lower, or raise it. Keep the existing skip
 rules and one-recheck limit.
 
@@ -276,6 +308,12 @@ Evidence/status: <actual command, artifact, result, failure, or unrun check>
 Blockers/next step: <sanitized blocker or none>
 ```
 
+For dispatch, also log interaction, assessment tier/factors, fixed/Adaptive mode, proposed
+and requested effort, ceiling/source, field provenance, schema/policy version, snapshot
+path/fingerprint, explicit overrides, and capability status. Snapshot contents are
+parent-owned files, not raw payloads copied into the daily log. Observed settings
+remain unknown unless reported by the runtime. Log reloads as new snapshots.
+
 For dispatch, log role, resolved instruction path, requested model/effort, ownership, and status before calling
 the native tool. If it fails, append the failure without treating the worker as
 running. On resume, read existing entries and reconcile a pending event from observed
@@ -306,3 +344,29 @@ not as a mandatory second review. For meaningful documentation impact, reuse
 Tell the user what completed, what was verified, and any concrete unrun or failed
 checks. Include the log path when logging succeeded. Do not fabricate agent runs,
 test results, settings, performance improvements, deployments, or OpenSpec state.
+
+## Freeze review inputs cooperatively
+
+Before a final Claude review, wait for all writers touching its selected files,
+context, manifest, or external guidance to finish. The launcher publishes an active
+reservation in `~/.clanker/review-reservations/` before creating its snapshot and
+releases it when execution finishes, fails, times out, or is interrupted.
+Do not dispatch overlapping writes while that reservation exists. Independent
+work outside the reserved paths may continue. Include this worker instruction in
+EVERY write-capable assignment (including documentation and installed guidance):
+
+> Before each edit batch, run the installed review launcher with
+> `--check-writes <absolute paths to files or directories being changed>`.
+> Exit 0 permits the cooperative write; exit 3 means reserved: defer the work and
+> notify the coordinator. Exit 2 means the check failed: do not assume permission.
+> Check both source and destination for moves. Never remove another run's reservation.
+
+A check is advisory, not an atomic filesystem lock. The coordinator must serialize
+review startup with writer dispatch, and still validate final fingerprints. If
+scope must change, stop and await the owned reviewer, let it release its reservation,
+then edit and run a fresh review. Do not install updated shared guidance mid-review.
+A hard-killed launcher may leave a reservation behind. Do not expire it based on
+elapsed time or PID alone: verify the owning launcher and reviewer have stopped
+before explicitly removing that exact orphan record. Malformed records block writes
+until the coordinator investigates. Multiple read-only reviews may overlap; each
+retains its own reservation until completion.
