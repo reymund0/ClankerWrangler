@@ -66,6 +66,7 @@ class EffortTests(unittest.TestCase):
                 self.assertEqual(command[command.index("--model") + 1], expected)
                 self.assertEqual(command[command.index("--effort") + 1], "medium")
                 self.assertNotIn("--fallback-model", command)
+                self.assertNotIn("--max-turns", command)
                 report = json.loads((root / "reports/model/plan-1/report.json").read_text(encoding="utf-8"))
                 self.assertEqual(report["requested_settings"]["model"], expected)
                 self.assertIsNone(report["observed_settings"]["model_usage"])

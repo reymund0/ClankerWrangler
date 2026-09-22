@@ -78,7 +78,7 @@ the policy below unless the user overrides it. Keep persistent Claude settings u
 or installation is authorized by a review request. If preflight blocks, report the
 specific prerequisite; never bypass restrictions to obtain a result.
 
-Use finite bounds (defaults: 600 seconds, 20 turns). The launcher supplies a snapshot,
+Use a finite wall-clock timeout (default: 600 seconds). The launcher supplies a snapshot,
 read/search tools, disabled ambient customizations/MCP, and noninteractive permission
 denial. No `--bare`, bypass-permissions, unrestricted shell, editor, browser, or nested
 agent capabilities. Resolve resources using the package actually loaded and supply
@@ -157,7 +157,7 @@ python <package>/scripts/claude_cross_review.py --check-current <saved-report.js
 
 Required for review execution: --effort <selected supported level>. Optional switches:
 --claude-exe <absolute executable>, --model <selection>, --timeout-seconds <positive
-integer>, --max-turns <positive integer>.
+integer>. Reviews are bounded by the timeout only; no turn limit is imposed.
 Use argument arrays or literal shell arguments; do not concatenate untrusted prompt
 text into commands. The helper returns its unique report path. Read report.json and
 summary.md from that location, not from a guessed most-recent directory.

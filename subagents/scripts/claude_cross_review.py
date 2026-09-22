@@ -24,7 +24,6 @@ from typing import Any
 
 
 DEFAULT_TIMEOUT_SECONDS = 600
-DEFAULT_MAX_TURNS = 20
 DEFAULT_REVIEW_MODEL = "claude-opus-5"
 MODEL_ENVIRONMENT_KEYS = {
     "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
@@ -563,7 +562,7 @@ def invoke(executable: pathlib.Path, snapshot: pathlib.Path, manifest: dict[str,
         "Return JSON with phase, verdict (clean|changes_requested|incomplete), coverage items {subject,status,evidence}, findings, limitations, and observed_settings. "
         "Each finding must include id, severity, location, scenario, evidence, confidence, and suggested_remedy.\n"
         "Report one coverage item with the exact subject string for each selected path, context path, guidance original path, and requirement: " + json.dumps(required_subjects(manifest)) + "\nExcluded files must be unreviewed; deleted files may be reviewed using supplied diffs.\nRequirements:\n" + requirements + "\nVerification evidence:\n" + evidence + ("\nAdditional bounded focus:\n" + manifest["prompt"] if isinstance(manifest.get("prompt"), str) else ""))
-    command = [str(executable), "--safe-mode", "--restricted", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep", "--disallowedTools", "mcp__*", "--permission-prompts", "none", "--no-session-persistence", "--max-turns", str(args.max_turns), "--output-format", "json", "--json-schema", json.dumps(schema, separators=(",", ":"))]
+    command = [str(executable), "--safe-mode", "--restricted", "--strict-mcp-config", "--mcp-config", '{"mcpServers":{}}', "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep", "--disallowedTools", "mcp__*", "--permission-prompts", "none", "--no-session-persistence", "--output-format", "json", "--json-schema", json.dumps(schema, separators=(",", ":"))]
     if args.model:
         command.extend(["--model", args.model])
     if args.effort:
@@ -668,7 +667,6 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_REVIEW_MODEL, help="Review model override (default: claude-opus-5)")
     parser.add_argument("--effort", help="Explicit review effort selected from scope/risk or user override; no default")
     parser.add_argument("--timeout-seconds", type=finite_positive, default=DEFAULT_TIMEOUT_SECONDS)
-    parser.add_argument("--max-turns", type=finite_positive, default=DEFAULT_MAX_TURNS)
     parser.add_argument("--check-current", type=pathlib.Path)
     args = parser.parse_args()
     if args.check_current:
@@ -686,7 +684,7 @@ def main() -> int:
     directory = None
     snapshot = None
     report = {"execution_status": "failed", "phase": "unknown", "scope_fingerprint": None,
-              "requested_settings": {"model": args.model, "effort": args.effort, "timeout_seconds": args.timeout_seconds, "max_turns": args.max_turns},
+              "requested_settings": {"model": args.model, "effort": args.effort, "timeout_seconds": args.timeout_seconds},
               "observed_settings": {}, "runtime": {}, "source_evidence": {}, "verdict": "incomplete",
               "findings": [], "coverage": [], "limitations": [], "created_at": utc_now()}
     try:
