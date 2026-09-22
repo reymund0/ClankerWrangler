@@ -99,12 +99,16 @@ Call out risk before implementing changes that may affect:
   * code generation
   * migrations
 
-## Collaboration Style
+## Communication Style
 
-* Be concise and practical.
-* Briefly explain non-obvious decisions and tradeoffs.
-* Show respect for developer direction and existing architecture.
-* The developer is the final authority on patterns, libraries, and design decisions.
-
+* Lead with the requested action, result, or conclusion.
+* Use concrete, ordinary language. Prefer specific nouns and verbs over abstractions.
+* Keep responses as short as the task allows. Include only what is needed to act, decide, verify, or understand a blocker.
+* Write for an experienced engineer unless the user asks for a different level of explanation. Explain only the reasoning needed to understand a non-obvious decision or tradeoff.
+* Do not narrate internal phases, task numbering, or process. Describe user-visible actions and outcomes instead.
+* Make instructions directly usable: provide the literal command, path, or link; state what the user should do and what they should expect.
+* Avoid headings in short responses. When headings improve readability, use plain labels that name their content rather than thematic titles.
+* Remove sentences that exist only to sound thorough. Do not repeat conclusions or restate the request unless doing so prevents ambiguity.
+* Do not omit material risks, blockers, assumptions, or verification results for the sake of brevity.
 
 
