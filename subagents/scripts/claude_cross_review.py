@@ -25,7 +25,7 @@ from typing import Any
 
 
 DEFAULT_TIMEOUT_SECONDS = 2700
-DEFAULT_REVIEW_MODEL = "claude-opus-5"
+DEFAULT_REVIEW_MODEL = "opus"
 MODEL_ENVIRONMENT_KEYS = {
     "ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
     "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
@@ -727,7 +727,7 @@ def main() -> int:
     parser.add_argument("--manifest", type=pathlib.Path)
     parser.add_argument("--output-dir", type=pathlib.Path)
     parser.add_argument("--claude-exe")
-    parser.add_argument("--model", default=DEFAULT_REVIEW_MODEL, help="Review model override (default: claude-opus-5)")
+    parser.add_argument("--model", default=DEFAULT_REVIEW_MODEL, help="Review model override (default: opus)")
     parser.add_argument("--effort", help="Explicit review effort selected from scope/risk or user override; no default")
     parser.add_argument("--timeout-seconds", type=finite_positive, default=DEFAULT_TIMEOUT_SECONDS, help="Wall-clock review limit in seconds (default: 2700 / 45 minutes)")
     parser.add_argument("--check-current", type=pathlib.Path)

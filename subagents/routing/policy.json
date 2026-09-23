@@ -6,7 +6,7 @@
     {"id": "implementation", "label": "Implementation and testing", "provider": "codex", "default_model": "gpt-5.6-terra"},
     {"id": "native-review", "label": "Native code review", "provider": "codex", "default_model": "gpt-5.6-sol"},
     {"id": "visual-review", "label": "Visual and UX review", "provider": "codex", "default_model": "gpt-5.6-sol"},
-    {"id": "claude-review", "label": "Claude cross-review", "provider": "claude", "default_model": "claude-opus-5"}
+    {"id": "claude-review", "label": "Claude cross-review", "provider": "claude", "default_model": "opus"}
   ],
   "roles": [
     {"id": "clanker-architect", "label": "Architect"},
@@ -29,6 +29,7 @@
     {"id": "gpt-5.6-terra", "label": "GPT-5.6 Terra", "provider": "codex", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"]},
     {"id": "gpt-5.6-luna", "label": "GPT-5.6 Luna", "provider": "codex", "efforts": ["low", "medium", "high", "xhigh", "max"]},
     {"id": "gpt-5.5", "label": "GPT-5.5", "provider": "codex", "efforts": ["low", "medium", "high", "xhigh"]},
+    {"id": "opus", "label": "Claude Opus (latest)", "provider": "claude", "efforts": ["low", "medium", "high", "xhigh", "max"]},
     {"id": "claude-opus-5", "label": "Claude Opus 5", "provider": "claude", "efforts": ["low", "medium", "high", "xhigh", "max"]}
   ],
   "effort_orders": {
@@ -42,7 +43,7 @@
       "implementation": {"model": "gpt-5.6-terra", "reasoning": {"mode": "adaptive"}},
       "native-review": {"model": "gpt-5.6-sol", "reasoning": {"mode": "adaptive"}},
       "visual-review": {"model": "gpt-5.6-sol", "reasoning": {"mode": "adaptive"}},
-      "claude-review": {"model": "claude-opus-5", "reasoning": {"mode": "adaptive"}}
+      "claude-review": {"model": "opus", "reasoning": {"mode": "adaptive"}}
     },
     "adaptive_profiles": {
       "codex:gpt-6-astra": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"},
@@ -50,6 +51,7 @@
       "codex:gpt-5.6-terra": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"},
       "codex:gpt-5.6-luna": {"tiers": {"mechanical": "medium", "routine": "high", "complex": "xhigh", "exceptional": "max"}, "default_ceiling": "xhigh"},
       "claude:default": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
+      "claude:opus": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
       "claude:opus[1m]": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
       "claude:claude-fable-5-1[1m]": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
       "claude:sonnet": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},

@@ -226,7 +226,7 @@ reason. A planning-only request authorizes only the planning checkpoint. Do not 
 Claude call after every task or treat review as authorization to implement/deploy.
 
 Resolve the `claude-review` interaction once for the packet, without native specialist
-route overrides. Its unconfigured model is Opus 5 (`claude-opus-5`); explicit user
+route overrides. Its unconfigured model is the generic Opus alias (`opus`); explicit user
 overrides take precedence. Pass the resolved model explicitly without changing persistent
 Claude configuration.
 

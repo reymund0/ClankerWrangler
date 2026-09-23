@@ -527,6 +527,10 @@ class DiscoveryManager:
                 request_id = "clanker-model-discovery"
                 self._send(process, {"type": "control_request", "request_id": request_id, "request": {"subtype": "initialize"}})
                 response = self._next_message(process, reader, deadline)
+                # CLI startup notifications can precede the initialize response.
+                # Keep the original deadline and output budget while skipping them.
+                while response.get("type") == "system" and response.get("subtype") == "commands_changed":
+                    response = self._next_message(process, reader, deadline)
                 payload = response.get("response")
                 if response.get("type") != "control_response" or not isinstance(payload, dict) or payload.get("request_id") != request_id:
                     raise DiscoveryError("Claude CLI returned malformed model metadata")

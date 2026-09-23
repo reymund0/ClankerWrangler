@@ -165,7 +165,7 @@ class ResolutionTests(unittest.TestCase):
         no_role = policy.resolve(self.snapshot(global_specialist, project_specialist), request(interaction="planning"))
         self.assertEqual(no_role["model"], "gpt-6-astra")
         claude = policy.resolve(self.snapshot({"schema_version": 1, "agents": {"clanker-backend-developer": {"model": "gpt-5.6-terra"}}}), request(interaction="claude-review", tier="complex", reason="Independent review"))
-        self.assertEqual(claude["model"], "claude-opus-5")
+        self.assertEqual(claude["model"], "opus")
 
     def test_agent_precedence_and_effective_baseline_are_field_specific(self):
         global_document = {"schema_version": 1, "interactions": {"planning": {"model": "gpt-5.6-sol", "specialists": {"clanker-backend-developer": {"model": "gpt-5.6-luna"}}}}, "agents": {"clanker-backend-developer": {"model": "gpt-5.6-terra", "reasoning": {"mode": "fixed", "effort": "medium"}}}}
@@ -240,7 +240,7 @@ class ResolutionTests(unittest.TestCase):
         snapshot = self.snapshot(preferences)
         decision = policy.resolve(snapshot, request(interaction="claude-review", tier="exceptional", reason="Explicit high-complexity cross-review"))
         self.assertEqual((decision["effort"], decision["capability_status"]), ("max", "requires_launcher_preflight"))
-        blocked = policy.resolve(snapshot, request(interaction="claude-review", tier="exceptional", reason="Explicit high-complexity cross-review", capabilities={"provider": "claude", "source": "launcher", "models": {"claude-opus-5": ["high"]}, "preflight_valid": True}))
+        blocked = policy.resolve(snapshot, request(interaction="claude-review", tier="exceptional", reason="Explicit high-complexity cross-review", capabilities={"provider": "claude", "source": "launcher", "models": {"opus": ["high"]}, "preflight_valid": True}))
         self.assertEqual((blocked["capability_status"], blocked["dispatch_allowed"]), ("unsupported", False))
         self.assertNotIn("launcher_allowed", blocked)
 

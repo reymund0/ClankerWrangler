@@ -309,8 +309,16 @@ class DiscoveryManagerTests(unittest.TestCase):
                 {"value": "default", "displayName": "Default", "supportedEffortLevels": ["low", "high"]}
             ]}},
         }
-        result = manager._probe_claude_inner()
-        self.assertEqual(result["models"], [{"id": "default", "label": "Default", "provider": "claude", "efforts": ["low", "high"], "default_effort": None}])
+        initialize_response = manager._next_message()
+        for notifications in ([], [{"type": "system", "subtype": "commands_changed", "commands": []}] * 2):
+            messages = iter([*notifications, initialize_response])
+            manager._next_message = lambda *args: next(messages)
+            result = manager._probe_claude_inner()
+            self.assertEqual(result["models"], [{"id": "default", "label": "Default", "provider": "claude", "efforts": ["low", "high"], "default_effort": None}])
+            if not notifications:
+                calls.clear()
+                open_calls.clear()
+                sent.clear()
         self.assertEqual(calls, [([str(Path(sys.executable)), "--help"], "claude"), ([str(Path(sys.executable)), "--version"], "claude")])
         self.assertEqual(open_calls, [([
             str(Path(sys.executable)), "--print", "--input-format", "stream-json", "--output-format", "stream-json",

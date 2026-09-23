@@ -50,7 +50,7 @@ class EffortTests(unittest.TestCase):
                 self.assertNotIn("effort", report["observed_settings"])
 
     def test_default_and_override_model_reach_dispatch_and_report(self):
-        for extra, expected in (([], "claude-opus-5"), (["--model", "sonnet"], "sonnet")):
+        for extra, expected in (([], "opus"), (["--model", "sonnet"], "sonnet")):
             with self.subTest(expected=expected), tempfile.TemporaryDirectory() as temporary:
                 root = Path(temporary)
                 manifest = root / "manifest.json"
@@ -91,7 +91,7 @@ class EffortTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, mock.patch.dict(os.environ, {**model_environment, "CLANKER_FIXTURE_ENV": "preserved"}):
             root = Path(temporary)
             (root / "settings.json").write_text(json.dumps({"env": model_environment}), encoding="utf-8")
-            self.assertEqual(review.configured_review_model(None, str(root)), "claude-opus-5")
+            self.assertEqual(review.configured_review_model(None, str(root)), "opus")
             for name in model_environment:
                 self.assertFalse(review.provider_override(name))
             self.assertTrue(review.provider_override("ANTHROPIC_API_KEY"))

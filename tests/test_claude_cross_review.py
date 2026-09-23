@@ -125,7 +125,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
             config = pathlib.Path(temporary)
             (config / "settings.json").write_text(json.dumps({"model": "configured-model"}), encoding="utf-8")
             with mock.patch.dict("os.environ", {"ANTHROPIC_MODEL": "ambient-model"}):
-                self.assertEqual("claude-opus-5", review.configured_review_model(None, str(config)))
+                self.assertEqual("opus", review.configured_review_model(None, str(config)))
                 self.assertEqual("explicit", review.configured_review_model("explicit", str(config)))
             self.assertEqual(json.loads((config / "settings.json").read_text(encoding="utf-8")), {"model": "configured-model"})
             with self.assertRaises(review.ReviewError):

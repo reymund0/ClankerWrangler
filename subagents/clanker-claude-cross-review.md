@@ -73,9 +73,9 @@ PATH is stale. Read its `--help` before invocation and use supported flags.
 
 Model selection is independent of the Codex parent and Sol/Terra worker defaults.
 Resolve the packet's `claude-review` route using the coordinator run snapshot and
-`routing/usage.md`. With no saved or explicit override, the model remains Claude
-Opus 5 (claude-opus-5), independently of ambient Claude settings. Pass the resolved
-model explicitly; direct launcher commands without --model retain Opus 5. Honor an explicit per-review model override, and select effort using
+`routing/usage.md`. With no saved or explicit override, the model remains
+the generic Opus alias (`opus`), independently of ambient Claude settings. Pass the resolved
+model explicitly; direct launcher commands without --model retain the Opus alias. Honor an explicit per-review model override, and select effort using
 the policy below unless the user overrides it. Keep persistent Claude settings unchanged. Log unknown effective settings as unknown. No automatic fallback, API-key billing, persistent configuration edits, login,
 or installation is authorized by a review request. If preflight blocks, report the
 specific prerequisite; never bypass restrictions to obtain a result.

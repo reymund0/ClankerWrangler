@@ -15,7 +15,7 @@ The system SHALL support versioned bundled defaults, global user preferences, an
 
 #### Scenario: Missing versus invalid preferences
 - **WHEN** no preference files exist
-- **THEN** existing Sol planning/review, Terra implementation, and Opus 5 cross-review model defaults remain available
+- **THEN** existing Sol planning/review, Terra implementation, and generic Opus cross-review model defaults remain available
 
 #### Scenario: Invalid saved preferences
 - **WHEN** a present preferences file has invalid syntax or an unsupported version

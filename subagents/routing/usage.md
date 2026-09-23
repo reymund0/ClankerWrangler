@@ -92,7 +92,7 @@ It does not authorize direct model execution or bypass preflight. The launcher c
 subscription authentication and CLI controls before requesting the review. Reconcile
 its report, record any blocked/failed execution, and retain the ordinary review
 checkpoint and recheck rules. A direct launcher call without `--model` still defaults
-to Opus 5 and still requires explicit `--effort`.
+to the generic Opus alias and still requires explicit `--effort`.
 
 ## Preferences and inheritance
 

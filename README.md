@@ -299,7 +299,7 @@ using API billing. The launcher accepts an absolute Claude executable path if PA
 not refreshed. It checks the CLI capabilities needed for restricted execution.
 
 Your selected Codex model remains the orchestrator. Claude cross-reviews default to
-**Opus 5** (`claude-opus-5`), with an explicit per-review model override available.
+**Opus** (`opus`, resolved by Claude Code), with an explicit per-review model override available.
 This leaves your regular Claude Code model settings unchanged. Codex selects review effort from scope and risk: **Low** for
 explicitly requested mechanical checks, **Medium** for routine bounded plans/code,
 and **High** for complex architecture, cross-layer contracts, security, data,
