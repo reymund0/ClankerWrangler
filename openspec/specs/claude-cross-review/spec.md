@@ -44,7 +44,7 @@ The launcher SHALL resolve a verified Claude executable through an explicit path
 - **THEN** no review model call starts, and the report explains the prerequisite without printing credentials or initiating login
 
 ### Requirement: Reviewer settings are explicit and bounded
-The workflow SHALL allow a user-selected Claude model and supported effort without changing persistent configuration. For orchestrated reviews, the parent SHALL resolve saved cross-review preferences and session overrides and pass the resulting model and effort explicitly. With no configured or explicit per-review model override, and for direct launcher calls without --model, it SHALL request the generic Claude Opus alias using opus regardless of ambient model defaults, and report the observed model when available; unknown effective settings SHALL remain unknown. The launcher SHALL enforce a finite timeout and turn bound, use no automatic model fallback, and report denied tools, usage exhaustion, unsupported settings, and interruption as incomplete or failed execution.
+The workflow SHALL allow a user-selected Claude model and supported effort without changing persistent configuration. For orchestrated reviews, the parent SHALL resolve saved cross-review preferences and session overrides and pass the resulting model and effort explicitly. With no configured or explicit per-review model override, and for direct launcher calls without --model, it SHALL request the generic Claude Opus alias using opus regardless of ambient model defaults, and report the observed model when available; unknown effective settings SHALL remain unknown. The launcher SHALL enforce a finite wall-clock timeout without a turn limit, use no automatic model fallback, and report denied tools, usage exhaustion, unsupported settings, and interruption as incomplete or failed execution.
 
 #### Scenario: User-selected reviewer model
 - **WHEN** the user selects an available Claude model and effort
@@ -55,7 +55,7 @@ The workflow SHALL allow a user-selected Claude model and supported effort witho
 - **THEN** the launcher explicitly requests opus, records that requested model, preserves the separately selected effort, and leaves persistent settings unchanged
 
 #### Scenario: Interrupted or exhausted review
-- **WHEN** the process times out, reaches its turn limit, or exhausts subscription usage
+- **WHEN** the process times out or exhausts subscription usage
 - **THEN** execution is terminated or collected as incomplete, with no clean-review claim or unbounded retry
 
 #### Scenario: Saved reviewer route
