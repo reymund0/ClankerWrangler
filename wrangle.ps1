@@ -16,8 +16,8 @@ $OrchestrationCoordinatorSource = Join-Path $SubagentsSource "$OrchestrationSkil
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 $CrossReviewLauncherSource = Join-Path $SubagentsSource "scripts\claude_cross_review.py"
 $RoutingPolicySource = Join-Path $SubagentsSource "scripts\routing_policy.py"
-$RoutingEditorSource = Join-Path $SubagentsSource "scripts\routing_editor.py"
-$ModelDiscoverySource = Join-Path $SubagentsSource "scripts\model_discovery.py"
+$RoutingEditorSource = Join-Path $RepoRoot "routing-editor\scripts\routing_editor.py"
+$ModelDiscoverySource = Join-Path $RepoRoot "routing-editor\scripts\model_discovery.py"
 $RoutingDataSource = Join-Path $SubagentsSource "routing"
 $RoutingEditorDistSource = Join-Path $RepoRoot "routing-editor\dist"
 

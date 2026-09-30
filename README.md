@@ -116,19 +116,20 @@ entries, and resumed runs keep their original log file.
 
 ## Routing Editor
 
-The local React editor starts with your specialist agents and one Claude cross-review
-card. Choose a model and Adaptive or Fixed reasoning for each agent. **Customize by
-activity** keeps planning, implementation, code review and visual review exceptions
-optional. Changing an agent default preserves those exceptions; resetting an agent
-field restores inheritance without deleting them. Existing settings are not migrated
-or flattened. If inherited activities use different values, the card shows **Varies
-by activity** until you choose a shared default.
+The local React editor opens on **Worker routes**, a specialist-by-activity matrix
+with an inspector for the selected agent or Claude cross-review route. Choose a
+model and Adaptive or Fixed reasoning, inspect inheritance, and add or reset
+activity exceptions. Changing or resetting an agent default preserves those
+exceptions. Existing settings are not migrated or flattened; differing inherited
+values appear as **Varies by activity** until you choose a shared default.
 
-Advanced activity defaults retain the earlier category settings. Adaptive ceilings
-and model-specific tier profiles are also available under collapsed controls. Activity
-choices retain configured exceptions even outside the suggested specialties. Your
-parent session model and effort stay unchanged. Adaptive requires a complete model
-profile; its advanced editor uses models reported by the local CLI.
+The **Activity defaults**, **Adaptive profiles**, and **Preview a route** tabs share
+the same unsaved draft. Activity-default resets retain specialist exceptions, and
+profile editing uses locally reported model and effort choices. Preview explains
+route precedence and effort without saving or launching workers. Scope, save,
+export/reload, reset, and Run Wrangler controls remain in the header. Themes follow
+your system by default and allow a manual override; system fonts keep the editor
+usable offline. Your parent session model and effort remain unchanged.
 
 **Python 3.10+ is required for native orchestration routing as well as Claude
 reviews.** The optional source-checkout commands also require Node compatible with
@@ -137,21 +138,21 @@ once from the repository root:
 
 ```text
 npm --prefix routing-editor ci
-npm run editor:build
+npm run build
 ```
 
 Then choose a mode, using the same commands on Windows, macOS, and Linux:
 
 ```text
-npm run editor
-npm run editor:dev
+npm start
+npm run dev
 ```
 
-`editor` runs the built UI through the existing Python server. `editor:dev` starts
+`start` runs the built UI through the existing Python server. `dev` starts
 Python and Vite together for hot reload at **http://127.0.0.1:42069**. Vite fails
 with a port-in-use error if 42069 is occupied instead of choosing a different port.
 Use the printed token-bearing URL to open the authenticated editor. Both require an initial compatible build;
-repeat `editor:build` after changing compatibility metadata. Neither command installs
+repeat `build` after changing compatibility metadata. Neither command installs
 dependencies automatically. The dependencies remain in `routing-editor/package-lock.json`;
 the root launcher adds no packages.
 
@@ -159,14 +160,14 @@ Pass an optional project or isolated preference directory after the literal `"--
 separator (quoting it also preserves it through PowerShell npm wrappers):
 
 ```text
-npm run editor:dev "--" --project "path/to/my project" --global-config-dir "path/to/test preferences"
+npm run dev "--" --project "path/to/my project" --global-config-dir "path/to/test preferences"
 ```
 
 Without `--project`, only global preferences are editable. Paths you supply are
 relative to the invocation directory; launcher-owned paths resolve from the checkout.
 The launcher discovers Python 3.10+ automatically. Set `CLANKER_PYTHON` to an executable
 path if needed (an executable only, not a shell command); an invalid explicit override
-fails rather than selecting another interpreter. `node scripts/editor.mjs --help`
+fails rather than selecting another interpreter. `node routing-editor/scripts/editor.mjs --help`
 lists the supported options.
 
 Open the printed local URL; Ctrl+C stops the owned servers. Both modes bind only to
@@ -178,12 +179,17 @@ Node remains optional when running an already-built source editor or an installe
 bundle directly with Python:
 
 ```text
-python subagents/scripts/routing_editor.py --project "path/to/my project"
+python routing-editor/scripts/routing_editor.py --project "path/to/my project"
 ```
 
 Use a verified Python executable (`python3` may be appropriate). The root launcher
 is a source-checkout convenience; installed bundles retain their Python-only startup.
-Focused launcher integration checks run with `node --test tests/test_editor_launcher.mjs`
+Editor source, supporting scripts, editor-specific tests, and design references live
+under `routing-editor/` (`src/`, `scripts/`, `tests/`, and `docs/design/`). Shared
+routing policy and cross-review helpers remain in `subagents/scripts/`; their tests
+remain in the root `tests/` directory. Root npm commands only launch the editor.
+
+Focused launcher integration checks run with `node --test routing-editor/tests/test_editor_launcher.mjs`
 after installing dependencies and building the UI; they use temporary preferences.
 
 After a build, run Wrangler to package it with the skill. From an installed bundle,
@@ -271,7 +277,8 @@ Run focused checks from the repository root and editor directory respectively:
 
 ```powershell
 python -B -m unittest discover -s tests -p "test_routing*.py" -v
-python -B -m unittest tests.test_model_discovery tests.test_cross_review_process -v
+python -B -m unittest discover -s routing-editor/tests -p "test_*.py" -v
+python -B -m unittest tests.test_cross_review_process -v
 cd routing-editor
 npm test
 npm run build

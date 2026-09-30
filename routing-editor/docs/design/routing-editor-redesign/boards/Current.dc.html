@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Current routing editor</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0;background:#f4f6fb;color:#1b263b;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:#215b9e}a:hover{color:#164a95}
+button,input,select{font:inherit}
+</style>
+</helmet>
+<div style="width: 1280px; height: 3600px; box-sizing: border-box; position: relative; background: #f4f6fb; color: #1b263b; font-family: Inter, ui-sans-serif, system-ui, sans-serif">
+<main style="width: 1240px; margin: 0 auto; padding: 40px 0 120px; display: flex; flex-direction: column">
+
+<header style="background: linear-gradient(120deg, #17213a, #2a4c78); color: #dce8ff; border-radius: 22px; padding: 56px; display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; box-shadow: 0 20px 45px #16274424">
+<div>
+<p style="margin: 0 0 8px; color: #a9c7ff; letter-spacing: .11em; text-transform: uppercase; font-size: 12px; font-weight: 750">Clanker orchestration</p>
+<h1 style="margin: 0 0 12px; color: #fff; font-size: 54px; line-height: 1.04">Routing editor</h1>
+<p style="margin: 0; max-width: 650px">Choose worker routes, see their inheritance, and preview a resolver decision before a future run.</p>
+</div>
+<div style="background: #e9f7ed; border: 1px solid #8ac69b; color: #164b28; white-space: nowrap; padding: 10px 13px; border-radius: 999px; font-size: 14px; font-weight: 650">All changes saved</div>
+</header>
+
+<section style="background: #fff; padding: 24px; margin: 24px 0 12px; border-radius: 16px; border: 1px solid #dde4f0; display: flex; justify-content: space-between; gap: 20px; align-items: center">
+<div>
+<p style="margin: 0 0 8px; color: #5676ad; letter-spacing: .11em; text-transform: uppercase; font-size: 12px; font-weight: 750">Editing</p>
+<h2 style="margin: 0 0 4px">Global defaults</h2>
+<p style="margin: 0; color: #536176; font-size: 14px">~/.clanker/orchestration-routing.json</p>
+</div>
+<label style="display: grid; gap: 6px; font-weight: 700; min-width: 180px; font-size: 14px">Scope
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>Global</option></select>
+</label>
+</section>
+
+<p style="background: #edf4ff; border-left: 4px solid #4c84dc; padding: 12px 14px; margin: 0 0 22px"><strong>Parent session settings are session-controlled.</strong> They remain read-only and are not changed by worker routes.</p>
+
+<section style="background: #fff; border: 1px solid #dde4f0; border-radius: 12px; padding: 16px; margin: 0 0 16px; display: flex; justify-content: space-between; gap: 16px; align-items: start">
+<div>
+<p style="margin: 0 0 4px; color: #5676ad; letter-spacing: .11em; text-transform: uppercase; font-size: 12px; font-weight: 750">Local model discovery</p>
+<h2 style="margin: 0 0 4px; font-size: 16px">CLI catalog</h2>
+<p style="margin: 0 0 4px; color: #59677d; font-size: 13px"><strong>codex</strong>: [status] via [source] · updated [time]</p>
+<p style="margin: 0; color: #59677d; font-size: 13px"><strong>claude</strong>: [status] via [source] · updated [time]</p>
+</div>
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Refresh models</button>
+</section>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<sc-for list="{{agents}}" as="a" hint-placeholder-count="13">
+<article style="background: #fff; border: 1px solid #dde4f0; border-radius: 16px; padding: 20px; box-shadow: 0 5px 18px #1627440a">
+<header style="display: flex; justify-content: space-between; gap: 12px">
+<div>
+<h3 style="margin: 0 0 6px; font-size: 18px">{{a.label}}</h3>
+<p style="margin: 0 0 8px; color: #59677d; font-size: 14px">Default route for this native specialist. Activity exceptions remain separate.</p>
+</div>
+<span style="color: #29568f; background: #e9f1ff; border: 1px solid #bfd6fb; border-radius: 999px; align-self: flex-start; padding: 3px 8px; font-size: 12px; font-weight: 750; text-transform: uppercase">codex</span>
+</header>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto; gap: 10px; align-items: start">
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Model
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff; color: #1b263b"><option>{{a.model}}</option></select>
+<span style="color: #66758c; font-size: 12px; font-weight: 500">Derived from activity routes</span>
+</label>
+<button type="button" disabled style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650; opacity: .55">Reset model</button>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Reasoning mode
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff; color: #1b263b"><option>Adaptive</option></select>
+<span style="color: #66758c; font-size: 12px; font-weight: 500">Derived from activity routes</span>
+</label>
+<button type="button" disabled style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650; opacity: .55">Reset reasoning</button>
+</div>
+<details style="margin-top: 10px; color: #32415a; font-size: 13px; font-weight: 670"><summary style="cursor: pointer; color: #215b9e; font-size: 13px; font-weight: 650">Adaptive maximum</summary></details>
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px">
+<button type="button" disabled style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650; opacity: .55">Reset agent default</button>
+<button type="button" style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650">Customize by activity</button>
+</div>
+</article>
+</sc-for>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 16px">
+<article style="background: #fff; border: 1px solid #dde4f0; border-radius: 16px; padding: 20px; box-shadow: 0 5px 18px #1627440a">
+<header style="display: flex; justify-content: space-between; gap: 12px">
+<div>
+<h3 style="margin: 0 0 6px; font-size: 18px">Claude cross-review</h3>
+<p style="margin: 0 0 8px; color: #59677d; font-size: 14px">One cross-review route, even when a packet contains several specialties.</p>
+</div>
+<span style="color: #29568f; background: #e9f1ff; border: 1px solid #bfd6fb; border-radius: 999px; align-self: flex-start; padding: 3px 8px; font-size: 12px; font-weight: 750; text-transform: uppercase">claude</span>
+</header>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: start">
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Model
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff; color: #1b263b"><option>Claude Opus (latest) (opus) · local CLI · alias; resolution may change</option></select>
+<span style="color: #66758c; font-size: 12px; font-weight: 500">Inherited from bundled defaults</span>
+</label>
+<button type="button" disabled style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650; opacity: .55">Reset model</button>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Reasoning mode
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff; color: #1b263b"><option>Adaptive</option></select>
+<span style="color: #66758c; font-size: 12px; font-weight: 500">Inherited from bundled defaults</span>
+</label>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a; grid-column: 1 / 2">Adaptive maximum
+<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff; color: #1b263b"><option>Model profile default</option></select>
+<span style="color: #66758c; font-size: 12px; font-weight: 500">Adaptive ceiling: Model profile default · Inherited from bundled defaults</span>
+</label>
+</div>
+<div style="display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px">
+<button type="button" disabled style="color: #215b9e; background: transparent; border: 0; padding: 8px 4px; text-decoration: underline; font-size: 13px; font-weight: 650; opacity: .55">Reset route to inherited</button>
+</div>
+</article>
+</div>
+
+<section style="margin-top: 24px; background: #fff; border: 1px solid #dde4f0; border-radius: 16px; padding: 20px">
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Show advanced activity defaults</button>
+</section>
+<section style="margin-top: 24px; background: #fff; border: 1px solid #dde4f0; border-radius: 16px; padding: 20px">
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Show advanced Adaptive profiles</button>
+</section>
+
+<section style="margin-top: 24px; background: #fff; border: 1px solid #dde4f0; border-radius: 16px; padding: 20px">
+<p style="margin: 0 0 8px; color: #5676ad; letter-spacing: .11em; text-transform: uppercase; font-size: 12px; font-weight: 750">Draft preview</p>
+<h2 style="margin: 0 0 4px">Preview model and reasoning</h2>
+<p style="margin: 0 0 16px">Uses this global draft. Runtime model availability is never inferred from the catalog.</p>
+<form style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: end">
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Activity<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>Implementation and testing</option></select></label>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Agent (optional)<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>Activity route</option></select></label>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a">Task tier<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>routine</option></select></label>
+<label style="display: grid; gap: 5px; font-size: 13px; font-weight: 670; color: #32415a; grid-column: span 2">Reason<input value="Preview a saved routing choice" style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"></label>
+<fieldset style="grid-column: 1 / -1; border: 1px solid #d6deeb; border-radius: 9px; padding: 12px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px">
+<legend style="color: #32415a; padding: 0 4px; font-weight: 750; font-size: 14px">Risk flags</legend>
+<sc-for list="{{risks}}" as="r" hint-placeholder-count="6"><label style="display: flex; align-items: center; gap: 6px; font-weight: 670; color: #32415a"><input type="checkbox">{{r}}</label></sc-for>
+</fieldset>
+<fieldset style="grid-column: 1 / -1; border: 1px solid #d6deeb; border-radius: 9px; padding: 12px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px">
+<legend style="color: #32415a; padding: 0 4px; font-weight: 750; font-size: 14px">Temporary session override</legend>
+<p style="width: 100%; color: #647189; margin: 0">Applies only to this preview and is never saved.</p>
+<label style="flex: 1 1 150px; display: grid; gap: 5px; font-weight: 670; color: #32415a">Model<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>No override</option></select></label>
+<label style="flex: 1 1 150px; display: grid; gap: 5px; font-weight: 670; color: #32415a">Mode<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>Adaptive</option></select></label>
+<label style="flex: 1 1 150px; display: grid; gap: 5px; font-weight: 670; color: #32415a">Maximum<select style="min-height: 38px; padding: 7px 9px; border: 1px solid #b7c2d4; border-radius: 7px; background: #fff"><option>No override</option></select></label>
+</fieldset>
+<button type="submit" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #fff; background: #225fba; border: 1px solid #225fba">Preview route</button>
+</form>
+</section>
+</main>
+
+<footer style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 20px; background: #ffffffed; border-top: 1px solid #d9e0eb">
+<div></div>
+<div style="display: flex; gap: 10px; align-items: center">
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Run Wrangler</button>
+<details style="font-size: 13px; color: #215b9e"><summary style="cursor: pointer">Install details</summary></details>
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Export draft and reload</button>
+<button type="button" style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #24415f; background: #fff; border: 1px solid #b9c6d9">Reset global override</button>
+<button type="button" disabled style="min-height: 40px; border-radius: 8px; padding: 8px 14px; font-weight: 720; color: #fff; background: #225fba; border: 1px solid #225fba; opacity: .55">Save global preferences</button>
+</div>
+</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":3600}}'>
+const LABELS = ['Architect', 'Backend developer', 'Code and security reviewer', 'Data engineer', 'DevOps engineer', 'Documentation writer', 'Performance engineer', 'Product engineer', 'QA engineer', 'Test engineer', 'UI developer', 'UI and UX reviewer', 'UX designer'];
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      agents: LABELS.map((label) => ({ label: label, model: 'GPT-5.6 Sol (gpt-5.6-sol) · local CLI' })),
+      risks: ['security', 'data-integrity', 'recovery', 'cross-layer', 'uncertainty', 'performance']
+    };
+  }
+}
+</script>
+</body>
+</html>

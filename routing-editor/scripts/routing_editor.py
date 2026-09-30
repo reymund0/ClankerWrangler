@@ -18,6 +18,13 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, urlsplit
 
+# Source checkout shares policy/review helpers; installed bundles keep them adjacent.
+import sys
+
+_shared_scripts = Path(__file__).resolve().parents[2] / "subagents" / "scripts"
+if _shared_scripts.is_dir():
+    sys.path.insert(0, str(_shared_scripts))
+
 import routing_policy as policy
 from model_discovery import DiscoveryClosed, DiscoveryManager
 
@@ -226,7 +233,7 @@ class PreferenceStore:
 
 def asset_root(explicit: Path | None = None) -> Path:
     package = Path(__file__).resolve().parent.parent
-    candidates = [explicit] if explicit is not None else [package / "editor", package.parent / "routing-editor" / "dist"]
+    candidates = [explicit] if explicit is not None else [package / "editor", package / "dist"]
     for candidate in candidates:
         if candidate is None or not candidate.exists():
             continue

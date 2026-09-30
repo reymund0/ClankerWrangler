@@ -10,8 +10,8 @@ import tempfile
 import unittest
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "subagents/scripts"))
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "routing-editor/scripts"))
 import routing_editor as editor
 import routing_policy as policy
 spec = importlib.util.spec_from_file_location("routing_review_fixture", ROOT / "subagents/scripts/claude_cross_review.py")

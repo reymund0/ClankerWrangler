@@ -17,6 +17,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+# Source checkout shares policy/review helpers; installed bundles keep them adjacent.
+import sys
+
+_shared_scripts = Path(__file__).resolve().parents[2] / "subagents" / "scripts"
+if _shared_scripts.is_dir():
+    sys.path.insert(0, str(_shared_scripts))
+
 import claude_cross_review as containment
 
 CACHE_SECONDS = 300.0

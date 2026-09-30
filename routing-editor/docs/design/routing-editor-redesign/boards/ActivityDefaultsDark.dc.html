@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Activity defaults, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:"IBM Plex Sans",system-ui,sans-serif;background:#121317;color:#ECEBE6}
+a{color:#5ED3C7}a:hover{color:#8FE3DA}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed}
+select{font:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1100px; box-sizing: border-box; display: flex; flex-direction: column; background: #121317; color: #ECEBE6; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+<header style="height: 68px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; align-items: center; gap: 24px; background: #0B0C0F; border-bottom: 1px solid #23262C; color: #ECEBE6">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em">Orchestration Nation</span>
+<span style="font-size: 13px; color: #A7AAB2">Routing</span>
+</div>
+<div role="group" aria-label="Scope" style="display: flex; padding: 3px; background: #1B1D22; border-radius: 10px; gap: 2px">
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: #ECEBE6; color: #121317; font-size: 13px; font-weight: 600">Global</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Project · ClankerWrangler</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8E929B">~/.clanker/orchestration-routing.json</span>
+<div style="flex-grow: 1"></div>
+<span role="status" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: #3A2A16; color: #F5D3A6; font-size: 13px; font-weight: 500">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #F0A94B"></span>2 unsaved changes</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Run Wrangler</button>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Export draft &amp; reload</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #3CC2B5; color: #0B1F1E; font-size: 13px; font-weight: 600">Save global</button>
+</header>
+
+<nav aria-label="Sections" style="height: 48px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; gap: 4px; background: #17191D; border-bottom: 1px solid #2E3138">
+<a href="MainDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Worker routes</a>
+<a href="ActivityDefaultsDark.dc.html" aria-current="page" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid #3CC2B5; color: #ECEBE6; font-size: 14px; font-weight: 600; text-decoration: none">Activity defaults</a>
+<a href="AdaptiveProfilesDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Adaptive profiles</a>
+<a href="RouteTraceDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Preview a route</a>
+</nav>
+
+<section aria-labelledby="ad-title" style="flex-grow: 1; padding: 22px 28px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: flex-end; gap: 24px">
+<div style="flex-grow: 1">
+<h1 id="ad-title" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.01em">Activity defaults</h1>
+<p style="margin: 4px 0 0; font-size: 14px; color: #A7AAB2; max-width: 720px">Shared model and reasoning for each kind of work. Every specialist in an activity starts here unless its agent default or an activity exception says otherwise.</p>
+</div>
+<ol aria-label="Precedence" style="margin: 0; padding: 0; list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12px; color: #A7AAB2">
+<li style="padding: 5px 10px; border-radius: 999px; background: #22252B">Bundled defaults</li>
+<li aria-hidden="true">→</li>
+<li style="padding: 5px 10px; border-radius: 999px; background: #3CC2B5; color: #0B1F1E; font-weight: 600">Activity default</li>
+<li aria-hidden="true">→</li>
+<li style="padding: 5px 10px; border-radius: 999px; background: #22252B">Agent default</li>
+<li aria-hidden="true">→</li>
+<li style="padding: 5px 10px; border-radius: 999px; background: #22252B">Activity exception</li>
+</ol>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<sc-for list="{{cards}}" as="c" hint-placeholder-count="4">
+<article style="background: #1B1D22; border: 1px solid {{c.bd}}; border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 14px">
+<header style="display: flex; align-items: flex-start; gap: 10px">
+<div style="flex-grow: 1">
+<h2 style="margin: 0; font-size: 18px; font-weight: 600">{{c.name}}</h2>
+<p style="margin: 2px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A7AAB2">{{c.id}}</p>
+</div>
+<span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: {{c.tagBg}}; color: {{c.tagFg}}">{{c.tag}}</span>
+<span style="font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 999px; background: #22252B; color: #C9CBD1; text-transform: uppercase; letter-spacing: 0.04em">codex</span>
+</header>
+
+<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: #A7AAB2">
+<span>Used by {{c.count}}:</span>
+<sc-for list="{{c.users}}" as="u" hint-placeholder-count="4"><span style="padding: 2px 8px; border-radius: 999px; border: 1px solid #33363E; color: #C9CBD1">{{u}}</span></sc-for>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px">
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Model
+<select style="height: 40px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 7px; background: #121317; color: #ECEBE6; font-family: 'JetBrains Mono', monospace; font-size: 13px"><option>{{c.model}}</option></select>
+<span style="font-size: 12px; color: #A7AAB2">From: {{c.src}}</span>
+</label>
+<div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Reasoning
+<div role="group" aria-label="Reasoning mode" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 3px; background: #15171B; border-radius: 8px">
+<button type="button" aria-pressed="{{c.isAdaptive}}" style="height: 34px; border: 0; border-radius: 6px; background: {{c.adaptiveBg}}; color: #ECEBE6; font-size: 13px; font-weight: 600">Adaptive</button>
+<button type="button" aria-pressed="{{c.isFixed}}" style="height: 34px; border: 0; border-radius: 6px; background: {{c.fixedBg}}; color: #ECEBE6; font-size: 13px; font-weight: 600">Fixed</button>
+</div>
+<span style="font-size: 12px; color: #A7AAB2">From: {{c.src}}</span>
+</div>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">{{c.effortLabel}}
+<select style="height: 40px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 7px; background: #121317; color: #ECEBE6; font-size: 13px"><option>{{c.effortValue}}</option></select>
+<span style="font-size: 12px; color: #A7AAB2">{{c.effortNote}}</span>
+</label>
+</div>
+
+<div style="display: flex; gap: 18px; padding-top: 12px; border-top: 1px solid #262930">
+<button type="button" disabled="{{c.inherited}}" style="height: 32px; padding: 0; border: 0; background: transparent; color: {{c.linkFg}}; font-size: 13px; font-weight: 600; text-decoration: underline">Reset model</button>
+<button type="button" disabled="{{c.inherited}}" style="height: 32px; padding: 0; border: 0; background: transparent; color: {{c.linkFg}}; font-size: 13px; font-weight: 600; text-decoration: underline">Reset reasoning</button>
+<button type="button" disabled="{{c.inherited}}" style="height: 32px; padding: 0; border: 0; background: transparent; color: {{c.linkFg}}; font-size: 13px; font-weight: 600; text-decoration: underline">Reset route to inherited</button>
+</div>
+</article>
+</sc-for>
+</div>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+const CARDS = [
+  { name: 'Planning & design', id: 'planning', users: ['Architect', 'Data engineer', 'Performance engineer', 'Product engineer', 'UX designer'], model: 'gpt-5.6-sol', fixed: false, value: 'Model profile default', note: 'Ceiling: xhigh from the gpt-5.6-sol profile', set: false },
+  { name: 'Implementation & testing', id: 'implementation', users: ['Backend developer', 'Data engineer', 'DevOps engineer', 'Documentation writer', 'Performance engineer', 'Test engineer', 'UI developer'], model: 'gpt-5.6-terra', fixed: false, value: 'Model profile default', note: 'Ceiling: xhigh from the gpt-5.6-terra profile', set: false },
+  { name: 'Native code review', id: 'native-review', users: ['Architect', 'Code & security reviewer', 'Performance engineer', 'QA engineer'], model: 'gpt-5.6-sol', fixed: false, value: 'Model profile default', note: 'Ceiling: xhigh from the gpt-5.6-sol profile', set: false },
+  { name: 'Visual & UX review', id: 'visual-review', users: ['QA engineer', 'UI and UX reviewer', 'UX designer'], model: 'gpt-6-astra', fixed: true, value: 'high', note: 'Every visual review runs at this effort.', set: true }
+];
+class Component extends DCLogic {
+  renderVals() {
+    const cards = CARDS.map((c) => ({
+      name: c.name,
+      id: c.id,
+      users: c.users,
+      count: String(c.users.length),
+      model: c.model,
+      src: c.set ? 'this scope' : 'bundled defaults',
+      isFixed: c.fixed,
+      isAdaptive: !c.fixed,
+      fixedBg: c.fixed ? '#33363E' : 'transparent',
+      adaptiveBg: c.fixed ? 'transparent' : '#33363E',
+      effortLabel: c.fixed ? 'Effort' : 'Adaptive maximum',
+      effortValue: c.value,
+      effortNote: c.note,
+      bd: c.set ? '#3CC2B5' : '#2E3138',
+      tag: c.set ? 'Set here' : 'Inherited',
+      tagBg: c.set ? '#12302E' : '#22252B',
+      tagFg: c.set ? '#BFEDE7' : '#A7AAB2',
+      inherited: !c.set,
+      linkFg: c.set ? '#5ED3C7' : '#6E727B'
+    }));
+    return { cards: cards };
+  }
+}
+</script>
+</body>
+</html>

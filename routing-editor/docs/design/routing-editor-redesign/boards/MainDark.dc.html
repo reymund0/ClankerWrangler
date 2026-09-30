@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Routing matrix, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:"IBM Plex Sans",system-ui,sans-serif;background:#121317;color:#ECEBE6}
+a{color:#5ED3C7}a:hover{color:#8FE3DA}
+button{font:inherit;cursor:pointer}
+select{font:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1060px; box-sizing: border-box; display: flex; flex-direction: column; background: #121317; color: #ECEBE6; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+<header style="height: 68px; box-sizing: border-box; padding: 0 28px; display: flex; align-items: center; gap: 24px; background: #0B0C0F; border-bottom: 1px solid #23262C; color: #ECEBE6">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em">Orchestration Nation</span>
+<span style="font-size: 13px; color: #A7AAB2">Routing</span>
+</div>
+<div role="group" aria-label="Scope" style="display: flex; padding: 3px; background: #1B1D22; border-radius: 10px; gap: 2px">
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: #ECEBE6; color: #121317; font-size: 13px; font-weight: 600">Global</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Project · ClankerWrangler</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8E929B">~/.clanker/orchestration-routing.json</span>
+<div style="flex-grow: 1"></div>
+<span role="status" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: #3A2A16; color: #F5D3A6; font-size: 13px; font-weight: 500">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #F0A94B"></span>2 unsaved changes</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Run Wrangler</button>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Export draft &amp; reload</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #3CC2B5; color: #0B1F1E; font-size: 13px; font-weight: 600">Save global</button>
+</header>
+
+<nav aria-label="Sections" style="height: 48px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; gap: 4px; background: #17191D; border-bottom: 1px solid #2E3138">
+<a href="MainDark.dc.html" aria-current="page" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid #3CC2B5; color: #ECEBE6; font-size: 14px; font-weight: 600; text-decoration: none">Worker routes</a>
+<a href="ActivityDefaultsDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Activity defaults</a>
+<a href="AdaptiveProfilesDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Adaptive profiles</a>
+<a href="RouteTraceDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Preview a route</a>
+</nav>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<section aria-labelledby="matrix-title" style="flex-grow: 1; min-width: 0; padding: 22px 28px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: flex-end; gap: 16px">
+<div style="flex-grow: 1">
+<h1 id="matrix-title" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.01em">Worker routes</h1>
+<p style="margin: 4px 0 0; font-size: 14px; color: #A7AAB2">Model and reasoning each specialist gets, per activity. Your parent session is never changed.</p>
+</div>
+<div style="display: flex; gap: 14px; font-size: 12px; color: #C9CBD1; align-items: center">
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #22252B; border: 1px solid #4A4E57"></span>Inherited</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #12302E; border: 1px solid #3CC2B5"></span>Set in this scope</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 3px; background: #3A2A16; border: 1px solid #E0A25A"></span>Activity exception</span>
+</div>
+</div>
+
+<div style="display: flex; align-items: center; gap: 18px; padding: 10px 14px; background: #1B1D22; border: 1px solid #2E3138; border-radius: 10px; font-size: 13px; color: #C9CBD1">
+<span style="font-weight: 600; color: #ECEBE6">Local model discovery</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span>codex CLI · [N] models · updated [TIME]</span>
+<span style="display: flex; align-items: center; gap: 6px"><span style="width: 8px; height: 8px; border-radius: 50%; background: #4CC38A"></span>claude CLI · [N] models · updated [TIME]</span>
+<div style="flex-grow: 1"></div>
+<button type="button" style="height: 32px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 7px; background: #22252B; color: #ECEBE6; font-size: 12px; font-weight: 500">Refresh models</button>
+</div>
+
+<div role="table" aria-label="Routes by agent and activity" style="background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px; overflow: hidden">
+<div role="row" style="display: grid; grid-template-columns: 208px repeat(5, minmax(0, 1fr)); gap: 8px; padding: 10px 14px; background: #17191D; border-bottom: 1px solid #2E3138; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A7AAB2">
+<span role="columnheader">Specialist</span>
+<span role="columnheader">Agent default</span>
+<span role="columnheader">Planning &amp; design</span>
+<span role="columnheader">Implementation</span>
+<span role="columnheader">Code review</span>
+<span role="columnheader">Visual &amp; UX review</span>
+</div>
+<sc-for list="{{rows}}" as="row" hint-placeholder-count="13">
+<div role="row" style="display: grid; grid-template-columns: 208px repeat(5, minmax(0, 1fr)); gap: 8px; padding: 5px 14px 5px 11px; border-left: 3px solid {{row.bar}}; background: {{row.bg}}; border-bottom: 1px solid #262930; align-items: center">
+<button type="button" role="rowheader" onClick="{{row.pick}}" style="display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 4px; border: 0; background: transparent; text-align: left; color: #ECEBE6; font-size: 14px; font-weight: 600">
+{{row.label}}
+<sc-if value="{{row.hasExc}}" hint-placeholder-val="{{false}}"><span style="font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 999px; background: #3A2A16; color: #F5D3A6">{{row.excText}}</span></sc-if>
+</button>
+<sc-for list="{{row.cells}}" as="c" hint-placeholder-count="5">
+<button type="button" role="cell" onClick="{{row.pick}}" aria-label="{{c.aria}}" style="height: 40px; box-sizing: border-box; padding: 3px 9px; border-radius: 7px; border: 1px solid {{c.bd}}; border-style: {{c.bs}}; background: {{c.bg}}; color: {{c.fg}}; text-align: left; display: flex; flex-direction: column; justify-content: center; gap: 1px; min-width: 0">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.model}}</span>
+<span style="font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.effort}}</span>
+</button>
+</sc-for>
+</div>
+</sc-for>
+<div role="row" style="display: grid; grid-template-columns: 208px minmax(0, 1fr); gap: 8px; padding: 10px 14px; background: #1E1B26; align-items: center">
+<span role="rowheader" style="display: flex; flex-direction: column; font-size: 14px; font-weight: 600">Claude cross-review<span style="font-size: 11px; font-weight: 500; color: #A7AAB2">One route for every review packet</span></span>
+<button type="button" role="cell" style="height: 40px; padding: 0 12px; border-radius: 7px; border: 1px solid #3A3547; background: #22252B; text-align: left; display: flex; align-items: center; gap: 12px; color: #C9CBD1">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 500; color: #ECEBE6">opus</span>
+<span style="font-size: 12px">adaptive · profile ceiling</span>
+<span style="font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #2E2840; color: #CFC3EE">alias · resolution may change</span>
+</button>
+</div>
+</div>
+</section>
+
+<aside aria-labelledby="insp-title" style="width: 400px; flex-shrink: 0; box-sizing: border-box; padding: 22px 24px; background: #1B1D22; border-left: 1px solid #2E3138; display: flex; flex-direction: column; gap: 18px">
+<div>
+<p style="margin: 0 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A7AAB2">Selected specialist</p>
+<h2 id="insp-title" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 24px; font-weight: 700">{{s.label}}</h2>
+<p style="margin: 2px 0 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #A7AAB2">{{s.roleId}}</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #22252B; border: 1px solid #2E3138; border-radius: 10px">
+<p style="margin: 0; font-size: 13px; font-weight: 600">Agent default</p>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Model
+<select style="height: 40px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 7px; background: #121317; color: #ECEBE6; font-family: 'JetBrains Mono', monospace; font-size: 13px">
+<option>{{s.defModel}}</option>
+</select>
+<span style="font-size: 12px; color: #A7AAB2">From: {{s.provModel}}</span>
+</label>
+<div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Reasoning
+<div role="group" aria-label="Reasoning mode" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 3px; background: #15171B; border-radius: 8px">
+<button type="button" aria-pressed="{{s.isAdaptive}}" style="height: 36px; border: 0; border-radius: 6px; background: {{s.adaptiveBg}}; color: #ECEBE6; font-size: 13px; font-weight: 600">Adaptive</button>
+<button type="button" aria-pressed="{{s.isFixed}}" style="height: 36px; border: 0; border-radius: 6px; background: {{s.fixedBg}}; color: #ECEBE6; font-size: 13px; font-weight: 600">Fixed</button>
+</div>
+</div>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">{{s.effortLabel}}
+<select style="height: 40px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 7px; background: #121317; color: #ECEBE6; font-size: 13px">
+<option>{{s.effortValue}}</option>
+</select>
+<span style="font-size: 12px; color: #A7AAB2">From: {{s.provReason}}</span>
+</label>
+<div style="display: flex; gap: 16px">
+<button type="button" style="height: 32px; padding: 0; border: 0; background: transparent; color: #5ED3C7; font-size: 13px; font-weight: 600; text-decoration: underline">Reset agent default</button>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<p style="margin: 0; font-size: 13px; font-weight: 600">By activity</p>
+<sc-for list="{{s.acts}}" as="a" hint-placeholder-count="2">
+<div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid {{a.bd}}; background: {{a.bg}}; border-radius: 8px">
+<div style="flex-grow: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<span style="font-size: 13px; font-weight: 600; color: #ECEBE6">{{a.name}}</span>
+<span style="font-size: 12px; color: #C9CBD1"><span style="font-family: 'JetBrains Mono', monospace">{{a.model}}</span> · {{a.effort}}</span>
+</div>
+<span style="font-size: 11px; font-weight: 600; color: {{a.fg}}">{{a.tag}}</span>
+</div>
+</sc-for>
+<button type="button" style="align-self: flex-start; height: 36px; padding: 0 12px; border: 1px dashed #5A5E67; border-radius: 7px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">+ Add activity exception</button>
+</div>
+
+<div style="flex-grow: 1"></div>
+<a href="RouteTraceDark.dc.html" style="display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 16px; border-radius: 10px; background: #3CC2B5; color: #0B1F1E; text-decoration: none; font-size: 14px; font-weight: 600">Preview a decision for this agent
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
+</a>
+</aside>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+const ACTS = [
+  { key: 'planning', name: 'Planning & design' },
+  { key: 'implementation', name: 'Implementation & testing' },
+  { key: 'native', name: 'Native code review' },
+  { key: 'visual', name: 'Visual & UX review' }
+];
+const BASE = {
+  planning: ['gpt-5.6-sol', 'adaptive ≤ xhigh'],
+  implementation: ['gpt-5.6-terra', 'adaptive ≤ xhigh'],
+  native: ['gpt-5.6-sol', 'adaptive ≤ xhigh'],
+  visual: ['gpt-5.6-sol', 'adaptive ≤ xhigh']
+};
+const TONE = {
+  inh: { bg: '#22252B', bd: '#33363E', bs: 'solid', fg: '#C9CBD1', tag: 'Inherited' },
+  set: { bg: '#12302E', bd: '#3CC2B5', bs: 'solid', fg: '#BFEDE7', tag: 'Set here' },
+  exc: { bg: '#3A2A16', bd: '#E0A25A', bs: 'solid', fg: '#F5D3A6', tag: 'Exception' },
+  vary: { bg: '#22252B', bd: '#E0A25A', bs: 'dashed', fg: '#F5D3A6', tag: 'Varies' },
+  na: { bg: '#17191D', bd: '#17191D', bs: 'solid', fg: '#80848D', tag: 'Not used' }
+};
+const AGENTS = [
+  { id: 'clanker-architect', label: 'Architect', uses: ['planning', 'native'], def: ['gpt-5.6-sol', 'fixed · high'] },
+  { id: 'clanker-backend-developer', label: 'Backend developer', uses: ['implementation'], exc: { implementation: ['gpt-6-astra', 'fixed · high'] } },
+  { id: 'clanker-code-review', label: 'Code & security reviewer', uses: ['native'] },
+  { id: 'clanker-data-engineer', label: 'Data engineer', uses: ['planning', 'implementation'] },
+  { id: 'clanker-devops-engineer', label: 'DevOps engineer', uses: ['implementation'] },
+  { id: 'clanker-documentation-writer', label: 'Documentation writer', uses: ['implementation'], def: ['gpt-5.6-luna', 'adaptive ≤ medium'] },
+  { id: 'clanker-performance-engineer', label: 'Performance engineer', uses: ['planning', 'implementation', 'native'] },
+  { id: 'clanker-product-engineer', label: 'Product engineer', uses: ['planning'] },
+  { id: 'clanker-qa-engineer', label: 'QA engineer', uses: ['native', 'visual'] },
+  { id: 'clanker-test-engineer', label: 'Test engineer', uses: ['implementation'] },
+  { id: 'clanker-ui-developer', label: 'UI developer', uses: ['implementation'] },
+  { id: 'clanker-ui-ux-reviewer', label: 'UI and UX reviewer', uses: ['visual'], exc: { visual: ['gpt-5.6-sol', 'fixed · xhigh'] } },
+  { id: 'clanker-ux-designer', label: 'UX designer', uses: ['planning', 'visual'] }
+];
+function cell(model, effort, tone, where) {
+  const t = TONE[tone];
+  return { model: model, effort: effort, bg: t.bg, bd: t.bd, bs: t.bs, fg: t.fg, tag: t.tag, aria: where + ': ' + model + ', ' + effort + ', ' + t.tag };
+}
+function build(agent) {
+  const exc = agent.exc || {};
+  const acts = [];
+  const cells = [];
+  let def;
+  if (agent.def) def = cell(agent.def[0], agent.def[1], 'set', 'Agent default');
+  else {
+    const models = agent.uses.map((k) => BASE[k][0]);
+    const same = models.every((m) => m === models[0]);
+    def = same ? cell(models[0], BASE[agent.uses[0]][1], 'inh', 'Agent default') : cell('Varies', 'by activity', 'vary', 'Agent default');
+  }
+  cells.push(def);
+  ACTS.forEach((a) => {
+    let c;
+    if (agent.uses.indexOf(a.key) < 0) c = cell('—', 'not used', 'na', a.name);
+    else if (exc[a.key]) c = cell(exc[a.key][0], exc[a.key][1], 'exc', a.name);
+    else if (agent.def) c = cell(agent.def[0], agent.def[1], 'inh', a.name);
+    else c = cell(BASE[a.key][0], BASE[a.key][1], 'inh', a.name);
+    cells.push(c);
+    if (c.tag !== 'Not used') acts.push(Object.assign({ name: a.name }, c));
+  });
+  const excCount = Object.keys(exc).length;
+  return { cells: cells, acts: acts, def: def, excCount: excCount };
+}
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 1 };
+  }
+  renderVals() {
+    const sel = this.state.sel;
+    const rows = AGENTS.map((agent, i) => {
+      const b = build(agent);
+      return {
+        label: agent.label,
+        cells: b.cells,
+        hasExc: b.excCount > 0,
+        excText: b.excCount + ' exception' + (b.excCount === 1 ? '' : 's'),
+        bg: i === sel ? '#1F2A29' : '#1B1D22',
+        bar: i === sel ? '#3CC2B5' : 'transparent',
+        pick: () => this.setState({ sel: i })
+      };
+    });
+    const agent = AGENTS[sel];
+    const b = build(agent);
+    const effortText = b.def.effort;
+    const fixed = effortText.indexOf('fixed') === 0;
+    const s = {
+      label: agent.label,
+      roleId: agent.id,
+      defModel: b.def.model === 'Varies' ? 'Varies by activity — choose a default' : b.def.model,
+      provModel: agent.def ? 'this scope (global agent default)' : 'bundled activity defaults',
+      provReason: agent.def ? 'this scope (global agent default)' : 'bundled activity defaults',
+      isFixed: fixed,
+      isAdaptive: !fixed,
+      fixedBg: fixed ? '#33363E' : 'transparent',
+      adaptiveBg: fixed ? 'transparent' : '#33363E',
+      effortLabel: fixed ? 'Effort' : 'Adaptive maximum',
+      effortValue: effortText.indexOf('by activity') >= 0 ? 'Model profile default' : effortText.replace('fixed · ', '').replace('adaptive ≤ ', ''),
+      acts: b.acts
+    };
+    return { rows: rows, s: s };
+  }
+}
+</script>
+</body>
+</html>

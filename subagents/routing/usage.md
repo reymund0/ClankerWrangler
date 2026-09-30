@@ -1,9 +1,10 @@
 # Routing preferences and dispatch preparation
 
-Use the `routing_policy.py` and `routing_editor.py` files in the loaded coordinator's
-`scripts/` directory. Their policy data and this guide live in `routing/`. In the
-source checkout the package root is `subagents/`; in an installed skill it is the
-directory containing `SKILL.md`. Verify the actual Python 3.10+ executable and read
+In the source checkout, shared `routing_policy.py` lives in `subagents/scripts/`
+and the optional editor's `routing_editor.py` lives in `routing-editor/scripts/`.
+Installed coordinator packages keep both in their `scripts/` directory. Policy
+data and this guide live in `routing/` beside the coordinator's `SKILL.md`
+(source checkout: `subagents/`). Verify the actual Python 3.10+ executable and read
 `--help`. Node is needed only to develop/build the optional React editor.
 
 ## Snapshot once, resolve each assignment
@@ -143,7 +144,7 @@ parent-owned; never log credentials or hidden reasoning.
 Build in `routing-editor/` using `npm ci` then `npm run build`. From the checkout:
 
 ```text
-python subagents/scripts/routing_editor.py --project <target-project>
+python routing-editor/scripts/routing_editor.py --project <target-project>
 ```
 
 From an installed package use its `scripts/routing_editor.py`. Wrangler copies the

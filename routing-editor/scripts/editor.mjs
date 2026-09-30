@@ -9,14 +9,14 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { timingSafeEqual } from 'node:crypto'
 
 const scriptPath = fileURLToPath(import.meta.url)
-const repositoryRoot = resolve(dirname(scriptPath), '..')
+const repositoryRoot = resolve(dirname(scriptPath), '../..')
 const editorRoot = join(repositoryRoot, 'routing-editor')
-const helperPath = join(repositoryRoot, 'subagents', 'scripts', 'routing_editor.py')
+const helperPath = join(editorRoot, 'scripts', 'routing_editor.py')
 const assetRoot = join(editorRoot, 'dist')
 const startupTimeoutMs = 10_000
 const compatibility = { schema_version: 1, policy_version: '2' }
 
-const usage = `Usage: node scripts/editor.mjs <start|dev|build> [options]
+const usage = `Usage: node routing-editor/scripts/editor.mjs <start|dev|build> [options]
 
 Commands:
   start                    Serve the compatible built editor through Python.
@@ -77,17 +77,17 @@ export async function assertCompatibleBuild() {
     exists(join(assetRoot, 'compatibility.json')),
   ])
   if (!indexPresent || !manifestPresent) {
-    throw new Error('Editor build is unavailable. Run "npm run editor:build" first.')
+    throw new Error('Editor build is unavailable. Run "npm run build" first.')
   }
 
   let manifest
   try {
     manifest = JSON.parse(await readFile(join(assetRoot, 'compatibility.json'), 'utf8'))
   } catch {
-    throw new Error('Editor build is incompatible. Run "npm run editor:build" first.')
+    throw new Error('Editor build is incompatible. Run "npm run build" first.')
   }
   if (manifest?.schema_version !== compatibility.schema_version || manifest?.policy_version !== compatibility.policy_version) {
-    throw new Error('Editor build is incompatible. Run "npm run editor:build" first.')
+    throw new Error('Editor build is incompatible. Run "npm run build" first.')
   }
 }
 
@@ -380,7 +380,7 @@ async function startPython(options, lifecycle, hideBootstrap) {
 async function startVite(backend, lifecycle) {
   const viteEntry = join(editorRoot, 'node_modules', 'vite', 'dist', 'node', 'index.js')
   if (!await exists(viteEntry)) {
-    throw new Error('Editor dependencies are unavailable. In routing-editor run "npm ci", then run "npm run editor:build".')
+    throw new Error('Editor dependencies are unavailable. In routing-editor run "npm ci", then run "npm run build".')
   }
   const { createServer } = await import(pathToFileURL(viteEntry).href)
   if (lifecycle.stopping) throw new Error('The local editor service stopped during startup.')
@@ -427,7 +427,7 @@ async function buildEditor() {
   const tsc = join(editorRoot, 'node_modules', 'typescript', 'bin', 'tsc')
   const vite = join(editorRoot, 'node_modules', 'vite', 'bin', 'vite.js')
   if (!await exists(tsc) || !await exists(vite)) {
-    throw new Error('Editor dependencies are unavailable. In routing-editor run "npm ci", then retry "npm run editor:build".')
+    throw new Error('Editor dependencies are unavailable. In routing-editor run "npm ci", then retry "npm run build".')
   }
   await run(process.execPath, [tsc, '-b'], { cwd: editorRoot, stdio: 'inherit' })
   await run(process.execPath, [vite, 'build'], { cwd: editorRoot, stdio: 'inherit' })

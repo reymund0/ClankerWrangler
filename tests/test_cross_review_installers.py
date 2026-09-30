@@ -21,6 +21,7 @@ class InstallerTests(unittest.TestCase):
                 shutil.copy2(REPO / filename, source_repo / filename)
             shutil.copytree(REPO / "skills", source_repo / "skills")
             shutil.copytree(REPO / "subagents", source_repo / "subagents", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            shutil.copytree(REPO / "routing-editor/scripts", source_repo / "routing-editor/scripts", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             project_preference = source_repo / ".clanker/orchestration-routing.json"
             project_preference.parent.mkdir()
             project_preference.write_bytes(b'{"schema_version":1}\n')
@@ -68,7 +69,7 @@ class InstallerTests(unittest.TestCase):
                     self.assertEqual((bundle / "SKILL.md").read_bytes(), (source_repo / "subagents" / (NAME + ".md")).read_bytes())
                     for script_name in ("claude_cross_review.py", "routing_policy.py", "routing_editor.py", "model_discovery.py"):
                         self.assertEqual((bundle / "scripts" / script_name).read_bytes(),
-                                         (source_repo / "subagents/scripts" / script_name).read_bytes())
+                                         (source_repo / ("routing-editor/scripts" if script_name in ("routing_editor.py", "model_discovery.py") else "subagents/scripts") / script_name).read_bytes())
                     self.assertEqual(sorted(f.name for f in (bundle / "scripts").iterdir()),
                                      ["claude_cross_review.py", "model_discovery.py", "routing_editor.py", "routing_policy.py"])
                     help_result = subprocess.run([sys.executable, "-B", str(bundle / "scripts/routing_editor.py"), "--help"],

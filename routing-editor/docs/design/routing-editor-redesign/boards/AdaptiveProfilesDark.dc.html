@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Adaptive profiles, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:"IBM Plex Sans",system-ui,sans-serif;background:#121317;color:#ECEBE6}
+a{color:#5ED3C7}a:hover{color:#8FE3DA}
+button{font:inherit;cursor:pointer}
+select{font:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1100px; box-sizing: border-box; display: flex; flex-direction: column; background: #121317; color: #ECEBE6; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+<header style="height: 68px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; align-items: center; gap: 24px; background: #0B0C0F; border-bottom: 1px solid #23262C; color: #ECEBE6">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em">Orchestration Nation</span>
+<span style="font-size: 13px; color: #A7AAB2">Routing</span>
+</div>
+<div role="group" aria-label="Scope" style="display: flex; padding: 3px; background: #1B1D22; border-radius: 10px; gap: 2px">
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: #ECEBE6; color: #121317; font-size: 13px; font-weight: 600">Global</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Project · ClankerWrangler</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8E929B">~/.clanker/orchestration-routing.json</span>
+<div style="flex-grow: 1"></div>
+<span role="status" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: #3A2A16; color: #F5D3A6; font-size: 13px; font-weight: 500">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #F0A94B"></span>2 unsaved changes</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Run Wrangler</button>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Export draft &amp; reload</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #3CC2B5; color: #0B1F1E; font-size: 13px; font-weight: 600">Save global</button>
+</header>
+
+<nav aria-label="Sections" style="height: 48px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; gap: 4px; background: #17191D; border-bottom: 1px solid #2E3138">
+<a href="MainDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Worker routes</a>
+<a href="ActivityDefaultsDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Activity defaults</a>
+<a href="AdaptiveProfilesDark.dc.html" aria-current="page" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid #3CC2B5; color: #ECEBE6; font-size: 14px; font-weight: 600; text-decoration: none">Adaptive profiles</a>
+<a href="RouteTraceDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Preview a route</a>
+</nav>
+
+<section aria-labelledby="ap-title" style="flex-grow: 1; padding: 22px 28px; display: flex; flex-direction: column; gap: 18px">
+<div>
+<h1 id="ap-title" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 28px; letter-spacing: -0.01em">Adaptive profiles</h1>
+<p style="margin: 4px 0 0; font-size: 14px; color: #A7AAB2; max-width: 760px">When a route uses Adaptive reasoning, the task tier picks the effort from the model's profile, then the ceiling caps it. Customize a model's profile to change that mapping in this scope.</p>
+</div>
+
+<form aria-label="Add a profile" style="display: flex; align-items: flex-end; gap: 14px; padding: 16px 18px; background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px">
+<div style="display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Provider
+<div role="group" aria-label="Provider" style="display: flex; padding: 3px; background: #15171B; border-radius: 8px">
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 16px; border: 0; border-radius: 6px; background: #33363E; color: #ECEBE6; font-size: 13px; font-weight: 600">Codex</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 16px; border: 0; border-radius: 6px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Claude</button>
+</div>
+</div>
+<label style="flex-grow: 1; display: flex; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 500; color: #C9CBD1">Model
+<select style="height: 40px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 7px; background: #121317; color: #ECEBE6; font-size: 13px"><option>Select a locally reported model</option></select>
+</label>
+<button type="submit" style="height: 40px; padding: 0 16px; border: 0; border-radius: 8px; background: #3CC2B5; color: #0B1F1E; font-size: 13px; font-weight: 600">Customize profile</button>
+</form>
+
+<div role="table" aria-label="Adaptive profiles by model" style="background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px; overflow: hidden">
+<div role="row" style="display: grid; grid-template-columns: 260px repeat(5, minmax(0, 1fr)) 150px; gap: 10px; padding: 10px 18px; background: #17191D; border-bottom: 1px solid #2E3138; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A7AAB2">
+<span role="columnheader">Model</span>
+<span role="columnheader">Mechanical</span>
+<span role="columnheader">Routine</span>
+<span role="columnheader">Complex</span>
+<span role="columnheader">Exceptional</span>
+<span role="columnheader">Default ceiling</span>
+<span role="columnheader"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Actions</span></span>
+</div>
+<sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+<div role="rowgroup">
+<div role="row" style="border-bottom: 1px solid #2E3138"><span role="rowheader" style="display: block">
+<button type="button" aria-expanded="{{g.expanded}}" style="width: 100%; min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 18px; border: 0; border-radius: 0; background: #17191D; color: #ECEBE6; text-align: left">
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="transform: rotate({{g.rot}}deg)"><path d="M6 9l6 6 6-6"></path></svg>
+<span style="font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: {{g.provFg}}">{{g.provider}}</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 16px; font-weight: 600">{{g.name}}</span>
+<span style="font-size: 12px; color: #A7AAB2">{{g.count}}</span>
+<sc-if value="{{g.hasCustom}}" hint-placeholder-val="{{false}}"><span style="font-size: 12px; font-weight: 600; color: #7FD6CC">· {{g.custom}}</span></sc-if>
+</button>
+</span></div>
+<sc-if value="{{g.expanded}}" hint-placeholder-val="{{true}}">
+<sc-for list="{{g.rows}}" as="r" hint-placeholder-count="3">
+<div role="row" style="display: grid; grid-template-columns: 260px repeat(5, minmax(0, 1fr)) 150px; gap: 10px; padding: 10px 18px; border-left: 3px solid {{r.bar}}; border-bottom: 1px solid #262930; align-items: center">
+<span role="rowheader" style="display: flex; flex-direction: column; gap: 2px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500">{{r.model}}</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #A7AAB2">{{r.provider}} · <span style="font-weight: 600; color: {{r.tagFg}}">{{r.tag}}</span></span>
+</span>
+<sc-for list="{{r.cells}}" as="c" hint-placeholder-count="5">
+<span role="cell" style="display: flex; flex-direction: column; gap: 5px; padding: 6px 9px; border-radius: 7px; border: 1px solid {{c.bd}}; background: {{c.bg}}">
+<span style="display: flex; align-items: center; justify-content: space-between; font-size: 13px; font-weight: 600; color: {{c.fg}}">{{c.effort}}<sc-if value="{{r.editable}}" hint-placeholder-val="{{false}}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></sc-if></span>
+<span aria-hidden="true" style="display: grid; grid-template-columns: repeat({{c.n}}, minmax(0, 1fr)); gap: 3px">
+<sc-for list="{{c.meter}}" as="m" hint-placeholder-count="8"><span style="height: 5px; border-radius: 2px; background: {{m}}"></span></sc-for>
+</span>
+</span>
+</sc-for>
+<span role="cell" style="display: flex; justify-content: flex-end">
+<sc-if value="{{r.editable}}" hint-placeholder-val="{{false}}"><button type="button" style="height: 34px; padding: 0 4px; border: 0; background: transparent; color: #5ED3C7; font-size: 13px; font-weight: 600; text-decoration: underline">Reset profile</button></sc-if>
+<sc-if value="{{r.readonly}}" hint-placeholder-val="{{true}}"><button type="button" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 7px; background: #22252B; color: #ECEBE6; font-size: 13px; font-weight: 500">Customize</button></sc-if>
+</span>
+</div>
+</sc-for>
+</sc-if>
+</div>
+</sc-for>
+</div>
+
+<div style="display: flex; align-items: center; gap: 14px; padding: 14px 18px; background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px; font-size: 13px; color: #C9CBD1">
+<span style="font-weight: 600; color: #ECEBE6">Example</span>
+<span>Complex task on <span style="font-family: 'JetBrains Mono', monospace">gpt-5.6-sol</span></span>
+<span aria-hidden="true">→</span>
+<span>profile says <strong style="color: #7FD6CC">xhigh</strong></span>
+<span aria-hidden="true">→</span>
+<span>ceiling <strong style="color: #ECEBE6">max</strong> doesn't cap it</span>
+<span aria-hidden="true">→</span>
+<span>requested <strong style="color: #7FD6CC">xhigh</strong></span>
+<div style="flex-grow: 1"></div>
+<a href="RouteTraceDark.dc.html" style="font-weight: 600">Try it in Preview a route</a>
+</div>
+<p style="margin: 0; font-size: 12px; color: #A7AAB2">Only efforts the local CLI reports for a model can be chosen. Profiles are routing policy, not a quality guarantee.</p>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1100}}'>
+const ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+const LEVEL = {"minimal": "#80848D", "low": "#4CC3B3", "medium": "#6AA3F0", "high": "#E3C04F", "xhigh": "#F2974F", "max": "#F06A5E", "ultra": "#B287F0"};
+const EMPTY = '#2E3138';
+const BASE = ['low', 'medium', 'high', 'xhigh', 'xhigh'];
+const PROFILES = [
+  { model: 'gpt-5.6-sol', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], values: ['low', 'medium', 'xhigh', 'max', 'max'], custom: true },
+  { model: 'gpt-6-astra', provider: 'codex', efforts: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'], values: BASE },
+  { model: 'gpt-5.6-terra', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], values: BASE },
+  { model: 'gpt-5.6-luna', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh'], values: BASE },
+  { model: 'opus', provider: 'claude', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], values: ['low', 'medium', 'high', 'xhigh', 'xhigh'] }
+];
+function meter(effort, efforts) {
+  const n = efforts.indexOf(effort);
+  return efforts.map((e, i) => (i <= n ? LEVEL[e] : EMPTY));
+}
+class Component extends DCLogic {
+  renderVals() {
+    const rows = PROFILES.map((p) => ({
+      model: p.model,
+      provider: p.provider,
+      tag: p.custom ? 'Customized in this scope' : 'Bundled',
+      tagFg: p.custom ? '#7FD6CC' : '#A7AAB2',
+      bar: p.custom ? '#3CC2B5' : 'transparent',
+      editable: !!p.custom,
+      readonly: !p.custom,
+      cells: p.values.map((v, i) => {
+        const changed = p.custom && v !== BASE[i];
+        return {
+          effort: v,
+          bg: changed ? '#12302E' : (p.custom ? '#22252B' : '#17191D'),
+          bd: changed ? '#3CC2B5' : (p.custom ? '#3A3D45' : '#17191D'),
+          fg: changed ? '#BFEDE7' : '#ECEBE6',
+          meter: meter(v, p.efforts),
+          n: p.efforts.length
+        };
+      })
+    }));
+    const GROUPS = [
+      { provider: 'Codex', name: '5.6', match: (m) => m.startsWith('gpt-5.6-'), expanded: true },
+      { provider: 'Codex', name: '6', match: (m) => m.startsWith('gpt-6-'), expanded: true },
+      { provider: 'Codex', name: '6.1', match: (m) => m.startsWith('gpt-6.1-'), expanded: false },
+      { provider: 'Claude', name: 'Models', match: (m, p) => p === 'claude', expanded: false }
+    ];
+    const groups = GROUPS.map((g) => {
+      const list = rows.filter((r) => g.match(r.model, r.provider));
+      const custom = list.filter((r) => r.editable).length;
+      return {
+        provider: g.provider, name: g.name, expanded: g.expanded, rot: g.expanded ? 0 : -90,
+        provFg: g.provider === 'Claude' ? '#CFC3EE' : '#A7AAB2',
+        count: list.length ? list.length + (list.length === 1 ? ' model' : ' models') : 'No models reported',
+        hasCustom: custom > 0, custom: custom + ' customized here', rows: list
+      };
+    });
+    return { groups: groups };
+  }
+}
+</script>
+</body>
+</html>

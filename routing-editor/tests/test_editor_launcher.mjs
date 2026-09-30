@@ -8,8 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const launcher = path.join(root, 'scripts', 'editor.mjs');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const launcher = path.join(root, 'routing-editor', 'scripts', 'editor.mjs');
 
 // Consume every response, including rejected requests, before testing server shutdown.
 function fetch(url, options = {}) {
@@ -59,9 +59,8 @@ test('an explicit missing Python executable fails without fallback', () => {
 test('a checkout without built assets reports the initial build prerequisite', async () => {
   const fixture = await mkdtemp(path.join(tmpdir(), 'clanker missing build '));
   try {
-    await mkdir(path.join(fixture, 'scripts'));
-    await mkdir(path.join(fixture, 'routing-editor'));
-    const copy = path.join(fixture, 'scripts', 'editor.mjs');
+    await mkdir(path.join(fixture, 'routing-editor/scripts'), { recursive: true });
+    const copy = path.join(fixture, 'routing-editor/scripts', 'editor.mjs');
     await copyFile(launcher, copy);
     const result = spawnSync(process.execPath, [copy, 'start'], { encoding: 'utf8', timeout: 15000, windowsHide: true });
     assert.notEqual(result.status, 0);
@@ -84,15 +83,15 @@ test('a checkout without built assets reports the initial build prerequisite', a
 test('development startup without Node dependencies cleans its Python backend', { timeout: 20000 }, async () => {
   const fixture = await mkdtemp(path.join(tmpdir(), 'clanker missing dependencies '));
   try {
-    for (const directory of ['scripts', 'routing-editor/dist', 'subagents/scripts', 'subagents/routing']) {
+    for (const directory of ['routing-editor/scripts', 'routing-editor/dist', 'subagents/scripts', 'subagents/routing']) {
       await mkdir(path.join(fixture, directory), { recursive: true });
     }
-    for (const name of ['scripts/editor.mjs', 'subagents/scripts/routing_editor.py', 'subagents/scripts/model_discovery.py', 'subagents/scripts/claude_cross_review.py', 'subagents/scripts/routing_policy.py', 'subagents/routing/policy.json']) {
+    for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/claude_cross_review.py', 'subagents/scripts/routing_policy.py', 'subagents/routing/policy.json']) {
       await copyFile(path.join(root, name), path.join(fixture, name));
     }
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
     await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '2' }));
-    const result = spawnSync(process.execPath, [path.join(fixture, 'scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
+    const result = spawnSync(process.execPath, [path.join(fixture, 'routing-editor/scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
       encoding: 'utf8', timeout: 12000, windowsHide: true,
     });
     assert.equal(result.error, undefined);
