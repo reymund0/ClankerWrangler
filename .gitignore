@@ -1,0 +1,5 @@
+routing-editor/node_modules/
+routing-editor/dist/
+__pycache__/
+*.py[cod]
+.clanker/*

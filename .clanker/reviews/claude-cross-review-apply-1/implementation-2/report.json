@@ -1,0 +1,156 @@
+{
+  "coverage": [
+    {
+      "evidence": "Read in full. can_accept returns `now < expires_at`, replacing the stub `return False`. Strict inequality, so equality and later instants return false. Matches the diff in evidence.json.",
+      "status": "covered",
+      "subject": "invitations.py"
+    },
+    {
+      "evidence": "Read in full. Subtests with expires_at=100 assert now=99 is True, now=100 is False and now=101 is False. This covers before, equal and after. The passing result is parent-supplied evidence and I did not run it.",
+      "status": "covered",
+      "subject": "test_invitations.py"
+    },
+    {
+      "evidence": "Read. It sets review-only constraints and says no OpenSpec change exists, so OpenSpec coverage is skipped. It also says to map code-review sections into the structured output. I complied.",
+      "status": "covered",
+      "subject": "rules.md"
+    },
+    {
+      "evidence": "Read the snapshot at _clanker_packet/guidance/00-clanker-claude-cross-review.md. I applied its implementation criteria: a concrete failure scenario for each finding, and no claim of running tests beyond the packet.",
+      "status": "covered",
+      "subject": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md"
+    },
+    {
+      "evidence": "Read the snapshot at _clanker_packet/guidance/01-SKILL.md. I reviewed correctness, boundaries, regressions and tests against it. No OpenSpec change exists, so drift and coverage checks were skipped.",
+      "status": "covered",
+      "subject": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-code-review\\SKILL.md"
+    },
+    {
+      "evidence": "invitations.py:2 `return now < expires_at` implements this exactly. test_invitations.py:5-7 asserts the 99, 100 and 101 boundaries against expires_at=100. The supplied verification log reports 1 test passing with before/equal/after subcases.",
+      "status": "covered",
+      "subject": "can_accept returns true only when now is strictly earlier than expires_at; equality and later instants return false."
+    }
+  ],
+  "created_at": "2026-09-21T20:40:38+00:00",
+  "execution_status": "completed",
+  "findings": [],
+  "limitations": [
+    "I ran no tests. The passing result comes from the parent's verification evidence in the packet.",
+    "The packet has no callers of can_accept, so I could not check how call sites use it, for example time units or timezone handling. The signature takes ints, so this is outside the stated requirement.",
+    "No OpenSpec change exists, so spec and task drift checks were skipped.",
+    "The git diff covers only invitations.py. test_invitations.py has no diff in the packet, so it is presumably unchanged from baseline or untracked. I reviewed its current contents only.",
+    "The review is limited to the supplied packet. I have no visibility into the baseline test state."
+  ],
+  "observed_settings": {
+    "model_usage": {
+      "claude-sonnet-5": {
+        "cacheCreationInputTokens": 11336,
+        "cacheReadInputTokens": 40899,
+        "canonicalModel": "claude-sonnet-5",
+        "contextWindow": 1000000,
+        "costBasis": "list",
+        "costUSD": 0.0693538,
+        "inputTokens": 10,
+        "maxOutputTokens": 64000,
+        "outputTokens": 1581,
+        "provider": "firstParty",
+        "thinkingTokens": 26,
+        "webSearchRequests": 0
+      }
+    },
+    "terminal_reason": "completed",
+    "turns": 10
+  },
+  "phase": "implementation",
+  "requested_settings": {
+    "effort": "low",
+    "max_turns": 20,
+    "model": null,
+    "timeout_seconds": 300
+  },
+  "runtime": {
+    "authentication": {
+      "logged_in": true,
+      "method": "claude.ai",
+      "provider": "firstParty",
+      "subscription_type": "pro"
+    },
+    "executable": "C:\\Users\\Raymo\\.local\\bin\\claude.exe",
+    "requested_effort": "low",
+    "requested_model": null,
+    "version": "2.1.278 (Claude Code)"
+  },
+  "scope_fingerprint": "ede2f9eb9dc232cc774703d37c1482d5e39cbcbc3db8f8eec31a8139c4ce4f62",
+  "source_evidence": {
+    "baseline": "cc42a43ebb3a306a5a4e5f5ee377b9722af2e98a",
+    "exclusions": [],
+    "file_fingerprint": "5159c6109feb8151bfb1e0058c27f9a6f67ed1f6e9fe1a88ab59a82432083b98",
+    "files": [
+      {
+        "bytes": 81,
+        "path": "invitations.py",
+        "sha256": "1ccee329239c05da6f1ee82ce0d2523e126638f15a1aa384abfd8d4aa06556cb",
+        "state": "included"
+      },
+      {
+        "bytes": 307,
+        "path": "test_invitations.py",
+        "sha256": "0b42a3478b88f42209423b44620c78c1d5e931de120b5087f8f54dd729a7bbd0",
+        "state": "included"
+      },
+      {
+        "bytes": 263,
+        "path": "rules.md",
+        "sha256": "98e0790fc6cae0414c17f017ecedcf668301a97cf746578f1534872edf84cabd",
+        "state": "included"
+      },
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md",
+        "sha256": "2c71ed581f77433b64fbbafd02854d07daf3f6860e6606a57a9e8a5f284f32a1",
+        "snapshot_path": "_clanker_packet/guidance/00-clanker-claude-cross-review.md",
+        "state": "guidance"
+      },
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-code-review\\SKILL.md",
+        "sha256": "4ebcaf80f53c4d28dad60e4417493e2d06a06fc762a4c4e2e0e64abbabc5e0c2",
+        "snapshot_path": "_clanker_packet/guidance/01-SKILL.md",
+        "state": "guidance"
+      },
+      {
+        "baseline": "cc42a43ebb3a306a5a4e5f5ee377b9722af2e98a",
+        "path": "@git",
+        "paths": [
+          "invitations.py",
+          "test_invitations.py"
+        ],
+        "sha256": "e8847222eda6b1f44d80f61685748f3edadfdd208b75df2fbf9c623791431244",
+        "state": "git"
+      }
+    ],
+    "fingerprint": "5159c6109feb8151bfb1e0058c27f9a6f67ed1f6e9fe1a88ab59a82432083b98",
+    "guidance": [
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-orchestration-nation\\references\\clanker-claude-cross-review.md",
+        "sha256": "2c71ed581f77433b64fbbafd02854d07daf3f6860e6606a57a9e8a5f284f32a1",
+        "snapshot_path": "_clanker_packet/guidance/00-clanker-claude-cross-review.md",
+        "state": "guidance"
+      },
+      {
+        "path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\installed-codex\\skills\\clanker-code-review\\SKILL.md",
+        "sha256": "4ebcaf80f53c4d28dad60e4417493e2d06a06fc762a4c4e2e0e64abbabc5e0c2",
+        "snapshot_path": "_clanker_packet/guidance/01-SKILL.md",
+        "state": "guidance"
+      }
+    ],
+    "manifest_path": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\implementation.json",
+    "manifest_sha256": "4f9374ae96e1e4cb395aff3893c3f1cb0095c49f8b49f2ae06f2cfbf5cb50216",
+    "repository": "C:\\Users\\Raymo\\AppData\\Local\\Temp\\clanker-cross-live-hadl82ll\\fixture",
+    "requirements": [
+      "can_accept returns true only when now is strictly earlier than expires_at; equality and later instants return false."
+    ],
+    "verification_evidence": [
+      "python -B -m unittest -v test_invitations: 1 test passed, with before/equal/after subcases."
+    ]
+  },
+  "verdict": "clean"
+}

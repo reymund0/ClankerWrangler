@@ -1,0 +1,77 @@
+{
+  "checked_at": "2026-09-21T20:42:59.282895+00:00",
+  "cli_version": "2.1.278",
+  "auth": {
+    "logged_in": true,
+    "method": "claude.ai",
+    "provider": "firstParty",
+    "subscription_type": "pro"
+  },
+  "observed_models": [
+    "claude-sonnet-5"
+  ],
+  "plan": "plan-1/report.json",
+  "defect_review": "implementation-1/report.json",
+  "fixed_recheck": "implementation-2/report.json",
+  "source_preservation": "Plan and initial implementation fingerprints matched before parent edited fixture; recheck fingerprint matches after completion.",
+  "staleness": "Initial implementation check-current returned 3 after parent corrected equality comparison.",
+  "dispositions": {
+    "F1": "accepted: independently confirmed <= accepts exact expiry; changed isolated fixture to <.",
+    "F2": "accepted: added boundary test with earlier/equal/later subcases; 1 test passed."
+  },
+  "restriction_probe": {
+    "is_error": false,
+    "subtype": "success",
+    "terminal_reason": "completed",
+    "permission_denials": [],
+    "subagent_stats": {
+      "spawned": 0,
+      "requested": {
+        "background": 0,
+        "foreground": 0,
+        "unset": 0
+      },
+      "started_in_background": 0,
+      "max_depth": 0,
+      "spawned_by_subagents": 0,
+      "completed": 0,
+      "failed": 0,
+      "killed": {
+        "parent": 0,
+        "user": 0,
+        "system": 0
+      },
+      "refused": {
+        "depth_limit": 0,
+        "concurrency_limit": 0,
+        "budget": 0
+      },
+      "by_type": {}
+    },
+    "response": "The fixture value in `sample.txt` is **42**.\n\nThe tools available to me are:\n- `Glob`\n- `Grep`\n- `Read`\n\nI didn't edit any files or run any other tasks."
+  },
+  "waivers": [],
+  "limitations": [
+    "Live Claude CLI exercised on Windows; POSIX execution tested deterministically, not with live Claude.",
+    "Temporary fixture paths may become unavailable later; saved reports remain evidence, not continuing approval.",
+    "The final isolated installer refresh updated reviewer guidance after live checks. Live reports document the exact earlier fixture state; they are historical acceptance evidence, not current approval for changed guidance or this repository implementation."
+  ],
+  "deterministic_verification": {
+    "Windows": {
+      "discovered": 45,
+      "passed": 43,
+      "skipped": 2,
+      "skip_reason": "Windows symlink creation unavailable in two scope-containment tests; same scenarios passed on POSIX."
+    },
+    "Ubuntu_WSL": {
+      "discovered": 45,
+      "passed": 44,
+      "skipped": 1,
+      "skip_reason": "PowerShell unavailable inside Ubuntu; PowerShell fresh/upgrade/repeat passed on Windows."
+    },
+    "installers": "PowerShell and Git Bash on Windows; Bash on Ubuntu. Fresh/upgrade/repeat, exact bundle bytes and preservation checks passed.",
+    "skill_validator": "Skill is valid",
+    "openspec": "claude-cross-review strict validation passed",
+    "whitespace": "git diff --check and explicit untracked-file whitespace checks passed"
+  }
+}

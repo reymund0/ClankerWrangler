@@ -1,0 +1,9 @@
+{
+  "name": "clanker-wrangler",
+  "private": true,
+  "scripts": {
+    "start": "node routing-editor/scripts/editor.mjs start",
+    "dev": "node routing-editor/scripts/editor.mjs dev",
+    "build": "node routing-editor/scripts/editor.mjs build"
+  }
+}

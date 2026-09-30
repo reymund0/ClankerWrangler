@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Route preview trace, dark</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0;font-family:"IBM Plex Sans",system-ui,sans-serif;background:#121317;color:#ECEBE6}
+a{color:#5ED3C7}a:hover{color:#8FE3DA}
+button,input,select{font:inherit}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1060px; box-sizing: border-box; display: flex; flex-direction: column; background: #121317; color: #ECEBE6; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+<header style="height: 68px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; align-items: center; gap: 24px; background: #0B0C0F; border-bottom: 1px solid #23262C; color: #ECEBE6">
+<div style="display: flex; align-items: baseline; gap: 10px">
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-weight: 700; font-size: 22px; letter-spacing: -0.01em">Orchestration Nation</span>
+<span style="font-size: 13px; color: #A7AAB2">Routing</span>
+</div>
+<div role="group" aria-label="Scope" style="display: flex; padding: 3px; background: #1B1D22; border-radius: 10px; gap: 2px">
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Global</button>
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 14px; border: 0; border-radius: 8px; background: #ECEBE6; color: #121317; font-size: 13px; font-weight: 600">Project · ClankerWrangler</button>
+</div>
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #8E929B">ClankerWrangler/.clanker/orchestration-routing.json</span>
+<div style="flex-grow: 1"></div>
+<span role="status" style="display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; background: #3A2A16; color: #F5D3A6; font-size: 13px; font-weight: 500">
+<span style="width: 8px; height: 8px; border-radius: 50%; background: #F0A94B"></span>2 unsaved changes</span>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Run Wrangler</button>
+<button type="button" style="height: 40px; padding: 0 14px; border: 1px solid #3A3D45; border-radius: 8px; background: transparent; color: #ECEBE6; font-size: 13px; font-weight: 500">Export draft &amp; reload</button>
+<button type="button" style="height: 40px; padding: 0 18px; border: 0; border-radius: 8px; background: #3CC2B5; color: #0B1F1E; font-size: 13px; font-weight: 600">Save project</button>
+</header>
+
+<nav aria-label="Sections" style="height: 48px; flex-shrink: 0; box-sizing: border-box; padding: 0 28px; display: flex; gap: 4px; background: #17191D; border-bottom: 1px solid #2E3138">
+<a href="MainDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Worker routes</a>
+<a href="ActivityDefaultsDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Activity defaults</a>
+<a href="AdaptiveProfilesDark.dc.html" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid transparent; color: #A7AAB2; font-size: 14px; font-weight: 500; text-decoration: none">Adaptive profiles</a>
+<a href="RouteTraceDark.dc.html" aria-current="page" style="display: flex; align-items: center; padding: 0 14px; border-bottom: 2px solid #3CC2B5; color: #ECEBE6; font-size: 14px; font-weight: 600; text-decoration: none">Preview a route</a>
+</nav>
+
+<div style="flex-grow: 1; display: flex; min-height: 0">
+
+<form aria-labelledby="ask-title" style="width: 420px; flex-shrink: 0; box-sizing: border-box; padding: 24px 28px; background: #1B1D22; border-right: 1px solid #2E3138; display: flex; flex-direction: column; gap: 18px">
+<div>
+<h1 id="ask-title" style="margin: 0; font-family: 'Bricolage Grotesque', sans-serif; font-size: 28px; font-weight: 700; letter-spacing: -0.01em">Preview a route</h1>
+<p style="margin: 4px 0 0; font-size: 14px; color: #A7AAB2">Describe an assignment and see which layer decides its model and effort. Uses the unsaved project draft; nothing is saved or run.</p>
+</div>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: #C9CBD1">Activity
+<select style="height: 44px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 8px; background: #121317; color: #ECEBE6; font-size: 14px"><option>Implementation &amp; testing</option></select>
+</label>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: #C9CBD1">Specialist
+<select style="height: 44px; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 8px; background: #121317; color: #ECEBE6; font-size: 14px"><option>Backend developer</option></select>
+</label>
+<div style="display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: #C9CBD1">Task tier
+<div role="group" aria-label="Task tier" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 3px; background: #15171B; border-radius: 9px">
+<button type="button" aria-pressed="false" style="height: 38px; border: 0; border-radius: 7px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Mechanical</button>
+<button type="button" aria-pressed="false" style="height: 38px; border: 0; border-radius: 7px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Routine</button>
+<button type="button" aria-pressed="true" style="height: 38px; border: 0; border-radius: 7px; background: #33363E; color: #ECEBE6; font-size: 13px; font-weight: 600">Complex</button>
+<button type="button" aria-pressed="false" style="height: 38px; border: 0; border-radius: 7px; background: transparent; color: #C9CBD1; font-size: 13px; font-weight: 500">Exceptional</button>
+</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: #C9CBD1">Risk flags
+<div role="group" aria-label="Risk flags" style="display: flex; flex-wrap: wrap; gap: 6px">
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 999px; background: #22252B; color: #C9CBD1; font-size: 12px">security</button>
+<button type="button" aria-pressed="true" style="height: 34px; padding: 0 12px; border: 1px solid #3CC2B5; border-radius: 999px; background: #12302E; color: #BFEDE7; font-size: 12px; font-weight: 600">data-integrity</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 999px; background: #22252B; color: #C9CBD1; font-size: 12px">recovery</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 999px; background: #22252B; color: #C9CBD1; font-size: 12px">cross-layer</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 999px; background: #22252B; color: #C9CBD1; font-size: 12px">uncertainty</button>
+<button type="button" aria-pressed="false" style="height: 34px; padding: 0 12px; border: 1px solid #3A3D45; border-radius: 999px; background: #22252B; color: #C9CBD1; font-size: 12px">performance</button>
+</div>
+</div>
+<label style="display: flex; flex-direction: column; gap: 5px; font-size: 13px; font-weight: 500; color: #C9CBD1">Reason
+<input value="Migrate routing snapshots to schema v2" style="height: 44px; box-sizing: border-box; padding: 0 10px; border: 1px solid #3A3D45; border-radius: 8px; background: #121317; color: #ECEBE6; font-size: 14px">
+</label>
+<details style="border: 1px solid #2E3138; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #C9CBD1">
+<summary style="cursor: pointer; font-weight: 600; color: #ECEBE6">Temporary session override</summary>
+<p style="margin: 8px 0 0">Applies only to this preview and is never saved.</p>
+</details>
+<div style="flex-grow: 1"></div>
+<button type="submit" style="height: 48px; border: 0; border-radius: 10px; background: #3CC2B5; color: #0B1F1E; font-size: 15px; font-weight: 600">Preview route</button>
+</form>
+
+<section aria-labelledby="result-title" style="flex-grow: 1; min-width: 0; padding: 24px 32px; display: flex; flex-direction: column; gap: 18px">
+<div style="display: flex; align-items: flex-end; gap: 24px; padding: 22px 24px; background: #0F2624; border: 1px solid #1F4A46; color: #ECEBE6; border-radius: 14px">
+<div style="flex-grow: 1">
+<h2 id="result-title" style="margin: 0 0 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #A7AAB2">Predicted route · Backend developer · Implementation</h2>
+<p style="margin: 0; display: flex; align-items: baseline; gap: 16px">
+<span style="font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 500">gpt-6-astra</span>
+<span style="font-family: 'Bricolage Grotesque', sans-serif; font-size: 34px; font-weight: 700; color: #7FD6CC">high</span>
+</p>
+</div>
+<dl style="margin: 0; display: grid; grid-template-columns: repeat(3, auto); gap: 4px 28px; font-size: 12px">
+<dt style="color: #A7AAB2">Proposed</dt><dt style="color: #A7AAB2">Ceiling</dt><dt style="color: #A7AAB2">Capability</dt>
+<dd style="margin: 0; font-size: 15px; font-weight: 600">high</dd><dd style="margin: 0; font-size: 15px; font-weight: 600">xhigh</dd><dd style="margin: 0; font-size: 15px; font-weight: 600; color: #F5D3A6">unverified</dd>
+</dl>
+</div>
+
+<div style="background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px; overflow: hidden">
+<div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid #2E3138">
+<h3 style="margin: 0; font-size: 15px; font-weight: 600">How it resolved</h3>
+<span style="font-size: 12px; color: #A7AAB2">Lowest to highest precedence. The highest layer with a value wins.</span>
+</div>
+<div role="table" aria-label="Precedence layers">
+<div role="row" style="display: grid; grid-template-columns: 36px minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 8px 18px; background: #17191D; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #A7AAB2">
+<span role="columnheader">#</span><span role="columnheader">Layer</span><span role="columnheader">Model</span><span role="columnheader">Reasoning</span>
+</div>
+<sc-for list="{{layers}}" as="l" hint-placeholder-count="8">
+<div role="row" style="display: grid; grid-template-columns: 36px minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); gap: 12px; padding: 0 18px; min-height: 46px; align-items: center; border-top: 1px solid #262930; font-size: 13px">
+<span role="cell" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #80848D">{{l.n}}</span>
+<span role="cell" style="display: flex; flex-direction: column"><span style="font-weight: 600; color: #ECEBE6">{{l.name}}</span><span style="font-size: 12px; color: #A7AAB2">{{l.src}}</span></span>
+<span role="cell" style="display: flex; align-items: center; gap: 8px; justify-self: start; padding: 4px 8px; border-radius: 6px; background: {{l.mBg}}; color: {{l.mFg}}; font-family: 'JetBrains Mono', monospace; font-size: 12px; text-decoration: {{l.mDec}}">{{l.model}}<sc-if value="{{l.mWin}}" hint-placeholder-val="{{false}}"><span style="font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 600">WINS</span></sc-if></span>
+<span role="cell" style="display: flex; align-items: center; gap: 8px; justify-self: start; padding: 4px 8px; border-radius: 6px; background: {{l.rBg}}; color: {{l.rFg}}; font-size: 12px; text-decoration: {{l.rDec}}">{{l.reason}}<sc-if value="{{l.rWin}}" hint-placeholder-val="{{false}}"><span style="font-size: 11px; font-weight: 600">WINS</span></sc-if></span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+<div style="background: #1B1D22; border: 1px solid #2E3138; border-radius: 12px; padding: 16px 18px">
+<h3 style="margin: 0 0 12px; font-size: 15px; font-weight: 600">How effort was chosen</h3>
+<ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; font-size: 13px; color: #C9CBD1">
+<li style="display: flex; gap: 10px"><span style="font-family: 'JetBrains Mono', monospace; color: #5ED3C7">1</span><span>Tier <strong style="color: #ECEBE6">complex</strong>. data-integrity implies at least complex.</span></li>
+<li style="display: flex; gap: 10px"><span style="font-family: 'JetBrains Mono', monospace; color: #5ED3C7">2</span><span>gpt-6-astra Adaptive profile maps complex → <strong style="color: #ECEBE6">high</strong>.</span></li>
+<li style="display: flex; gap: 10px"><span style="font-family: 'JetBrains Mono', monospace; color: #5ED3C7">3</span><span>Ceiling <strong style="color: #ECEBE6">xhigh</strong> (project exception) does not cap it. Requested: <strong style="color: #ECEBE6">high</strong>.</span></li>
+</ol>
+</div>
+<div style="background: #2A2114; border: 1px solid #5A4526; border-radius: 12px; padding: 16px 18px">
+<h3 style="margin: 0 0 12px; font-size: 15px; font-weight: 600; color: #F5D3A6">Limitations</h3>
+<ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #E8D2B0">
+<li>The local CLI catalog is not proof this model is available at runtime.</li>
+<li>Your parent session model and effort are not worker overrides.</li>
+</ul>
+</div>
+</div>
+</section>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1060}}'>
+const WIN = { bg: '#12302E', fg: '#BFEDE7', dec: 'none' };
+const LOST = { bg: 'transparent', fg: '#80848D', dec: 'line-through' };
+const NONE = { bg: 'transparent', fg: '#6E727B', dec: 'none' };
+const RAW = [
+  ['Bundled defaults', 'policy.json', 'gpt-5.6-terra', 'adaptive'],
+  ['Global · activity', 'Implementation & testing', '—', '—'],
+  ['Global · agent default', 'Backend developer', 'gpt-5.6-terra', 'fixed · medium'],
+  ['Global · activity exception', 'Backend developer × Implementation', 'gpt-6-astra', 'fixed · high'],
+  ['Project · activity', 'Implementation & testing', '—', '—'],
+  ['Project · agent default', 'Backend developer', '—', '—'],
+  ['Project · activity exception', 'Backend developer × Implementation', '—', 'adaptive ≤ xhigh'],
+  ['Session override', 'This preview only', '—', '—']
+];
+const MODEL_WIN = 3;
+const REASON_WIN = 6;
+function tone(value, i, win) {
+  if (value === '—') return NONE;
+  return i === win ? WIN : LOST;
+}
+class Component extends DCLogic {
+  renderVals() {
+    const layers = RAW.map((r, i) => {
+      const m = tone(r[2], i, MODEL_WIN);
+      const q = tone(r[3], i, REASON_WIN);
+      return {
+        n: String(i + 1), name: r[0], src: r[1], model: r[2], reason: r[3],
+        mBg: m.bg, mFg: m.fg, mDec: m.dec, mWin: i === MODEL_WIN,
+        rBg: q.bg, rFg: q.fg, rDec: q.dec, rWin: i === REASON_WIN
+      };
+    });
+    return { layers: layers };
+  }
+}
+</script>
+</body>
+</html>

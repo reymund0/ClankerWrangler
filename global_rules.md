@@ -23,9 +23,23 @@ Do not jump into broad edits before understanding the surrounding code.
 * Avoid duplicate logic when an existing utility or pattern can be reused.
 * Default to safe, reversible, low-risk changes.
 
+## Delegation and Coordination
+
+* When acting as the primary agent, assess whether specialist work would improve the result. Handle small, straightforward tasks directly.
+* For work that benefits from multiple specialties, use the available orchestration workflow when it supports the active client.
+* Give each worker a bounded objective, relevant instructions, acceptance criteria, explicit ownership, and verification expectations.
+* Parallelize independent work. Sequence changes to shared files, interfaces, browser state, or other shared resources.
+* The primary agent owns integration, shared planning state, decision logging, and the final response.
+* When acting as a delegated worker, follow the assigned role and scope. Return evidence and blockers; do not start another orchestration layer.
+* Verify worker results against the actual artifacts and relevant checks. A completion report alone does not establish correctness.
+* Delegation does not expand user authorization or tool permissions.
+* For projects using OpenSpec, follow the selected change's requirements and acceptance criteria. Keep the detailed workflow in the applicable skills.
+
 ## Approval Required
 
-Ask for approval before:
+Before asking, check whether the current request or an earlier explicit approval already authorizes the action. Ask again when the proposed action materially expands that scope or introduces an unapproved consequential change.
+
+When not already authorized, ask for approval before:
 
 * large refactors
 * sweeping renames
