@@ -1,5 +1,6 @@
 """Independent regression cases for scope isolation and review freshness."""
 import importlib.util
+import contextlib
 import json
 from pathlib import Path
 import shutil
@@ -60,6 +61,22 @@ class EvidenceTests(unittest.TestCase):
             self.assertIn(expected, packet)
         self.assertNotIn("DO_NOT_SEND_UNRELATED_CONTENT", packet)
         self.assertFalse((root / "unrelated.txt").exists())
+        evidence = json.loads((root / "_clanker_packet/evidence.json").read_text(encoding="utf-8"))
+        artifacts = evidence["git"]["diffs"]
+        self.assertEqual({"committed", "staged", "unstaged"}, set(artifacts))
+        combined_diff = []
+        for kind, artifact in artifacts.items():
+            self.assertTrue(artifact["path"].startswith("_clanker_packet/diffs/"), kind)
+            self.assertTrue(artifact["path"].endswith(".diff"), kind)
+            contents = (root / artifact["path"]).read_bytes()
+            self.assertEqual(artifact["sha256"], review.sha256_bytes(contents), kind)
+            self.assertEqual(artifact["bytes"], len(contents), kind)
+            self.assertGreater(len(contents.splitlines()), 1, kind)
+            combined_diff.append(contents.decode("utf-8"))
+        readable_diff = "\n".join(combined_diff)
+        self.assertIn("diff --git", readable_diff)
+        self.assertNotIn("DO_NOT_SEND_UNRELATED_CONTENT", readable_diff)
+        self.assertLessEqual(sum(item["bytes"] for item in artifacts.values()), 8 * review.MAX_OUTPUT_BYTES)
 
     def test_ignored_and_sensitive_files_do_not_enter_packet(self):
         (self.repo / "ignored.txt").write_text("DO_NOT_SEND_IGNORED\n")
@@ -76,6 +93,9 @@ class EvidenceTests(unittest.TestCase):
         (self.repo / "app.py").unlink()
         root, _, _ = self.snapshot(["app.py"])
         self.assertIn("value = 'base'", self.packet_text(root))
+        evidence = json.loads((root / "_clanker_packet/evidence.json").read_text(encoding="utf-8"))
+        referenced = [root / item["path"] for item in evidence["git"]["diffs"].values()]
+        self.assertTrue(any("-value = 'base'" in path.read_text(encoding="utf-8") for path in referenced))
 
     def test_new_file_after_snapshot_invalidates_fingerprint(self):
         _, files, before = self.snapshot(["app.py", "new.py"])
@@ -105,6 +125,9 @@ class EvidenceTests(unittest.TestCase):
         self.assertIn("app.py", packet)
         self.assertIn("value = 'base'", packet)
         self.assertEqual(review.current_fingerprint(self.repo, files), before)
+        evidence = json.loads((root / "_clanker_packet/evidence.json").read_text(encoding="utf-8"))
+        diff_paths = [root / item["path"] for item in evidence["git"]["diffs"].values()]
+        self.assertTrue(any("app.py" in path.read_text(encoding="utf-8") and "renamed.py" in path.read_text(encoding="utf-8") for path in diff_paths))
 
     def test_guidance_is_copied_and_fingerprinted(self):
         guidance = Path(self.temp.name) / "rules.md"
@@ -181,6 +204,35 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue((first / "metadata.json").is_file())
         with self.assertRaises(OSError):
             review.write_report(output / "missing", report)
+
+    def test_legacy_git_fingerprint_remains_current_for_an_unchanged_repository(self):
+        head = self.git("rev-parse", "HEAD").strip()
+        merge_base = self.git("merge-base", self.base, head).strip()
+        prefix = ("diff", "--no-ext-diff", "--no-textconv", "--no-color")
+        legacy_git = {
+            "head": head,
+            "baseline": self.base,
+            "merge_base": merge_base,
+            "committed": self.git(*prefix, merge_base, head, "--", "app.py"),
+            "staged": self.git(*prefix, "--cached", "--", "app.py"),
+            "unstaged": self.git(*prefix, "--", "app.py"),
+            "names": self.git(*prefix, "--name-status", "-M", merge_base, "--", "app.py"),
+        }
+        files = [
+            {"path": "app.py", "state": "included", "sha256": review.sha256_file(self.repo / "app.py")},
+            {"path": "@git", "state": "git", "baseline": self.base, "paths": ["app.py"],
+             "sha256": review.sha256_bytes(json.dumps(legacy_git, sort_keys=True).encode())},
+        ]
+        report = self.repo.parent / "legacy-report.json"
+        report.write_text(json.dumps({
+            "execution_status": "completed",
+            "source_evidence": {"repository": str(self.repo), "files": files,
+                                "file_fingerprint": review.evidence_fingerprint(files)},
+        }), encoding="utf-8")
+        output = __import__("io").StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(0, review.check_current(report))
+        self.assertTrue(json.loads(output.getvalue())["current"])
 
     def test_output_symlink_cannot_escape_report_root(self):
         output = Path(self.temp.name) / "reports"

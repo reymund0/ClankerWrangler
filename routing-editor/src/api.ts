@@ -1,4 +1,4 @@
-import type { ConfigResponse, ModelCatalogResponse, Preferences, Scope } from './types'
+import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
@@ -29,10 +29,10 @@ export const api = {
   config: () => request<ConfigResponse>('/api/config'),
   models: () => request<ModelCatalogResponse>('/api/models'),
   refreshModels: () => request<ModelCatalogResponse>('/api/models/refresh', { method: 'POST', body: '{}' }),
-  preview: (scope: Scope, document: Preferences, requestBody?: Record<string, unknown>) =>
+  preview: (document: Preferences, requestBody?: Record<string, unknown>) =>
     request<{ effective: ConfigResponse['effective']; decision: import('./types').Decision | null }>('/api/preview', {
-      method: 'POST', body: JSON.stringify({ scope, document, ...(requestBody ? { request: requestBody } : {}) }),
+      method: 'POST', body: JSON.stringify({ scope: 'global', document, ...(requestBody ? { request: requestBody } : {}) }),
     }),
-  save: (scope: Scope, document: Preferences, revision: string) =>
-    request<ConfigResponse>('/api/save', { method: 'POST', body: JSON.stringify({ scope, document, revision }) }),
+  save: (document: Preferences, revision: string) =>
+    request<ConfigResponse>('/api/save', { method: 'POST', body: JSON.stringify({ scope: 'global', document, revision }) }),
 }

@@ -19,12 +19,11 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "2"
-LEGACY_POLICY_VERSION = "1"
-SUPPORTED_POLICY_VERSIONS = frozenset((LEGACY_POLICY_VERSION, POLICY_VERSION))
+POLICY_VERSION = "4"
 INTERACTIONS = ("planning", "implementation", "native-review", "visual-review", "claude-review")
 NATIVE_INTERACTIONS = frozenset(INTERACTIONS[:-1])
-TIERS = ("mechanical", "routine", "complex", "exceptional")
+TIERS = ("straightforward", "involved", "demanding")
+LEGACY_TIERS = ("mechanical", "routine", "complex", "exceptional")
 RISK_FLAGS = frozenset(("security", "data-integrity", "recovery", "cross-layer", "uncertainty", "performance"))
 CONSEQUENTIAL_FLAGS = frozenset(("security", "data-integrity", "recovery"))
 MAX_JSON_BYTES = 1_048_576
@@ -144,15 +143,15 @@ def _require_version(value: Any, path: str) -> None:
         raise _error(path, f"must be integer {SCHEMA_VERSION}")
 
 
-def _validate_bundle_document(document: Any, field: str = "bundle", *, expected_policy_version: str = POLICY_VERSION) -> dict[str, Any]:
+def _validate_bundle_document(document: Any, field: str = "bundle") -> dict[str, Any]:
     """Validate a bundled policy already held in memory."""
     bundle = _require_object(document, field)
     _reject_unknown(bundle, {"schema_version", "policy_version", "interactions", "roles", "models", "effort_orders", "defaults"}, field)
     if set(bundle) != {"schema_version", "policy_version", "interactions", "roles", "models", "effort_orders", "defaults"}:
         raise _error(field, "is missing required fields")
     _require_version(bundle.get("schema_version"), f"{field}.schema_version")
-    if bundle.get("policy_version") != expected_policy_version:
-        raise _error(f"{field}.policy_version", f"must be {expected_policy_version!r}")
+    if bundle.get("policy_version") != POLICY_VERSION:
+        raise _error(f"{field}.policy_version", f"must be {POLICY_VERSION!r}")
     interactions, roles, models = bundle["interactions"], bundle["roles"], bundle["models"]
     if not isinstance(interactions, list) or not isinstance(roles, list) or not isinstance(models, list):
         raise _error(field, "interactions, roles, and models must be arrays")
@@ -206,7 +205,9 @@ def _validate_bundle_document(document: Any, field: str = "bundle", *, expected_
             raise _error(f"{field}.effort_orders.{provider}", "must be a unique non-empty string array")
     defaults = _require_object(bundle["defaults"], f"{field}.defaults")
     _require_version(defaults.get("schema_version"), f"{field}.defaults.schema_version")
-    validate_preferences(defaults, bundle=bundle, field=f"{field}.defaults")
+    normalized_defaults = validate_preferences(defaults, bundle=bundle, field=f"{field}.defaults")
+    if normalized_defaults != defaults:
+        raise _error(f"{field}.defaults.adaptive_profiles", "must use the current tier vocabulary")
     return copy.deepcopy(bundle)
 
 
@@ -287,13 +288,24 @@ def _validate_profile(value: Any, provider: str, path: str, bundle: Mapping[str,
     profile = _require_object(value, path)
     _reject_unknown(profile, {"tiers", "default_ceiling"}, path)
     tiers = _require_object(profile.get("tiers"), f"{path}.tiers")
-    if set(tiers) != set(TIERS):
-        raise _error(f"{path}.tiers", "must define mechanical, routine, complex, and exceptional")
+    accepted_tiers = TIERS
+    legacy_shape = set(tiers) == set(LEGACY_TIERS)
+    if set(tiers) != set(accepted_tiers) and not legacy_shape:
+        required = ", ".join(accepted_tiers)
+        required += "; complete legacy profiles may define mechanical, routine, complex, and exceptional"
+        raise _error(f"{path}.tiers", f"must define exactly {required}")
+    if legacy_shape:
+        retired_effort = _require_string(tiers["mechanical"], f"{path}.tiers.mechanical")
+        if retired_effort not in bundle["effort_orders"][provider]:
+            raise _error(f"{path}.tiers.mechanical", f"is not supported by {provider}")
+    source_tiers = ({"straightforward": tiers["routine"], "involved": tiers["complex"], "demanding": tiers["exceptional"]}
+                    if legacy_shape else tiers)
     normalized_tiers: dict[str, str] = {}
-    for tier in TIERS:
-        effort = _require_string(tiers[tier], f"{path}.tiers.{tier}")
+    for tier in accepted_tiers:
+        source_tier = {"straightforward": "routine", "involved": "complex", "demanding": "exceptional"}.get(tier, tier) if legacy_shape else tier
+        effort = _require_string(source_tiers[tier], f"{path}.tiers.{source_tier}")
         if effort not in bundle["effort_orders"][provider]:
-            raise _error(f"{path}.tiers.{tier}", f"is not supported by {provider}")
+            raise _error(f"{path}.tiers.{source_tier}", f"is not supported by {provider}")
         normalized_tiers[tier] = effort
     ceiling = _require_string(profile.get("default_ceiling"), f"{path}.default_ceiling")
     if ceiling not in bundle["effort_orders"][provider]:
@@ -306,12 +318,9 @@ def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = No
     active_bundle = load_bundle() if bundle is None else bundle
     prefs = _require_object(document, field)
     policy_version = active_bundle.get("policy_version")
-    if not isinstance(policy_version, str) or policy_version not in SUPPORTED_POLICY_VERSIONS:
+    if policy_version != POLICY_VERSION:
         raise _error(f"{field}.policy_version", "is not supported by this routing helper")
-    allows_agents = policy_version == POLICY_VERSION
-    allowed = {"schema_version", "interactions", "adaptive_profiles"}
-    if allows_agents:
-        allowed.add("agents")
+    allowed = {"schema_version", "interactions", "adaptive_profiles", "agents"}
     _reject_unknown(prefs, allowed, field)
     _require_version(prefs.get("schema_version"), f"{field}.schema_version")
     normalized: dict[str, Any] = {"schema_version": SCHEMA_VERSION}
@@ -349,6 +358,13 @@ def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = No
     return normalized
 
 
+def needs_profile_migration(document: Any) -> bool:
+    """Validate current preferences and report whether a complete legacy profile needs conversion."""
+    validate_preferences(document)
+    profiles = document.get("adaptive_profiles", {})
+    return any(set(profile["tiers"]) == set(LEGACY_TIERS) for profile in profiles.values())
+
+
 def _empty_preferences() -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION}
 
@@ -361,14 +377,13 @@ def _snapshot_payload(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     return {key: copy.deepcopy(value) for key, value in snapshot.items() if key != "fingerprint"}
 
 
-def snapshot_from_documents(global_document: Any = None, project_document: Any = None, sources: Mapping[str, str] | None = None) -> dict[str, Any]:
+def snapshot_from_documents(global_document: Any = None, *, sources: Mapping[str, str] | None = None) -> dict[str, Any]:
     """Freeze already-read documents and the bundled policy for a reproducible run."""
     bundle = load_bundle()
     global_prefs = None if global_document is None else validate_preferences(global_document, bundle=bundle, field="global")
-    project_prefs = None if project_document is None else validate_preferences(project_document, bundle=bundle, field="project")
     source_values = dict(sources or {})
-    _reject_unknown(source_values, {"global", "project"}, "sources")
-    normalized_sources = {name: source_values.get(name) for name in ("global", "project")}
+    _reject_unknown(source_values, {"global"}, "sources")
+    normalized_sources = {"global": source_values.get("global")}
     for name, value in normalized_sources.items():
         if value is not None and (not isinstance(value, str) or not value):
             raise _error(f"sources.{name}", "must be a non-empty display path")
@@ -376,12 +391,11 @@ def snapshot_from_documents(global_document: Any = None, project_document: Any =
         "schema_version": SCHEMA_VERSION,
         "policy_version": POLICY_VERSION,
         "bundle": bundle,
-        "documents": {"global": global_prefs, "project": project_prefs},
+        "documents": {"global": global_prefs},
         "sources": normalized_sources,
         "hashes": {
             "bundle": _sha256(_canonical_json(bundle)),
             "global": _hash_document(global_prefs),
-            "project": _hash_document(project_prefs),
         },
         "bypassed_sources": [],
     }
@@ -413,7 +427,7 @@ def _read_preference_path(path: str | os.PathLike[str] | None, name: str, bypass
     return document, display, _sha256(raw), False
 
 
-def create_snapshot(global_path: str | os.PathLike[str], project_path: str | os.PathLike[str] | None = None, bypass: list[str] | tuple[str, ...] | set[str] | None = None) -> dict[str, Any]:
+def create_snapshot(global_path: str | os.PathLike[str], *, bypass: list[str] | tuple[str, ...] | set[str] | None = None) -> dict[str, Any]:
     """Read only explicitly named config files and create a deterministic snapshot."""
     if global_path is None:
         raise _error("global", "an explicit global configuration path is required")
@@ -421,11 +435,9 @@ def create_snapshot(global_path: str | os.PathLike[str], project_path: str | os.
         raise _error("bypass", "must name exact source paths")
     bypassed = set(bypass or ())
     global_doc, global_source, global_hash, global_bypassed = _read_preference_path(global_path, "global", bypassed)
-    project_doc, project_source, project_hash, project_bypassed = _read_preference_path(project_path, "project", bypassed)
-    snapshot = snapshot_from_documents(global_doc, project_doc, {"global": global_source, "project": project_source})
+    snapshot = snapshot_from_documents(global_doc, sources={"global": global_source})
     snapshot["hashes"]["global"] = global_hash
-    snapshot["hashes"]["project"] = project_hash
-    snapshot["bypassed_sources"] = [source for source, bypassed_flag in ((global_source, global_bypassed), (project_source, project_bypassed)) if bypassed_flag and source is not None]
+    snapshot["bypassed_sources"] = [global_source] if global_bypassed and global_source is not None else []
     snapshot["fingerprint"] = _sha256(_canonical_json(_snapshot_payload(snapshot)))
     return snapshot
 
@@ -439,21 +451,24 @@ def validate_snapshot(snapshot: Any) -> dict[str, Any]:
         raise _error("snapshot", "is missing required fields")
     _require_version(value["schema_version"], "snapshot.schema_version")
     policy_version = value["policy_version"]
-    if not isinstance(policy_version, str) or policy_version not in SUPPORTED_POLICY_VERSIONS:
-        raise _error("snapshot.policy_version", "has an unsupported policy version")
-    bundle = _validate_bundle_document(value["bundle"], "snapshot.bundle", expected_policy_version=policy_version)
+    if policy_version != POLICY_VERSION:
+        raise _error("snapshot.policy_version", f"only policy {POLICY_VERSION} is supported. Start a new run to create a current snapshot.")
+    bundle = _validate_bundle_document(value["bundle"], "snapshot.bundle")
     documents = _require_object(value["documents"], "snapshot.documents")
     sources = _require_object(value["sources"], "snapshot.sources")
     hashes = _require_object(value["hashes"], "snapshot.hashes")
-    if set(documents) != {"global", "project"} or set(sources) != {"global", "project"} or set(hashes) != {"bundle", "global", "project"}:
+    expected_names = {"global"}
+    expected_hashes = {"bundle", "global"}
+    if set(documents) != expected_names or set(sources) != expected_names or set(hashes) != expected_hashes:
         raise _error("snapshot", "documents, sources, and hashes have an invalid shape")
     # The snapshot bundle was generated by load_bundle; validate preference data against it.
-    for name in ("global", "project"):
+    for name in expected_names:
         if documents[name] is not None:
-            validate_preferences(documents[name], bundle=bundle, field=f"snapshot.documents.{name}")
+            normalized = validate_preferences(documents[name], bundle=bundle, field=f"snapshot.documents.{name}")
+            if normalized != documents[name]:
+                raise _error(f"snapshot.documents.{name}", "must already use the tier vocabulary for its frozen policy version")
         if sources[name] is not None and not isinstance(sources[name], str):
             raise _error(f"snapshot.sources.{name}", "must be a path string or null")
-        expected_hash = _hash_document(documents[name])
         if hashes[name] is not None and not isinstance(hashes[name], str):
             raise _error(f"snapshot.hashes.{name}", "must be a SHA-256 string or null")
         # File hashes intentionally may differ from canonical parsed JSON hashes, but missing documents cannot have one.
@@ -468,15 +483,10 @@ def validate_snapshot(snapshot: Any) -> dict[str, Any]:
     return copy.deepcopy(value)
 
 
-def _layers(snapshot: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
-    docs = snapshot["documents"]
-    return docs["global"] or _empty_preferences(), docs["project"] or _empty_preferences()
-
-
 def _route_for(snapshot: Mapping[str, Any], interaction: str, role: str | None, session_override: Any = None) -> tuple[dict[str, Any], dict[str, str]]:
     bundle = snapshot["bundle"]
     defaults = bundle["defaults"]
-    global_prefs, project_prefs = _layers(snapshot)
+    global_prefs = snapshot["documents"]["global"] or _empty_preferences()
     route = copy.deepcopy(defaults["interactions"][interaction])
     provenance = {"model": "bundle.defaults", "reasoning": "bundle.defaults"}
 
@@ -488,13 +498,12 @@ def _route_for(snapshot: Mapping[str, Any], interaction: str, role: str | None, 
                 route[field] = copy.deepcopy(value[field])
                 provenance[field] = source + "." + field
 
-    for scope_name, document in (("global", global_prefs), ("project", project_prefs)):
-        interaction_route = document.get("interactions", {}).get(interaction)
-        apply(interaction_route, f"{scope_name}.interactions.{interaction}")
-        if role is not None and snapshot["policy_version"] == POLICY_VERSION:
-            apply(document.get("agents", {}).get(role), f"{scope_name}.agents.{role}")
-        if role is not None and interaction_route:
-            apply(interaction_route.get("specialists", {}).get(role), f"{scope_name}.interactions.{interaction}.specialists.{role}")
+    interaction_route = global_prefs.get("interactions", {}).get(interaction)
+    apply(interaction_route, f"global.interactions.{interaction}")
+    if role is not None:
+        apply(global_prefs.get("agents", {}).get(role), f"global.agents.{role}")
+        if interaction_route:
+            apply(interaction_route.get("specialists", {}).get(role), f"global.interactions.{interaction}.specialists.{role}")
     if session_override not in (None, {}):
         normalized = _validate_route(session_override, interaction, "request.session_override", bundle, False)
         apply(normalized, "session_override")
@@ -505,10 +514,10 @@ def _profile_for(snapshot: Mapping[str, Any], provider: str, model: str) -> tupl
     key = f"{provider}:{model}"
     profile = snapshot["bundle"]["defaults"].get("adaptive_profiles", {}).get(key)
     source = "bundle.defaults.adaptive_profiles." + key if profile is not None else None
-    for scope_name, document in (("global", snapshot["documents"]["global"]), ("project", snapshot["documents"]["project"])):
-        if document is not None and key in document.get("adaptive_profiles", {}):
-            profile = document["adaptive_profiles"][key]
-            source = f"{scope_name}.adaptive_profiles.{key}"
+    document = snapshot["documents"]["global"]
+    if document is not None and key in document.get("adaptive_profiles", {}):
+        profile = document["adaptive_profiles"][key]
+        source = f"global.adaptive_profiles.{key}"
     return copy.deepcopy(profile) if profile is not None else None, source
 
 
@@ -525,8 +534,9 @@ def _validate_request(request: Any, bundle: Mapping[str, Any]) -> dict[str, Any]
         if role not in _catalog(bundle)[1]:
             raise _error("request.role", "is not a known native role")
     tier = value.get("tier")
-    if tier not in TIERS:
-        raise _error("request.tier", "must be mechanical, routine, complex, or exceptional")
+    supported_tiers = TIERS
+    if tier not in supported_tiers:
+        raise _error("request.tier", f"must be {', '.join(supported_tiers)}")
     reason = _require_string(value.get("reason"), "request.reason").strip()
     flags = value.get("risk_flags", [])
     if not isinstance(flags, list) or not all(isinstance(flag, str) and flag in RISK_FLAGS for flag in flags) or len(set(flags)) != len(flags):
@@ -602,9 +612,11 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
     profile, profile_source = _profile_for(frozen, provider, model)
     tier = asked["tier"]
     limitations: list[str] = []
-    if set(asked["risk_flags"]) & CONSEQUENTIAL_FLAGS and TIERS.index(tier) < TIERS.index("complex"):
-        tier = "complex"
-        limitations.append("Tier raised to complex because the request has consequential risk")
+    tier_order = TIERS
+    risk_floor = "involved"
+    if set(asked["risk_flags"]) & CONSEQUENTIAL_FLAGS and tier_order.index(tier) < tier_order.index(risk_floor):
+        tier = risk_floor
+        limitations.append(f"Tier raised to {risk_floor} because the request has consequential risk")
     if reasoning["mode"] == "adaptive":
         if profile is None:
             raise _error("resolved.reasoning", f"Adaptive routing for {provider}:{model} requires a complete profile")
@@ -689,20 +701,19 @@ def effective_configuration(snapshot: Any) -> dict[str, Any]:
         if document is not None:
             profiles.update(copy.deepcopy(document.get("adaptive_profiles", {})))
     result: dict[str, Any] = {"interactions": interactions, "profiles": profiles}
-    if frozen["policy_version"] == POLICY_VERSION:
-        agents: dict[str, Any] = {}
-        for role in role_ids:
-            route: dict[str, Any] = {}
-            provenance: dict[str, str] = {}
-            for scope_name, document in (("global", frozen["documents"]["global"]), ("project", frozen["documents"]["project"])):
-                agent_route = (document or {}).get("agents", {}).get(role)
-                if agent_route:
-                    for field in ("model", "reasoning"):
-                        if field in agent_route:
-                            route[field] = copy.deepcopy(agent_route[field])
-                            provenance[field] = f"{scope_name}.agents.{role}.{field}"
-            agents[role] = {"route": route, "provenance": provenance}
-        result["agents"] = agents
+    agents: dict[str, Any] = {}
+    document = frozen["documents"]["global"] or _empty_preferences()
+    for role in role_ids:
+        route: dict[str, Any] = {}
+        provenance: dict[str, str] = {}
+        agent_route = document.get("agents", {}).get(role)
+        if agent_route:
+            for field in ("model", "reasoning"):
+                if field in agent_route:
+                    route[field] = copy.deepcopy(agent_route[field])
+                    provenance[field] = f"global.agents.{role}.{field}"
+        agents[role] = {"route": route, "provenance": provenance}
+    result["agents"] = agents
     return result
 
 
@@ -735,7 +746,6 @@ def main(argv: list[str] | None = None) -> int:
     subcommands.add_parser("catalog", help="write the bundled policy catalog as JSON")
     snapshot_parser = subcommands.add_parser("snapshot", help="read explicit preferences and create an immutable snapshot")
     snapshot_parser.add_argument("--global", dest="global_path", required=True, help="explicit global preferences path")
-    snapshot_parser.add_argument("--project", dest="project_path", help="explicit project preferences path")
     snapshot_parser.add_argument("--bypass", action="append", default=[], help="exact source path to ignore for this run")
     snapshot_parser.add_argument("--output", help="new snapshot file path; creation is exclusive")
     resolve_parser = subcommands.add_parser("resolve", help="resolve a JSON request against a saved snapshot")
@@ -746,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "catalog":
             result = load_bundle()
         elif args.command == "snapshot":
-            result = create_snapshot(args.global_path, args.project_path, args.bypass)
+            result = create_snapshot(args.global_path, bypass=args.bypass)
             if args.output:
                 _write_snapshot_exclusive(args.output, result)
         else:

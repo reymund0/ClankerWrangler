@@ -1,4 +1,4 @@
-"""Loopback-only editor for explicit Clanker routing preference destinations."""
+"""Loopback-only editor for global Clanker routing preferences."""
 from __future__ import annotations
 
 import argparse
@@ -30,7 +30,7 @@ from model_discovery import DiscoveryClosed, DiscoveryManager
 
 MAX_DOCUMENT_BYTES = 262144
 API_VERSION = 1
-POLICY_VERSION = "2"
+POLICY_VERSION = "4"
 
 
 class EditorError(Exception):
@@ -88,8 +88,8 @@ def parse_json(content: bytes):
 
 
 class PreferenceStore:
-    """The browser selects scope only; paths are fixed by the process owner."""
-    def __init__(self, project: Path | None = None, global_config_dir: Path | None = None):
+    """One global destination, fixed by the process owner."""
+    def __init__(self, *, global_config_dir: Path | None = None):
         if global_config_dir is None:
             home = Path.home().resolve()
             self.targets = {"global": (home, home / ".clanker" / "orchestration-routing.json")}
@@ -97,11 +97,6 @@ class PreferenceStore:
             directory = Path(global_config_dir).absolute()
             anchor = directory.parent.resolve()
             self.targets = {"global": (anchor, anchor / directory.name / "orchestration-routing.json")}
-        if project is not None:
-            root = Path(project).resolve(strict=True)
-            if not root.is_dir():
-                raise EditorError("Project must be an existing directory")
-            self.targets["project"] = (root, root / ".clanker" / "orchestration-routing.json")
         for anchor, target in self.targets.values():
             safe_path(anchor, target)
         self._mutex = threading.RLock()
@@ -135,8 +130,10 @@ class PreferenceStore:
                             "error": "Invalid saved preferences: configuration file is too large"}
                 content = b"".join(chunks)
             document = {"schema_version": 1} if content is None else parse_json(content)
-            policy.validate_preferences(document)
-            return {"path": str(target), "revision": revision(content), "document": document}
+            migration_pending = policy.needs_profile_migration(document)
+            document = policy.validate_preferences(document)
+            return {"path": str(target), "revision": revision(content), "document": document,
+                    "migration_pending": migration_pending}
         except (ValueError, policy.RoutingError) as error:
             return {"path": str(target), "revision": revision(content), "document": None,
                     "error": "Invalid saved preferences: " + str(error)}
@@ -144,23 +141,14 @@ class PreferenceStore:
     def snapshot(self, scope: str, document: dict | None = None):
         self.target(scope)
         global_state = self.read("global")
-        project_state = self.read("project") if scope == "project" else None
-        states = {"global": global_state, "project": project_state}
-        documents = {}
-        for layer, state in states.items():
-            if state is None:
-                documents[layer] = None
-            elif layer == scope and document is not None:
-                documents[layer] = document
-            elif state.get("error"):
-                raise EditorError(state["error"])
-            else:
-                documents[layer] = state["document"]
-        sources = {key: value["path"] for key, value in states.items() if value is not None}
-        return policy.snapshot_from_documents(documents["global"], documents["project"], sources=sources)
+        if document is None:
+            if global_state.get("error"):
+                raise EditorError(global_state["error"])
+            document = global_state["document"]
+        return policy.snapshot_from_documents(document, sources={"global": global_state["path"]})
 
     def configuration(self) -> dict:
-        states = {"global": self.read("global"), "project": self.read("project") if "project" in self.targets else None}
+        states = {"global": self.read("global")}
         result = {"schema_version": API_VERSION, "policy_version": POLICY_VERSION, "scopes": states,
                   "bundle": policy.load_bundle(), "effective": None}
         try:
@@ -169,7 +157,6 @@ class PreferenceStore:
                     raise EditorError(state["error"])
             frozen = policy.snapshot_from_documents(
                 states["global"]["document"],
-                states["project"]["document"] if states["project"] else None,
                 sources={key: value["path"] for key, value in states.items() if value is not None},
             )
             result["effective"] = policy.effective_configuration(frozen)
@@ -186,6 +173,7 @@ class PreferenceStore:
     def save(self, scope: str, document: dict, expected_revision: str) -> dict:
         if not isinstance(expected_revision, str) or not expected_revision:
             raise EditorError("A loaded revision is required")
+        document = policy.validate_preferences(document)
         serialized = (json.dumps(document, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
         if len(serialized) > MAX_DOCUMENT_BYTES:
             raise EditorError("Configuration document is too large")
@@ -194,6 +182,7 @@ class PreferenceStore:
         lock = target.with_suffix(".json.lock")
         temp_path = None
         lock_owned = False
+        migration_backup = None
         with self._mutex:
             safe_path(anchor, target.parent)
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -210,6 +199,31 @@ class PreferenceStore:
                 if state["revision"] != expected_revision:
                     raise EditorError("Preferences changed since loading. Reload the latest revision before saving your draft.", 409)
                 self.preview(scope, document)
+                if state.get("migration_pending"):
+                    with safe_path(anchor, target).open("rb") as source:
+                        original = source.read(MAX_DOCUMENT_BYTES + 1)
+                    if revision(original) != expected_revision:
+                        raise EditorError("Preferences changed during saving; saved content was preserved.", 409)
+                    backup = safe_path(anchor, target.with_name(target.name + ".pre-three-tier." + expected_revision + ".bak"))
+                    try:
+                        backup_fd = os.open(backup, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                    except FileExistsError:
+                        if not backup.is_file():
+                            raise EditorError("Migration backup already exists with different content; saved preferences were preserved.", 409) from None
+                        with backup.open("rb") as source:
+                            existing = source.read(MAX_DOCUMENT_BYTES + 1)
+                        if existing != original:
+                            raise EditorError("Migration backup already exists with different content; saved preferences were preserved.", 409) from None
+                    else:
+                        try:
+                            with os.fdopen(backup_fd, "wb") as output:
+                                output.write(original)
+                                output.flush()
+                                os.fsync(output.fileno())
+                        except BaseException:
+                            safe_path(anchor, backup).unlink(missing_ok=True)
+                            raise
+                    migration_backup = str(backup)
                 descriptor, name = tempfile.mkstemp(prefix="routing-", suffix=".tmp", dir=target.parent)
                 temp_path = Path(name)
                 with os.fdopen(descriptor, "wb") as output:
@@ -228,7 +242,10 @@ class PreferenceStore:
                     safe_path(anchor, temp_path).unlink(missing_ok=True)
                 if lock_owned:
                     safe_path(anchor, lock).unlink(missing_ok=True)
-        return self.configuration()
+        result = self.configuration()
+        if migration_backup is not None:
+            result["scopes"][scope]["migration_backup"] = migration_backup
+        return result
 
 
 def asset_root(explicit: Path | None = None) -> Path:
@@ -430,7 +447,7 @@ class EditorHandler(BaseHTTPRequestHandler):
             allowed = {"scope", "document", "request"} if self.path == "/api/preview" else {"scope", "document", "revision"}
             if set(value) - allowed or not {"scope", "document"}.issubset(value):
                 raise EditorError("Unsupported or missing request fields")
-            if value["scope"] not in ("global", "project"):
+            if value["scope"] != "global":
                 raise EditorError("Invalid configuration scope")
             if self.path == "/api/preview":
                 result = self.server.store.preview(value["scope"], value["document"], value.get("request"))
@@ -444,7 +461,6 @@ class EditorHandler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--project", type=Path, help="Existing project whose routing overrides may be edited")
     parser.add_argument("--global-config-dir", type=Path, help="Explicit alternative to ~/.clanker, useful for isolated testing")
     parser.add_argument("--assets", type=Path, help="Explicit compatible built editor directory")
     parser.add_argument("--port", type=int, default=0)
@@ -455,12 +471,10 @@ def main():
     try:
         if not 0 <= args.port <= 65535:
             raise EditorError("Port must be between 0 and 65535")
-        store = PreferenceStore(args.project, args.global_config_dir)
+        store = PreferenceStore(global_config_dir=args.global_config_dir)
         with EditorServer(store, asset_root(args.assets), args.port) as server:
             print("Open the local editor: " + server.origin + "/#token=" + server.token, flush=True)
             print("Global preferences: " + str(store.target("global")[1]), flush=True)
-            if args.project:
-                print("Project preferences: " + str(store.target("project")[1]), flush=True)
             print("Press Ctrl+C to stop. No agents or model inference are launched by this editor.", flush=True)
             server.serve_forever()
     except KeyboardInterrupt:

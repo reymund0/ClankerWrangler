@@ -24,12 +24,13 @@ class InstallerTests(unittest.TestCase):
             shutil.copytree(REPO / "routing-editor/scripts", source_repo / "routing-editor/scripts", ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
             project_preference = source_repo / ".clanker/orchestration-routing.json"
             project_preference.parent.mkdir()
-            project_preference.write_bytes(b'{"schema_version":1}\n')
+            project_bytes = b'{"schema_version":1,"adaptive_profiles":{"codex:custom":{"tiers":{"straightforward":"low","involved":"high","demanding":"xhigh"},"default_ceiling":"xhigh"}}}\n'
+            project_preference.write_bytes(project_bytes)
             if built:
                 build = source_repo / "routing-editor/dist"
                 (build / "assets").mkdir(parents=True)
                 (build / "index.html").write_text("<!doctype html><title>Fixture editor</title>")
-                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"2"}')
+                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"4"}')
                 (build / "assets/app.js").write_text("// fixture build")
             claude, codex, windsurf = [root / name for name in ("claude", "codex", "windsurf")]
             sentinel = root / "unexpected-claude-call"
@@ -43,7 +44,8 @@ class InstallerTests(unittest.TestCase):
             isolated_home = root / "isolated-home"
             preference = isolated_home / ".clanker" / "orchestration-routing.json"
             preference.parent.mkdir(parents=True)
-            preference.write_bytes(b'{"schema_version": 1, "sentinel": "preserve"}\n')
+            legacy_bytes = b'{"schema_version":1,"adaptive_profiles":{"codex:custom":{"tiers":{"mechanical":"low","routine":"medium","complex":"high","exceptional":"xhigh"},"default_ceiling":"xhigh"}}}\n'
+            preference.write_bytes(legacy_bytes)
             env.update(CLAUDE_ROOT=str(claude), CODEX_ROOT=str(codex), WINDSURF_MEMORIES_ROOT=str(windsurf),
                        HOME=str(isolated_home), USERPROFILE=str(isolated_home))
             if shell == "powershell":
@@ -56,13 +58,17 @@ class InstallerTests(unittest.TestCase):
                 binary = str(Path("C:/Program Files/Git/bin/bash.exe")) if os.name == "nt" else shutil.which("bash")
                 if not binary or not Path(binary).is_file():
                     self.skipTest("Bash unavailable")
+                # Git Bash consumes environment paths as POSIX text, not Python's
+                # backslash-separated Windows strings.
+                env.update(CLAUDE_ROOT=claude.as_posix(), CODEX_ROOT=codex.as_posix(),
+                           WINDSURF_MEMORIES_ROOT=windsurf.as_posix(), HOME=isolated_home.as_posix())
                 command = [binary, str(source_repo / "wrangle.sh")]
 
             def run():
                 result = subprocess.run(command, cwd=source_repo, env=env, capture_output=True, text=True, timeout=90)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertFalse(sentinel.exists(), "Installer invoked Claude")
-                self.assertEqual(project_preference.read_bytes(), b'{"schema_version":1}\n')
+                self.assertEqual(project_preference.read_bytes(), project_bytes)
                 self.assertEqual((windsurf / "global_rules.md").read_bytes(), (source_repo / "global_rules.md").read_bytes())
                 for base, rules in ((claude, "CLAUDE.md"), (codex, "AGENTS.md")):
                     bundle = base / "skills" / NAME
@@ -76,6 +82,7 @@ class InstallerTests(unittest.TestCase):
                                                  cwd=root, capture_output=True, text=True, timeout=10)
                     self.assertEqual(help_result.returncode, 0, help_result.stderr)
                     self.assertIn("--global-config-dir", help_result.stdout)
+                    self.assertNotIn("--project", help_result.stdout)
                     for source in (source_repo / "subagents" / "routing").rglob("*"):
                         if source.is_file():
                             destination = bundle / "routing" / source.relative_to(source_repo / "subagents" / "routing")
@@ -88,7 +95,7 @@ class InstallerTests(unittest.TestCase):
                     self.assertEqual(list(bundle.rglob("SKILL.md")), [bundle / "SKILL.md"])
                     self.assertEqual((base / rules).read_bytes(), (source_repo / "global_rules.md").read_bytes())
                 self.assertIn("allow_implicit_invocation: true", (codex / "skills" / NAME / "agents/openai.yaml").read_text(encoding="utf-8-sig"))
-                self.assertEqual(preference.read_bytes(), b'{"schema_version": 1, "sentinel": "preserve"}\n')
+                self.assertEqual(preference.read_bytes(), legacy_bytes)
 
             run()  # Fresh install.
             for base in (claude, codex):

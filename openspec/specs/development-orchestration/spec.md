@@ -7,7 +7,7 @@ Coordinate Codex specialists around the user's software-development scope, with 
 ## Requirements
 
 ### Requirement: Phase-aware model routing
-The skill SHALL preserve the user-selected session model and effort for orchestration. Astra or Fable MAY be suggested where available, but another parent choice MUST NOT require approval or block work. The skill SHALL default to GPT-5.6 Sol for planning and review workers and GPT-5.6 Terra for implementation workers unless the user chooses otherwise. Saved global/project routing preferences and explicit session overrides SHALL resolve worker models and effort through the shared routing policy. With no saved overrides, the stated model defaults SHALL remain. It MUST select and disclose reasoning effort for each worker assignment and MUST NOT silently substitute unavailable worker models or claim to switch the parent model or effort. Unknown effective settings MUST remain reported as unknown.
+The skill SHALL preserve the user-selected session model and effort for orchestration. Astra or Fable MAY be suggested where available, but another parent choice MUST NOT require approval or block work. The skill SHALL default to GPT-5.6 Sol for planning and review workers and GPT-5.6 Terra for implementation workers unless the user chooses otherwise. Saved global routing preferences and explicit session overrides SHALL resolve worker models and effort through the shared routing policy. With no saved overrides, the stated model defaults SHALL remain. It MUST select and disclose reasoning effort for each worker assignment and MUST NOT silently substitute unavailable worker models or claim to switch the parent model or effort. Unknown effective settings MUST remain reported as unknown.
 
 #### Scenario: User-selected orchestrator
 - **WHEN** the user invokes the skill with any available session model and effort
@@ -22,7 +22,7 @@ The skill SHALL preserve the user-selected session model and effort for orchestr
 - **THEN** the orchestrator reports the limitation and does not claim that an agent ran or silently use a different model
 
 #### Scenario: Configured worker routing
-- **WHEN** a project selects Luna Adaptive for implementation
+- **WHEN** the user selects Luna Adaptive in global preferences for implementation
 - **THEN** the parent resolves and validates that route, supplies its explicit model and effort to native delegation, and retains its own session settings
 
 ### Requirement: Specialist coverage without mandatory full-team activation
@@ -139,8 +139,29 @@ The shared global rules SHALL distinguish primary coordination from delegated wo
 - **THEN** the worker follows its assigned role without starting another orchestration layer, and approval is requested again only for a material scope expansion or unapproved consequential change without expanding tool permissions
 
 ### Requirement: Routing prerequisite disclosure
-The coordinator SHALL disclose the Python routing prerequisite and any active project override source at run start. It SHALL NOT bypass a missing resolver by silently reverting to Markdown defaults.
+The coordinator SHALL disclose the Python routing prerequisite and the global preference source at run start. It SHALL NOT bypass a missing resolver by silently reverting to Markdown defaults.
 
 #### Scenario: Native routing without Python
 - **WHEN** Python is unavailable for a native-only run with no saved preferences
 - **THEN** routing is blocked with an actionable prerequisite message, and no worker dispatch is claimed
+
+### Requirement: Coherent review scopes
+The parent SHALL assign static code review, browser acceptance, and executable verification to their appropriate owners. Before external dispatch it SHALL inspect local packet readiness and confirm authorization for that exact source/destination scope. Large packets SHALL be split into coherent scopes where needed; aggregate acceptance and unresolved checks SHALL remain parent-owned.
+
+#### Scenario: Bounded recheck
+- **WHEN** a review covers a small fix within a larger change
+- **THEN** its static requirements and evidence match that scope, and unrelated acceptance remains explicitly tracked by the parent
+
+### Requirement: Capacity-aware dispatch
+The parent SHALL inspect available worker state before spawning and prefer suitable idle-worker reuse or sequencing when capacity is exhausted. Reuse SHALL preserve the resolved model/effort, role guidance, and ownership contract. Failed dispatch SHALL NOT count as a running assignment.
+
+#### Scenario: No suitable worker slot
+- **WHEN** the runtime rejects dispatch for capacity and no idle worker matches the resolved settings
+- **THEN** the parent sequences the work or handles authorized work directly instead of repeatedly spawning or silently changing settings
+
+### Requirement: Explicit worker readiness
+Worker handoffs SHALL distinguish draft, locally checked, and ready for integration. Executable changes SHALL receive the smallest relevant authorized compile or contract check before a readiness claim. Every handoff SHALL state changed files, exact checks/results, and remaining blockers; parent integration verification remains required.
+
+#### Scenario: Worker cannot run verification
+- **WHEN** execution is unavailable or outside a worker's assignment
+- **THEN** the worker returns a draft with the unrun check and reason, rather than claiming readiness

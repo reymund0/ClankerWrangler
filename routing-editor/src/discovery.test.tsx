@@ -2,11 +2,11 @@ import { act, StrictMode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
-import type { ConfigResponse, ModelCatalogResponse } from './types'
+import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
 
 const fixture: ConfigResponse = {
-  schema_version: 1, policy_version: '1', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } }, project: null },
-  bundle: { schema_version: 1, policy_version: '1', roles: [], defaults: { schema_version: 1 },
+  schema_version: 1, policy_version: '4', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
+  bundle: { schema_version: 1, policy_version: '4', roles: [], defaults: { schema_version: 1 },
     interactions: [{ id: 'planning', label: 'Planning', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'implementation', label: 'Implementation', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5' }],
     models: [{ id: 'gpt-5.6-sol', label: 'Sol', provider: 'codex', efforts: ['low', 'high'] }, { id: 'claude-opus-5', label: 'Opus', provider: 'claude', efforts: ['low', 'high'] }],
     effort_orders: { codex: ['low', 'medium', 'high', 'xhigh'], claude: ['low', 'medium', 'high', 'max'] } },
@@ -30,13 +30,16 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 let root: Root | undefined
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.unstubAllGlobals(); vi.useRealTimers() })
-async function render(options: { config?: ConfigResponse; initial?: Promise<Response> | Response | (() => Promise<Response> | Response); strict?: boolean; settleInherited?: boolean; previewError?: string; refresh?: () => Promise<Response> | Response } = {}) {
+async function render(options: { config?: ConfigResponse; initial?: Promise<Response> | Response | (() => Promise<Response> | Response); strict?: boolean; settleInherited?: boolean; previewError?: string; refresh?: () => Promise<Response> | Response; saveResponse?: (body: { scope?: string; revision?: string; document?: Preferences }) => Response | Promise<Response> } = {}) {
   const config = options.config ?? fixture
   const fetchMock = vi.fn((path: string, init?: RequestInit) => {
     if (path === '/api/config') return Promise.resolve(response(config))
     if (path === '/api/models') return typeof options.initial === 'function' ? options.initial() : options.initial ?? Promise.resolve(response(catalog))
     if (path === '/api/models/refresh') return options.refresh?.() ?? Promise.resolve(response(catalog))
-    if (path === '/api/save') return Promise.resolve(response({ ...config, scopes: { ...config.scopes, global: { ...config.scopes.global, document: JSON.parse(String(init?.body)).document, revision: 'two' } } }))
+    if (path === '/api/save') {
+      const body = JSON.parse(String(init?.body)) as { scope?: string; revision?: string; document?: Preferences }
+      return Promise.resolve(options.saveResponse?.(body) ?? response({ ...config, scopes: { ...config.scopes, global: { ...config.scopes.global, document: body.document, revision: 'two' } } }))
+    }
     if (options.previewError) return Promise.resolve(response({ error: options.previewError }, 400))
     return Promise.resolve(response({ effective: config.effective, decision: null }))
   })
@@ -86,7 +89,7 @@ describe('local discovery controls', () => {
   })
   it('groups profile rows into sorted, accessible version family accordions', async () => {
     const configured = structuredClone(fixture)
-    const profile = { tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'high' }
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
     configured.effective!.profiles = {
       'codex:gpt-5.6-sol': profile,
       'codex:gpt-6-mini': profile,
@@ -127,6 +130,79 @@ describe('local discovery controls', () => {
     expect(button55.getAttribute('aria-expanded')).toBe('true')
     expect(table.textContent).toContain('codex:gpt-5.5-sol')
   })
+  it('shows exactly three described adaptive tiers and links descriptions to editable controls', async () => {
+    const configured = structuredClone(fixture)
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } }
+    configured.effective!.profiles = { 'codex:cli-model': profile }
+    await render({ config: configured })
+    await openTab('Adaptive profiles')
+    const table = activePanel().querySelector<HTMLElement>('[role="table"][aria-label="Adaptive model profiles"]')!
+    expect(activePanel().querySelector('[aria-label="Adaptive tier definitions"]')?.textContent).toContain('Established approach, limited remaining decisions, and direct acceptance checks.')
+    expect(activePanel().querySelector('[aria-label="Adaptive tier definitions"]')?.textContent).toContain('difficult correctness arguments.')
+    const headers = [...table.querySelectorAll<HTMLElement>('.profile-heading [role="columnheader"]')]
+    expect(headers.map((item) => item.querySelector('span:not(.sr-only)')?.textContent ?? item.textContent?.trim())).toEqual(['Model', 'Straightforward', 'Involved', 'Demanding', 'Default ceiling', 'Actions'])
+    expect(headers.slice(1, 4).map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Straightforward: Established approach, limited remaining decisions, and direct acceptance checks.',
+      'Involved: Meaningful decisions or bounded uncertainty involving related behavior.',
+      'Demanding: Substantial unresolved reasoning across interacting constraints or difficult correctness arguments.',
+    ])
+    const row = [...table.querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
+    const fields = [...row.querySelectorAll<HTMLSelectElement>('select')]
+    expect(fields).toHaveLength(4)
+    for (const [index, tier] of ['straightforward', 'involved', 'demanding'].entries()) {
+      const descriptionId = `tier-definition-${tier}`
+      expect(fields[index].getAttribute('aria-describedby')).toContain(descriptionId)
+      expect(document.getElementById(descriptionId)?.textContent).toBe(headers[index + 1].getAttribute('aria-label')?.split(': ').slice(1).join(': '))
+    }
+    expect(table.querySelector('.profile-family-heading [aria-colspan="6"]')).toBeTruthy()
+    expect(activePanel().textContent).toContain('An involved task on cli-model maps to high')
+  })
+  it('defaults route preview to Straightforward while retaining exactly three task tier choices', async () => {
+    await render()
+    await openTab('Preview a route')
+    const group = activePanel().querySelector<HTMLElement>('[role="group"][aria-label="Task tier"]')!
+    const choices = [...group.querySelectorAll<HTMLButtonElement>('button')]
+    expect(choices.map((choice) => choice.textContent?.trim())).toEqual(['Straightforward', 'Involved', 'Demanding'])
+    expect(choices[0].getAttribute('aria-pressed')).toBe('true')
+  })
+  it('keeps a pending conversion read-only on open and preview until explicit save', async () => {
+    const configured = structuredClone(fixture)
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    configured.scopes.global = { ...configured.scopes.global!, revision: 'raw-legacy-source-hash', migration_pending: true, document: { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } } }
+    configured.effective!.profiles = { 'codex:cli-model': profile }
+    const fetchMock = await render({ config: configured })
+    const migrationNote = document.querySelector('.header-migration-row .migration-save-note')!
+    expect(migrationNote.textContent).toContain('Routine → Straightforward')
+    expect(migrationNote.textContent).toContain('Mechanical is retired')
+    expect(button('Save global preferences').disabled).toBe(false)
+    await openTab('Adaptive profiles')
+    expect(activePanel().textContent).toContain('Legacy profile conversion is pending.')
+    expect(activePanel().textContent).toContain('Mechanical is retired')
+    expect(button('Save global preferences').disabled).toBe(false)
+    expect(fetchMock.mock.calls.some(([path]) => path === '/api/save')).toBe(false)
+    await openTab('Preview a route')
+    expect(activePanel().querySelector('[role="group"][aria-label="Task tier"] button[aria-pressed="true"]')?.textContent?.trim()).toBe('Straightforward')
+    expect(fetchMock.mock.calls.some(([path]) => path === '/api/save')).toBe(false)
+    await act(async () => { button('Export draft & reload').click(); await Promise.resolve() })
+    expect(fetchMock.mock.calls.some(([path]) => path === '/api/save')).toBe(false)
+  })
+  it.each([409, 500])('retains edited draft and pending conversion after save failure (%i)', async (status) => {
+    const configured = structuredClone(fixture)
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    configured.scopes.global = { ...configured.scopes.global!, migration_pending: true, document: { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } } }
+    configured.effective!.profiles = { 'codex:cli-model': profile }
+    await render({ config: configured, saveResponse: () => response({ error: status === 409 ? 'Preferences changed since loading.' : 'Save rejected for this test.' }, status) })
+    await openTab('Adaptive profiles')
+    const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
+    const involved = row.querySelectorAll<HTMLSelectElement>('select')[1]
+    await select(involved, 'low')
+    await act(async () => { button('Save global preferences').click(); await Promise.resolve() })
+    expect(involved.value).toBe('low')
+    expect(activePanel().textContent).toContain('Legacy profile conversion is pending.')
+    expect(button('Save global preferences').disabled).toBe(false)
+    expect(document.body.textContent).toContain(status === 409 ? 'Save conflict: your draft is still available' : 'Save rejected for this test.')
+  })
   it('uses the provider switch and a single provider-specific local model selector', async () => {
     await render()
     await openTab('Adaptive profiles')
@@ -147,7 +223,7 @@ describe('local discovery controls', () => {
   })
   it('keeps accordion state local to the UI and excludes it from saved preferences', async () => {
     const configured = structuredClone(fixture)
-    const inherited = { tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'high' }
+    const inherited = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
     configured.effective!.profiles = { 'codex:gpt-5.6-sol': inherited }
     const discovered = structuredClone(catalog)
     discovered.providers.codex.models.push({ id: 'gpt-5.6-sol', label: '5.6 Sol', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh'], default_effort: 'high' })
@@ -163,11 +239,11 @@ describe('local discovery controls', () => {
     let row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:gpt-5.6-sol'))!
     await act(async () => { actionButton('Customize', row).click() })
     row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:gpt-5.6-sol'))!
-    const routine = row.querySelectorAll<HTMLSelectElement>('select')[1]
-    await select(routine, 'high')
+    const involved = row.querySelectorAll<HTMLSelectElement>('select')[1]
+    await select(involved, 'high')
     await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
     const save = fetchMock.mock.calls.find(([path]) => path === '/api/save')!
-    expect(JSON.parse(save[1]?.body as string).document).toEqual({ schema_version: 1, adaptive_profiles: { 'codex:gpt-5.6-sol': { ...inherited, tiers: { ...inherited.tiers, routine: 'high' } } } })
+    expect(JSON.parse(save[1]?.body as string).document).toEqual({ schema_version: 1, adaptive_profiles: { 'codex:gpt-5.6-sol': { ...inherited, tiers: { ...inherited.tiers, involved: 'high' } } } })
   })
   it('keeps the no local models message and disabled empty provider selects', async () => {
     const empty: ModelCatalogResponse = { providers: {
@@ -201,9 +277,9 @@ describe('local discovery controls', () => {
     const configured = structuredClone(fixture)
     configured.bundle.effort_orders.codex = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
     configured.effective!.profiles = {
-      'codex:meter-short': { tiers: { mechanical: 'low', routine: 'low', complex: 'high', exceptional: 'high' }, default_ceiling: 'high' },
-      'codex:meter-many': { tiers: { mechanical: 'minimal', routine: 'low', complex: 'high', exceptional: 'ultra' }, default_ceiling: 'ultra' },
-      'codex:saved-away': { tiers: { mechanical: 'low', routine: 'medium', complex: 'xhigh', exceptional: 'high' }, default_ceiling: 'high' },
+      'codex:meter-short': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' }, default_ceiling: 'high' },
+      'codex:meter-many': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' }, default_ceiling: 'ultra' },
+      'codex:saved-away': { tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' }, default_ceiling: 'high' },
     }
     const discovered = structuredClone(catalog)
     discovered.providers.codex.models.push(
@@ -212,29 +288,29 @@ describe('local discovery controls', () => {
       { id: 'saved-away', label: 'Saved effort', provider: 'codex', efforts: ['high', 'low', 'future'], default_effort: 'high' },
     )
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:saved-away': {
-      tiers: { mechanical: 'low', routine: 'medium', complex: 'xhigh', exceptional: 'high' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' }, default_ceiling: 'high',
     } } }
     await render({ config: configured, initial: response(discovered) })
     await openTab('Adaptive profiles')
     const row = (key: string) => [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes(key))!
-    // Each row exposes five fields in tier order followed by the default ceiling.
+    // The model is followed by three tier cells, the ceiling, and actions.
     const shortCells = row('codex:meter-short').querySelectorAll<HTMLElement>('[role="cell"]')
     const short = shortCells[2].querySelectorAll<HTMLElement>('.effort-meter i')
     expect([...short].map((bar) => bar.dataset.effort)).toEqual(['low', 'high'])
     expect([...short].map((bar) => bar.className)).toEqual(['filled effort-low', 'filled effort-high'])
     const manyCells = row('codex:meter-many').querySelectorAll<HTMLElement>('[role="cell"]')
-    const many = manyCells[2].querySelectorAll<HTMLElement>('.effort-meter i')
+    const many = manyCells[1].querySelectorAll<HTMLElement>('.effort-meter i')
     expect([...many].map((bar) => bar.dataset.effort)).toEqual(['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'])
     expect([...many].map((bar) => bar.classList.contains('filled'))).toEqual([true, true, true, true, false, false, false])
     expect([...many].slice(0, 4).map((bar) => [...bar.classList].find((name) => name.startsWith('effort-')))).toEqual(['effort-minimal', 'effort-low', 'effort-medium', 'effort-high'])
     const savedCells = row('codex:saved-away').querySelectorAll<HTMLElement>('[role="cell"]')
-    const savedRoutine = savedCells[1].querySelectorAll<HTMLElement>('.effort-meter i')
-    expect([...savedRoutine].map((bar) => bar.dataset.effort)).toEqual(['low', 'medium', 'high'])
-    expect([...savedRoutine].map((bar) => bar.classList.contains('filled'))).toEqual([true, true, false])
-    const savedComplex = savedCells[2].querySelectorAll<HTMLElement>('.effort-meter i')
-    expect([...savedComplex].map((bar) => bar.dataset.effort)).toEqual(['low', 'high', 'xhigh'])
-    expect([...savedComplex].map((bar) => bar.classList.contains('filled'))).toEqual([true, true, true])
-    expect([...savedComplex].map((bar) => bar.dataset.effort)).not.toContain('future')
+    const savedStraightforward = savedCells[0].querySelectorAll<HTMLElement>('.effort-meter i')
+    expect([...savedStraightforward].map((bar) => bar.dataset.effort)).toEqual(['low', 'medium', 'high'])
+    expect([...savedStraightforward].map((bar) => bar.classList.contains('filled'))).toEqual([true, true, false])
+    const savedInvolved = savedCells[1].querySelectorAll<HTMLElement>('.effort-meter i')
+    expect([...savedInvolved].map((bar) => bar.dataset.effort)).toEqual(['low', 'high', 'xhigh'])
+    expect([...savedInvolved].map((bar) => bar.classList.contains('filled'))).toEqual([true, true, true])
+    expect([...savedInvolved].map((bar) => bar.dataset.effort)).not.toContain('future')
     expect(row('codex:meter-short').querySelector('.effort-meter')?.getAttribute('aria-hidden')).toBe('true')
     expect(row('codex:saved-away').querySelector('select option[value="xhigh"]')?.textContent).toContain('saved; unavailable for new selection')
   })
@@ -246,7 +322,7 @@ describe('local discovery controls', () => {
     await act(async () => { actionButton('Customize profile', activePanel()).click() })
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
     const controls = [...row.querySelectorAll('select')] as HTMLSelectElement[]
-    expect(controls).toHaveLength(5)
+    expect(controls).toHaveLength(4)
     for (const control of controls) {
       expect([...control.options].filter((option) => !option.disabled && ['low', 'high'].includes(option.value)).map((option) => option.value)).toEqual(['low', 'high'])
       expect([...control.options].find((option) => option.value === 'future')?.disabled).toBe(true)
@@ -369,13 +445,13 @@ describe('local discovery controls', () => {
   it('shows unknown CLI profile effort metadata beside every editable profile value', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:unknown-efforts': {
-      tiers: { mechanical: 'low', routine: 'high', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'high',
+      tiers: { straightforward: 'high', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high',
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:unknown-efforts'))!
     const fields = [...row.querySelectorAll<HTMLSelectElement>('select')]
-    expect(fields).toHaveLength(5)
+    expect(fields).toHaveLength(4)
     for (const field of fields) {
       expect(field.getAttribute('aria-describedby')).toContain('-help')
       const helpId = field.getAttribute('aria-describedby')!.split(' ').find((id) => id.endsWith('-help'))!
@@ -386,7 +462,7 @@ describe('local discovery controls', () => {
 
   it('compares customized profile values with inherited values and restores them on reset', async () => {
     const configured = structuredClone(fixture)
-    const inherited = { tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'high' }
+    const inherited = { tiers: { straightforward: 'medium', involved: 'medium', demanding: 'xhigh' }, default_ceiling: 'high' }
     configured.bundle.defaults.adaptive_profiles = { 'codex:cli-model': inherited }
     configured.effective!.profiles = { 'codex:cli-model': inherited }
     await render({ config: configured })
@@ -396,8 +472,8 @@ describe('local discovery controls', () => {
     expect(profileRow().classList.contains('is-customized')).toBe(false)
     await act(async () => { actionButton('Customize', profileRow()).click() })
     expect(profileRow().classList.contains('is-customized')).toBe(true)
-    const routine = profileRow().querySelectorAll<HTMLSelectElement>('select')[1]
-    await select(routine, 'high')
+    const involved = profileRow().querySelectorAll<HTMLSelectElement>('select')[1]
+    await select(involved, 'high')
     expect(profileRow().textContent).toContain('Different from inherited medium')
     await act(async () => { actionButton('Reset profile', profileRow()).click() })
     expect(profileRow().classList.contains('is-customized')).toBe(false)
@@ -408,7 +484,7 @@ describe('local discovery controls', () => {
   it('disables profile creation for an already owned model while keeping its row editable', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:cli-model': {
-      tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'high' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'high', demanding: 'high' }, default_ceiling: 'high',
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')
@@ -417,16 +493,16 @@ describe('local discovery controls', () => {
     await select(addModel, 'cli-model')
     expect(actionButton('Customize profile', activePanel()).disabled).toBe(true)
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
-    const routine = row.querySelectorAll<HTMLSelectElement>('select')[1]
-    await select(routine, 'high')
+    const involved = row.querySelectorAll<HTMLSelectElement>('select')[1]
+    await select(involved, 'high')
     expect(row.classList.contains('is-customized')).toBe(true)
-    expect(routine.value).toBe('high')
+    expect(involved.value).toBe('high')
   })
 
   it('keeps a saved profile visible and resettable when its model is no longer reported', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:retired-model': {
-      tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high',
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')

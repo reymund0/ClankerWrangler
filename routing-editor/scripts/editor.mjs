@@ -14,7 +14,7 @@ const editorRoot = join(repositoryRoot, 'routing-editor')
 const helperPath = join(editorRoot, 'scripts', 'routing_editor.py')
 const assetRoot = join(editorRoot, 'dist')
 const startupTimeoutMs = 10_000
-const compatibility = { schema_version: 1, policy_version: '2' }
+const compatibility = { schema_version: 1, policy_version: '4' }
 
 const usage = `Usage: node routing-editor/scripts/editor.mjs <start|dev|build> [options]
 
@@ -24,7 +24,6 @@ Commands:
   build                    Build the editor from source.
 
 Options:
-  --project PATH           Existing project whose routing overrides may be edited.
   --global-config-dir PATH Alternative global preferences directory.
   --help                   Show this help message.
 `
@@ -38,18 +37,18 @@ export function parseArguments(argv) {
     throw new Error(`Unknown command: ${mode}`)
   }
 
-  const options = { mode, project: undefined, globalConfigDir: undefined }
+  const options = { mode, globalConfigDir: undefined }
   while (args.length > 0) {
     const option = args.shift()
     if (option === '--help') return { help: true }
-    if (option !== '--project' && option !== '--global-config-dir') {
+    if (option !== '--global-config-dir') {
       throw new Error(`Unknown option: ${option}`)
     }
     const value = args.shift()
     if (!value || value.startsWith('--')) {
       throw new Error(`${option} requires a path`)
     }
-    const key = option === '--project' ? 'project' : 'globalConfigDir'
+    const key = 'globalConfigDir'
     if (options[key] !== undefined) throw new Error(`${option} may be specified only once`)
     options[key] = isAbsolute(value) ? resolve(value) : resolve(process.cwd(), value)
   }
@@ -325,7 +324,6 @@ async function startPython(options, lifecycle, hideBootstrap) {
   const python = await discoverPython()
   if (lifecycle.stopping) throw new Error('The local editor service stopped during startup.')
   const args = [...python.prefix, '-u', helperPath, '--assets', assetRoot]
-  if (options.project) args.push('--project', options.project)
   if (options.globalConfigDir) args.push('--global-config-dir', options.globalConfigDir)
 
   const child = spawn(python.command, args, {

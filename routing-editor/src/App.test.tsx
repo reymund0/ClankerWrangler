@@ -6,10 +6,10 @@ import { specialistChoices } from './specialists'
 import type { ConfigResponse } from './types'
 
 const config: ConfigResponse = {
-  schema_version: 1, policy_version: '1',
-  scopes: { global: { path: '/home/test/.clanker/orchestration-routing.json', revision: 'abc', document: { schema_version: 1 } }, project: { path: '/project/.clanker/orchestration-routing.json', revision: 'project', document: { schema_version: 1 } } },
+  schema_version: 1, policy_version: '4',
+  scopes: { global: { path: '/home/test/.clanker/orchestration-routing.json', revision: 'abc', document: { schema_version: 1 } } },
   bundle: {
-    schema_version: 1, policy_version: '1',
+    schema_version: 1, policy_version: '4',
     interactions: [
       { id: 'planning', label: 'Planning and design', provider: 'codex', default_model: 'gpt-5.6-sol' },
       { id: 'implementation', label: 'Implementation and testing', provider: 'codex', default_model: 'gpt-5.6-terra' },
@@ -158,14 +158,14 @@ describe('routing editor', () => {
     expect(inspector().textContent).not.toContain('Visual review')
   })
 
-  it('preserves inherited off-scenario overrides only in the applicable editing scope', () => {
+  it('preserves configured off-scenario overrides in global preferences', () => {
     const loaded = structuredClone(config)
     loaded.bundle.roles.push({ id: 'clanker-backend-developer', label: 'Backend developer' })
     loaded.scopes.global.document = { schema_version: 1, interactions: { 'visual-review': { specialists: { 'clanker-backend-developer': { model: 'gpt-5.6-terra' } } } } }
     const empty = { schema_version: 1 as const }
-    expect(specialistChoices(loaded, empty, 'project', 'visual-review').map((role) => role.label)).toContain('Backend developer (existing override)')
-    expect(specialistChoices(loaded, empty, 'global', 'visual-review').map((role) => role.id)).not.toContain('clanker-backend-developer')
-    expect(specialistChoices(loaded, empty, 'project', 'claude-review')).toEqual([])
+    expect(specialistChoices(loaded, empty, 'visual-review').map((role) => role.id)).not.toContain('clanker-backend-developer')
+    expect(specialistChoices(loaded, loaded.scopes.global.document!, 'visual-review').map((role) => role.label)).toContain('Backend developer (existing override)')
+    expect(specialistChoices(loaded, empty, 'claude-review')).toEqual([])
   })
 
   it('shows inherited values and resets a specialist route without flattening it', async () => {
@@ -196,14 +196,14 @@ describe('routing editor', () => {
   it('renders an API-returned Luna ceiling preview as unverified', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(config))
-      .mockResolvedValueOnce(response({ effective: config.effective, decision: { model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive' }, effort: 'xhigh', proposed_effort: 'max', ceiling: 'xhigh', ceiling_source: 'global', interaction: 'implementation', tier: 'exceptional', reason: 'Hard integration', limitations: ['Adaptive exceptional effort max is capped at xhigh'], provenance: { model: 'global', reasoning: 'global', profile: 'global' }, capability_status: 'unverified', dispatch_allowed: false } }))
+      .mockResolvedValueOnce(response({ effective: config.effective, decision: { model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive' }, effort: 'xhigh', proposed_effort: 'max', ceiling: 'xhigh', ceiling_source: 'global', interaction: 'implementation', tier: 'demanding', reason: 'Hard integration', limitations: ['Adaptive demanding effort max is capped at xhigh'], provenance: { model: 'global', reasoning: 'global', profile: 'global' }, capability_status: 'unverified', dispatch_allowed: false } }))
     await render(fetchMock)
     await openTab('Preview a route')
     const form = previewForm()
     const interaction = form.querySelector('label select') as HTMLSelectElement
     await setInput(interaction, 'implementation')
     const tier = form.querySelector('[aria-label="Task tier"]')!
-    await act(async () => { actionButton('Exceptional', tier).click() })
+    await act(async () => { actionButton('Demanding', tier).click() })
     const previewButton = actionButton('Preview route', form)
     await act(async () => { previewButton.click(); await Promise.resolve() })
     expect(document.body.textContent).toContain('gpt-5.6-luna')
@@ -335,7 +335,7 @@ describe('routing editor', () => {
   })
 
   it('associates advanced profile errors with the invalid input and clears them when corrected', async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValueOnce(response({ error: 'global.adaptive_profiles.codex:custom-model-v9.tiers.routine: is not supported by codex' }, 400))
+    const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValueOnce(response({ error: 'global.adaptive_profiles.codex:custom-model-v9.tiers.involved: is not supported by codex' }, 400))
     await render(fetchMock)
     await openTab('Adaptive profiles')
     await setInput(profileModelSelect('custom-model-v9'), 'custom-model-v9')
@@ -348,10 +348,10 @@ describe('routing editor', () => {
     await act(async () => { save.click(); await Promise.resolve() })
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:custom-model-v9'))!
     expect(otherFamily.getAttribute('aria-expanded')).toBe('true')
-    const routine = row.querySelectorAll<HTMLSelectElement>('select')[1]
+    const involved = row.querySelectorAll<HTMLSelectElement>('select')[1]
     expect(document.body.textContent).toContain('is not supported by codex')
-    expect(routine.getAttribute('aria-describedby')).toContain('adaptive_profiles.codex:custom-model-v9.tiers.routine-error')
-    await setInput(routine, 'high')
+    expect(involved.getAttribute('aria-describedby')).toContain('adaptive_profiles.codex:custom-model-v9.tiers.involved-error')
+    await setInput(involved, 'high')
     expect(document.body.textContent).not.toContain('is not supported by codex')
   })
 
@@ -384,7 +384,7 @@ describe('routing editor', () => {
   })
 
   it('clears only the generic preview error after a successful explicit preview', async () => {
-    const decision = { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'routine', reason: 'Resolved', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false }
+    const decision = { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'straightforward', reason: 'Resolved', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false }
     const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValueOnce(response({ error: 'Preview temporarily failed' }, 400)).mockResolvedValueOnce(response({ effective: config.effective, decision }))
     await render(fetchMock)
     await openTab('Preview a route')
@@ -427,7 +427,7 @@ describe('routing editor', () => {
     const preview = actionButton('Preview route', previewForm())
     await act(async () => { preview.click() })
     await setInput(previewForm().querySelector('input[required]') as HTMLInputElement, 'Changed after preview started')
-    pending.resolve(response({ effective: config.effective, decision: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'routine', reason: 'Stale result', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false } }))
+    pending.resolve(response({ effective: config.effective, decision: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'straightforward', reason: 'Stale result', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false } }))
     await act(async () => { await Promise.resolve() })
     expect(document.body.textContent).not.toContain('Predicted route')
   })
@@ -442,7 +442,7 @@ describe('routing editor', () => {
     await setInput(model, 'gpt-5.6-luna')
     const save = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Save global preferences')!
     await act(async () => { save.click() })
-    expect([...document.querySelector('[aria-label="Scope"]')!.querySelectorAll('button')].every((button) => (button as HTMLButtonElement).disabled)).toBe(true)
+    expect((save as HTMLButtonElement).disabled).toBe(true)
     await setInput(model, 'gpt-5.6-sol')
     pending.resolve(response(saved))
     await act(async () => { await Promise.resolve() })
@@ -503,36 +503,18 @@ describe('routing editor', () => {
     expect(adaptiveMaximum?.getAttribute('aria-describedby')).toContain('agents.clanker-ui-developer-reasoning-error')
   })
 
-  it('clears project effective agents before a deferred global preview resolves', async () => {
+  it('keeps the global inherited agent route visible while its preview refreshes', async () => {
     vi.useFakeTimers()
     const loaded = structuredClone(config)
     loaded.bundle.roles = [{ id: 'clanker-ui-developer', label: 'UI developer' }]
-    loaded.scopes.project!.document = { schema_version: 1, agents: { 'clanker-ui-developer': { model: 'gpt-5.6-luna' } } }
     loaded.effective!.agents = { 'clanker-ui-developer': { route: {}, provenance: {} } }
-    const projectEffective = structuredClone(loaded.effective)
-    projectEffective!.agents!['clanker-ui-developer'] = { route: { model: 'gpt-5.6-luna' }, provenance: { model: 'project.agents.clanker-ui-developer.model' } }
-    const pending = deferred<Response>()
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(loaded))
       .mockResolvedValueOnce(response({ effective: loaded.effective, decision: null }))
-      .mockResolvedValueOnce(response({ effective: projectEffective, decision: null }))
-      .mockReturnValueOnce(pending.promise)
     await render(fetchMock)
     await act(async () => { await vi.advanceTimersByTimeAsync(180) })
     await openTab('Worker routes')
-    const scope = document.querySelector('[aria-label="Scope"]')!
-    const projectScope = [...scope.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.startsWith('Project ·'))!
-    await act(async () => { projectScope.click() })
-    await act(async () => { await vi.advanceTimersByTimeAsync(180) })
     const model = inspector().querySelector('.model-picker select') as HTMLSelectElement
-    expect(model.value).toBe('gpt-5.6-luna')
-    await act(async () => { actionButton('Global', scope).click() })
-    expect(model.value).toBe('')
-    expect(model.selectedOptions[0].textContent).toContain('Inherited model unresolved')
-    await act(async () => { await vi.advanceTimersByTimeAsync(180) })
-    expect(model.value).toBe('')
-    pending.resolve(response({ effective: loaded.effective, decision: null }))
-    await act(async () => { await Promise.resolve() })
     expect(model.value).toBe('gpt-5.6-terra')
   })
 
@@ -631,25 +613,13 @@ describe('agent-first cards', () => {
     expect(savedDocument.interactions.implementation).toEqual({ specialists: { 'clanker-ui-developer': { model: 'gpt-5.6-sol' } } })
   })
 
-  it('keeps scope confirmation and draft state when a scope switch is canceled', async () => {
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    try {
-      await render(vi.fn().mockResolvedValue(response(config)))
-      await setInput(activityModel('Planning and design'), 'gpt-5.6-luna')
-      const scope = document.querySelector('[aria-label="Scope"]')!
-      const project = [...scope.querySelectorAll<HTMLButtonElement>('button')].find((button) => button.textContent?.startsWith('Project ·'))!
-      await act(async () => { project.click() })
-      expect(project.getAttribute('aria-pressed')).toBe('false')
-      expect(activityModel('Planning and design').value).toBe('gpt-5.6-luna')
-
-      await act(async () => { project.click() })
-      expect(project.getAttribute('aria-pressed')).toBe('true')
-      expect(actionButton('Save project preferences').disabled).toBe(true)
-      expect(document.querySelector('[role="status"]')?.textContent).toContain('All changes saved')
-      expect(confirm).toHaveBeenCalledTimes(2)
-    } finally {
-      confirm.mockRestore()
-    }
+  it('keeps one global destination and draft with no scope switcher', async () => {
+    await render(vi.fn().mockResolvedValue(response(config)))
+    await setInput(activityModel('Planning and design'), 'gpt-5.6-luna')
+    expect(document.querySelector('[aria-label="Scope"]')).toBeNull()
+    expect(document.querySelector('.header-path')?.textContent).toContain('/home/test/.clanker/orchestration-routing.json')
+    expect(actionButton('Save global preferences').disabled).toBe(false)
+    expect(document.body.textContent).not.toContain('Project activity')
   })
 
   it('routes Claude save errors to Worker routes and keeps them discoverable across tabs', async () => {
@@ -707,11 +677,10 @@ describe('agent-first cards', () => {
       interactions: { implementation: { model: 'gpt-5.6-luna' } },
       agents: { [role.id]: { model: 'gpt-5.6-sol' } },
     }
-    loaded.scopes.project!.document = { schema_version: 1, interactions: { implementation: { model: 'project-only-model' } } }
     const decision = {
       model: 'gpt-5.6-sol', reasoning: { mode: 'fixed', effort: 'high' } as const,
       effort: 'high', proposed_effort: 'max', ceiling: 'high', ceiling_source: 'global profile',
-      interaction: 'implementation', role: role.id, tier: 'exceptional', reason: 'Risk raised the tier', limitations: [],
+      interaction: 'implementation', role: role.id, tier: 'demanding', reason: 'Risk raised the tier', limitations: [],
       provenance: { model: 'global.agents.clanker-ui-developer.model', reasoning: 'session_override.reasoning', profile: null },
       capability_status: 'available', dispatch_allowed: false,
     }
@@ -733,22 +702,22 @@ describe('agent-first cards', () => {
     await setInput(session.querySelector('label:last-of-type select') as HTMLSelectElement, 'high')
     await act(async () => { actionButton('Preview route', form).click(); await Promise.resolve() })
 
-    const table = document.querySelector('[aria-label="Eight routing precedence layers"]')!
-    expect(table.querySelectorAll('[role="row"]')).toHaveLength(9)
+    const table = document.querySelector('[aria-label="Five routing precedence layers"]')!
+    expect(table.querySelectorAll('[role="row"]')).toHaveLength(6)
     const row = (label: string) => [...table.querySelectorAll<HTMLElement>('[role="row"]')].find((item) => item.querySelector('[role="rowheader"]')?.textContent?.includes(label))!
     expect(row('Global agent default').querySelector('[role="cell"]')?.textContent).toContain('gpt-5.6-sol')
     expect(row('Global agent default').querySelector('[role="cell"]')?.textContent).toContain('WINS')
     expect(row('Session override').querySelectorAll('[role="cell"]')[1].textContent).toContain('Fixed · high')
     expect(row('Session override').querySelectorAll('[role="cell"]')[1].textContent).toContain('WINS')
-    expect(row('Project activity').querySelectorAll('[role="cell"]')[0].textContent).toBe('—')
-    expect(document.body.textContent).toContain('raised from routine by security')
+    expect(row('Global activity-specific specialist').querySelectorAll('[role="cell"]')[0].textContent).toBe('—')
+    expect(document.body.textContent).toContain('raised from straightforward by security')
 
     const previewCall = fetchMock.mock.calls.find(([path]) => path === '/api/preview')
     const payload = JSON.parse(String(previewCall?.[1]?.body))
     expect(payload.scope).toBe('global')
     expect(payload.request).toMatchObject({ interaction: 'implementation', role: role.id, risk_flags: ['security'], session_override: { reasoning: { mode: 'fixed', effort: 'high' } } })
     expect(payload.document.interactions.implementation.model).toBe('gpt-5.6-luna')
-    expect(payload.document.interactions.implementation.model).not.toBe('project-only-model')
+    expect(payload.document.interactions.implementation.model).toBe('gpt-5.6-luna')
 
     await openTab('Worker routes')
     await openTab('Preview a route')
@@ -828,7 +797,7 @@ describe('agent-first cards', () => {
     const decision = {
       model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } as const,
       effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle profile',
-      interaction: 'implementation', tier: 'complex', reason: 'Matched saved routing', limitations: [],
+      interaction: 'implementation', tier: 'involved', reason: 'Matched saved routing', limitations: [],
       provenance: { model: 'resolver-v2:model', reasoning: 'resolver-v2:reasoning', profile: profileSource },
       capability_status: 'available', dispatch_allowed: false,
     }
@@ -839,7 +808,7 @@ describe('agent-first cards', () => {
     await openTab('Preview a route')
     await act(async () => { actionButton('Preview route', previewForm()).click(); await Promise.resolve() })
 
-    const table = document.querySelector('[aria-label="Eight routing precedence layers"]')!
+    const table = document.querySelector('[aria-label="Five routing precedence layers"]')!
     const bundled = [...table.querySelectorAll<HTMLElement>('[role="row"]')].find((row) => row.querySelector('[role="rowheader"]')?.textContent?.includes('Bundled defaults'))!
     const model = bundled.querySelectorAll<HTMLElement>('[role="cell"]')[0]
     const reasoning = bundled.querySelectorAll<HTMLElement>('[role="cell"]')[1]
@@ -940,7 +909,7 @@ describe('agent-first cards', () => {
     const decision = {
       model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } as const,
       effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle profile',
-      interaction: 'implementation', tier: 'complex', reason: 'No profile source returned', limitations: [],
+      interaction: 'implementation', tier: 'involved', reason: 'No profile source returned', limitations: [],
       provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: null },
       capability_status: 'available', dispatch_allowed: false,
     }

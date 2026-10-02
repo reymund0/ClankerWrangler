@@ -13,7 +13,7 @@ Claude only reviews. Do not invoke another orchestrator or agent team from the r
 
 Use for substantial plans before implementation and integrated substantial changes
 before completion: contracts across layers, consequential architecture, auth, data
-integrity/migrations, deployment, or measured performance risks. Record a skip for small
+integrity/migrations, UI/API/data contract changes, deployment, or measured performance risks. Record a skip for small
 low-risk edits. Explicit requests and opt-outs prevail. Preserve planning-only scope.
 
 ## Prepare the review
@@ -43,6 +43,16 @@ low-risk edits. Explicit requests and opt-outs prevail. Preserve planning-only s
    guidance paths and hashes in the report.
 5. Keep the target stable during review. Use a new attempt directory for a rerun. A
    changed source fingerprint invalidates the old verdict even if the snapshot was stable.
+6. Run local `--prepare-only` and inspect its readiness report before external dispatch.
+   Resolve filtered/missing required evidence without bypassing guards; split oversized
+   scopes into coherent reviews. Confirm authorization for the exact paths and destination
+   from the existing user request/approval. Preparation does not grant export permission.
+
+Keep `requirements` limited to this static review. Put browser/runtime acceptance in
+`parent_checks` with its owner, supplied status, and evidence; the parent must reconcile
+those checks separately. A clean static verdict cannot complete a pending parent check.
+For a narrow recheck, narrow its requirements as well as its files and retain outstanding
+broader acceptance explicitly in the parent log. Never treat excluded coverage as passed.
 
 ## Plan review criteria
 
@@ -73,10 +83,9 @@ PATH is stale. Read its `--help` before invocation and use supported flags.
 
 Model selection is independent of the Codex parent and Sol/Terra worker defaults.
 Resolve the packet's `claude-review` route using the coordinator run snapshot and
-`routing/usage.md`. With no saved or explicit override, the model remains
-the generic Opus alias (`opus`), independently of ambient Claude settings. Pass the resolved
-model explicitly; direct launcher commands without --model retain the Opus alias. Honor an explicit per-review model override, and select effort using
-the policy below unless the user overrides it. Keep persistent Claude settings unchanged. Log unknown effective settings as unknown. No automatic fallback, API-key billing, persistent configuration edits, login,
+the dispatch procedure in `routing/usage.md`, without native specialist route overrides.
+Pass the resolved model and effort explicitly. Keep persistent Claude settings unchanged
+and unknown effective settings unknown. No automatic fallback, API-key billing, persistent configuration edits, login,
 or installation is authorized by a review request. If preflight blocks, report the
 specific prerequisite; never bypass restrictions to obtain a result.
 
@@ -98,38 +107,16 @@ or spawn a native agent solely to wait. The wall-clock limit can be overridden w
 
 ## Select reasoning effort
 
-For orchestrated reviews use the shared resolver; configured fixed effort, model-specific
-Adaptive maps and ceilings override the default table below, with explicit session
-requests taking precedence. Several specialist instruction files still use one
-`claude-review` route. A result requiring launcher preflight permits only invoking
-the existing restricted launcher: it validates subscription and CLI controls before
-executing the model. Neither the resolver nor editor performs that preflight or calls
-a model. Log requested settings and the launcher's observed result separately.
+Resolve each selected review from the existing run snapshot. Assess scope, uncertainty,
+and consequences rather than counting files; let the resolver apply configured fixed
+or Adaptive effort and ceilings. For a recheck, reassess the remaining risk instead of
+automatically inheriting, lowering, or raising effort. Keep the one-automatic-recheck
+limit. Live visual acceptance stays with the native UI/UX reviewer.
 
-First decide whether Claude review is warranted; small low-risk work still skips it
-unless explicitly requested. For each selected plan or implementation review, assess
-complexity, uncertainty, and consequences rather than counting files or lines:
-
-| Review scope | Effort |
-| --- | --- |
-| Explicitly requested mechanical documentation or consistency check | Low |
-| Routine feature plan, acceptance criteria, or test strategy | Medium |
-| Bounded backend/UI change with clear requirements and no consequential risk | Medium |
-| Complex architecture or contracts spanning UI, API, and data | High |
-| Authentication, authorization, migrations, or data integrity | High |
-| Deployment/recovery changes or complex performance behavior | High |
-
-A configured route or explicit supported user effort overrides this default selection. A two-line authorization
-change can still warrant high. For a recheck, reassess the remaining scope and risk:
-a purely mechanical remainder may use low; unresolved security/data concerns retain
-high. Never lower or raise effort solely because it is a recheck. Preserve the existing
-one-automatic-recheck limit. Live visual acceptance stays with the native UI/UX reviewer.
-
-Before dispatch, log the phase, chosen effort, concise scope/risk reason, and any user
-override. Pass the choice explicitly as --effort; the launcher has no effort default
-and rejects missing or blank values before preflight or model execution. It records
-the request separately from observed settings. Unsupported settings fail without
-fallback. --check-current does not require effort.
+Capture the routing decision as described in the dispatch procedure. Pass `--effort`
+explicitly: the launcher rejects missing or unsupported settings without fallback.
+`--check-current` does not require effort. The launcher validates subscription and CLI
+controls before model execution; neither the resolver nor editor performs that preflight.
 
 ## Manifest and invocation
 
@@ -142,6 +129,12 @@ and OpenSpec files as context_paths. requirements and verification_evidence are 
 of non-empty strings. Record intentionally omitted paths and reasons in exclusions.
 Use a unique run_id; baseline must identify a verified Git ref.
 The optional prompt can add task-specific focus, but cannot loosen the review boundary.
+
+Existing manifests remain valid. Optional `requirement_paths` maps every requirement
+string to a nonempty list of paths already listed in selected/context/guidance evidence.
+Optional `parent_checks` contains `{subject, owner, status, evidence}` records, with
+status `pending`, `passed`, or `failed`; these are parent-supplied records, not reviewer
+attestations. A mapping cannot make filtered or missing evidence reviewable.
 
 ```json
 {
@@ -157,6 +150,12 @@ The optional prompt can add task-specific focus, but cannot loosen the review bo
     "C:/Users/example/.codex/skills/clanker-code-review/SKILL.md"
   ],
   "requirements": ["Expired invitations cannot be accepted."],
+  "requirement_paths": {
+    "Expired invitations cannot be accepted.": ["src/invitations.py", "tests/test_invitations.py"]
+  },
+  "parent_checks": [
+    {"subject": "Browser invitation flow", "owner": "native UI reviewer", "status": "pending", "evidence": "Not yet run"}
+  ],
   "exclusions": [],
   "verification_evidence": ["python -m unittest tests.test_invitations: 8 passed"]
 }
@@ -171,7 +170,8 @@ only those files into the snapshot and records their provenance and hashes. Do n
 copy instructions into the live checkout or grant access to whole skill directories.
 
 ```text
-python <package>/scripts/claude_cross_review.py --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --effort <selected-effort>
+python <package>/scripts/claude_cross_review.py --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --prepare-only
+python <package>/scripts/claude_cross_review.py --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --model <resolved-model> --effort <resolved-effort>
 python <package>/scripts/claude_cross_review.py --check-current <saved-report.json>
 ```
 
@@ -181,6 +181,19 @@ integer>. Reviews are bounded by the timeout only; no turn limit is imposed.
 Use argument arrays or literal shell arguments; do not concatenate untrusted prompt
 text into commands. The helper returns its unique report path. Read report.json and
 summary.md from that location, not from a guessed most-recent directory.
+
+Preparation needs no Claude executable, login, or effort and makes no model call. It
+checks the actual packet and local writable locations, saves a unique readiness result,
+and releases temporary resources. `prepared` is not approval or a claim of model access;
+normal execution repeats checks against current inputs. Reports identify filtered or
+missing subjects and advisory split warnings. The packet supplies line-readable Git
+diff files under `_clanker_packet/diffs/`, referenced by `_clanker_packet/evidence.json`.
+Read those files directly instead of extracting escaped diff strings from JSON.
+
+On failure, use the reported stage, safe diagnostic category, and suggested action.
+Do not retry unchanged manifest, access, or runtime failures without resolving the cause;
+retain previous attempts. Unknown CLI failures remain unknown, with an exit code and
+no raw diagnostics. Existing permission and subscription boundaries still apply.
 
 Model verdicts are clean, changes_requested, or incomplete. Coverage items identify a
 subject with covered, partial, or unreviewed status plus concrete evidence (or a reason
@@ -218,8 +231,14 @@ use `python <package>/scripts/claude_cross_review.py --check-writes <absolute pa
 before editing. Directory checks also detect reserved descendants. Exit codes are
 0 (no overlap), 3 (defer overlapping writes), and 2 (check failed; investigate).
 These reservations coordinate participating agents, not arbitrary filesystem writes.
-The coordinator must quiesce existing writers before launch. Final fingerprints
+The coordinator must quiesce existing writers before launch and serialize review startup
+with writer dispatch; checks are advisory, not atomic filesystem locks. Do not dispatch
+overlapping writes or install shared guidance while reserved. Check source and destination
+for moves, and never remove another run's reservation. Malformed records block writes
+until investigated. If scope must change, stop and await the owned reviewer, let it release
+its reservation, then edit and start a fresh review. Final fingerprints
 remain authoritative; changed inputs produce a stale/incomplete report, separately
 from a failed model execution. Normal exits release reservations; after a hard kill,
 the coordinator verifies the entire owned review has stopped before deleting an
-orphan record. Unrelated work may continue throughout the review.
+orphan record; elapsed time or PID alone is insufficient. Multiple read-only reviews may
+overlap across runs, retaining their own reservations. Unrelated work may continue.
