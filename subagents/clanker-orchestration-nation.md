@@ -5,368 +5,179 @@ description: Coordinate a bounded set of Codex specialists for software work wit
 
 # Clanker Orchestration Nation
 
-## Purpose
+Coordinate only the specialists the task needs. The Codex parent owns scope,
+integration, OpenSpec artifacts/task state, and the run log. Workers own bounded
+assignments and return evidence; they do not recursively delegate.
 
-Coordinate only the specialists a software task needs. Keep one parent accountable for
-scope, integration, OpenSpec state, and the run log. Workers provide focused evidence;
-they do not become a second orchestration layer.
+Use native Codex collaboration tools. Claude Code is supported only through the
+external cross-review launcher, not as the orchestration host. Do not substitute a
+local Codex CLI or custom agent framework when native delegation is unavailable.
 
-This workflow is driven by Codex. If the active orchestration host is Claude Code,
-report that Claude-led orchestration is not supported yet; do not recursively launch
-this workflow. Installation into both clients does not imply host compatibility.
+## Establish scope
 
-Use native collaboration delegation for Codex workers, never a custom agent framework
-or a local Codex CLI workaround. The bounded Claude Code cross-review launcher below
-is an explicit external-review exception. Do not invoke deprecated skills from `skills/legacy/`.
+Read the request, repository instructions, relevant code, git state, and existing
+OpenSpec state. Identify the requested outcome, risks, dependencies, and authorization.
+Handle localized low-risk work directly and record why delegation is unnecessary.
 
-## Start and classify
+For meaningful features, cross-cutting behavior, uncertain acceptance criteria, or
+an existing selected change, use the installed OpenSpec workflows and actual artifact
+paths. Ask when the intended change is missing or ambiguous; report unavailable
+OpenSpec tooling rather than inventing state or silently creating a competing plan.
+Preserve planning-only scope. Mark implementation tasks complete only after integrated
+verification; synchronize or archive only when requested or authorized by that workflow.
 
-1. Read the request, repository instructions, relevant code, current git state, and
-   existing OpenSpec state before choosing roles.
-2. Identify the target repository, branch, requested outcome, affected ownership,
-   complexity, risks, and user authorization boundary.
-3. Treat a documentation-only edit, localized low-risk bug fix, or one-file change as
-   a likely single-owner task. Record the lightweight choice; do not manufacture a team.
-4. Use OpenSpec for a meaningful feature, cross-cutting behavior, uncertain acceptance
-   criteria, or an existing selected change. Resolve the actual change directory,
-   artifacts, state/store, and task identifiers using installed OpenSpec workflows when
-   available. Do not invent their paths, state, commands, or results.
-5. If planning only was requested, preserve that boundary. If a new change is authorized,
-   use the installed OpenSpec workflow to scaffold it and follow its artifact instructions.
-   If the intended existing change is missing or ambiguous, report it and ask the user which change applies before making
-   a competing plan or starting implementation.
+## Resolve worker settings
 
-## Model and effort policy
+Keep the user's parent model and effort. Before the first assignment, read the
+**Dispatch procedure** in `routing/usage.md` relative to this coordinator's package
+(source checkout: `subagents/routing/usage.md`). It defines the Python 3.10+ prerequisite,
+snapshot and resolver commands, request fields, dispatch gates, and evidence capture.
+Read its configuration/editor sections only when those details are needed.
 
-Keep the user-selected parent settings and use these worker defaults unless the user
-explicitly chooses otherwise:
+Supply the interaction, selected role, one assignment-specific reasoning tier and short
+reason, applicable risk flags, explicit worker overrides,
+and actual runtime capabilities. Let `scripts/routing_policy.py` resolve precedence,
+models, effort, ceilings, and validation from the run snapshot. Do not reproduce its
+policy in prose or silently substitute settings when resolution or dispatch is blocked.
+Disclose the global preference source at run start, and consequential
+limitations from each decision. Missing Python blocks routing, even without preferences.
 
-| Phase | Model | Typical effort |
+For current-policy runs choose straightforward, involved, or demanding from the definitions
+in the dispatch procedure. Judge unresolved decisions and correctness constraints,
+not file count or role. Reassess new assignments after investigation resolves uncertainty;
+do not carry its tier into implementation automatically. After a bundle update, start a new run if the saved
+snapshot uses an unsupported policy version. No scoring rubric or additional request fields are needed.
+
+Use the returned `model` and `effort` as the native tool's model and reasoning-effort
+arguments. Prefer an empty history fork with a focused assignment; a bounded history
+is allowed when needed. A full-history fork inherits parent settings and must not be
+used to select worker settings. Requested settings are not proof of observed settings.
+
+## Select roles and hand off
+
+Choose the smallest useful team. Limit concurrent assignments to three, or the runtime's
+lower limit, counting Claude review; run at most one Claude review per run at a time.
+Parallelize independent work and serialize changes to shared files, interfaces, browser
+state, or the reviewed build. Keep useful inspection or integration work with the parent.
+
+Before spawning, inspect worker state and available capacity. Reuse a suitable idle
+worker only when its known requested model/effort matches the newly resolved route;
+refresh its role, ownership, and context. Otherwise sequence the work or handle it
+directly within the parent's scope. After a capacity rejection, do not repeat the same
+spawn until capacity changes, and never count the rejected assignment as running.
+
+| Role | Instruction file | Use for |
 | --- | --- | --- |
-| Parent coordination | User-selected session model | User-selected session effort |
-| Planning and review | `gpt-5.6-sol` | medium; high for architecture, data, security, or complex review |
-| Implementation and bounded tests | `gpt-5.6-terra` | medium; high for complex logic or data/security risk |
+| Product | `clanker-product-engineer.md` | Outcomes, scope, acceptance, edge cases |
+| Architect | `clanker-architect.md` | Boundaries, interfaces, design tradeoffs |
+| UX/UI | `clanker-ux-designer.md` | Flows, states, accessibility, visual direction |
+| UI/UX reviewer | `clanker-ui-ux-reviewer.md` | Rendered visuals and interaction evidence |
+| Backend | `clanker-backend-developer.md` | APIs, services, integrations, domain logic |
+| Data | `clanker-data-engineer.md` | Contracts, queries, integrity, migrations |
+| UI implementation | `clanker-ui-developer.md` | Components, forms, client state, layouts |
+| QA planning | `clanker-qa-engineer.md` | Acceptance scenarios and verification strategy |
+| Test engineer | `clanker-test-engineer.md` | Test implementation and execution |
+| Code/security reviewer | Shared `clanker-code-review` skill | Correctness, regressions, spec coverage |
+| Documentation | `clanker-documentation-writer.md` | Documentation of verified behavior |
+| DevOps | `clanker-devops-engineer.md` | Build, CI, delivery, recovery |
+| Performance | `clanker-performance-engineer.md` | Measured bottlenecks and improvements |
 
-The model selected by the user when invoking this skill remains the orchestrator,
-with its selected session effort. Astra or Fable may be suggested where available;
-these are optional recommendations, not prerequisites. Do not block work or request
-approval merely because the user selected another parent model. This skill does not
-switch the active parent model or effort. If the parent model or any effective setting
-is unknown, say it is unknown. Parent choice does not guarantee worker availability:
-do not silently substitute an unavailable worker model, effort, or delegation
-capability, and never claim a worker ran when dispatch did not succeed.
+In the source checkout, specialist files sit beside this coordinator in `subagents/`;
+installed packages keep them in `references/`. Shared code review is
+`skills/clanker-code-review.md` in the checkout or the separate installed skill
+(`../clanker-code-review/SKILL.md`). Resolve from the package actually loaded; do not
+use retired skills or stale standalone specialist installations.
 
-Before the first assignment, read `routing/usage.md` relative to the coordinator
-package (source checkout: `subagents/routing/usage.md`). Use the package's
-`scripts/routing_policy.py` with Python 3.10+ to create an immutable run snapshot
-of bundled defaults, `~/.clanker/orchestration-routing.json`, and the target
-project's optional `.clanker/orchestration-routing.json`. Missing Python or invalid
-present configuration blocks routing; do not silently revert to this table.
+Read only the selected instructions, verify their names and paths, and require each
+worker to read its absolute instruction path before domain work. Missing or unreadable
+instructions block that assignment; independent work may continue. Specialist guidance
+does not override the assignment's phase, ownership, repository rules, or authorization.
 
-Resolve every assignment from that snapshot using one of `planning`,
-`implementation`, `native-review`, `visual-review`, or `claude-review`, plus the
-selected native specialist where applicable. Precedence is bundled defaults,
-global interaction, global agent default, global activity-specific specialist,
-project interaction, project agent default, project activity-specific specialist,
-then explicit per-assignment user overrides. Agent defaults are optional; without them
-phase defaults remain unchanged. Every assignment still resolves its own activity. Parent session settings are not worker
-overrides. Disclose active project sources and effective changes at run start.
-Only explicit user instruction permits bypassing an entire named invalid file.
+Use one concise handoff containing:
 
-Assess mechanical, routine, complex, or exceptional scope with a concise reason.
-Security, data integrity, and recovery risk imply at least complex. Exceptional
-needs a concrete reason beyond the model choice. Fixed effort is authoritative;
-Adaptive applies the effective model profile and user ceiling. An omitted ceiling
-uses that model's profile default; an explicit inherited ceiling remains in force
-when only the model changes. Log limitations rather than silently raising effort
-or switching models. Profiles are provisional policy, not quality guarantees.
+- Role/interaction, repository and instruction paths, and the requested model/effort.
+- Outcome, exact file ownership or advisory-only scope, dependencies, and exclusions.
+- Relevant user/repository constraints and OpenSpec artifacts, tasks, and scenarios.
+- Expected verification; return changed files, evidence, blockers, and the instruction
+  path actually read. Report effective settings only when the runtime supplies them.
+- Worker boundaries: no recursive delegation, shared-log writes, or OpenSpec updates.
 
-For native dispatch, supply model/effort capabilities actually advertised by the
-active collaboration tool, with its source recorded as parent-attested evidence.
-Only dispatch a supported resolved pair. A saved catalog is not runtime or account
-proof. Claude routes without evidence permit only the existing guarded launcher,
-whose built-in preflight runs before any model request. Its final report remains
-authoritative for execution; no preview constitutes a completed review.
+Require a handoff status: **draft** (unverified or blocked), **locally checked** (named
+checks passed, integration remains), or **ready for integration** (assigned acceptance
+checks passed and no known blocker). For executable changes, run the smallest relevant
+authorized compile or contract check before claiming readiness. If execution is outside
+the assignment or unavailable, return a draft with the unrun command and reason.
+Include exact results and remaining gaps; none of these labels replaces parent verification.
 
-Saved preference changes affect new runs. Reload only on explicit user direction,
-create a new snapshot ordinal, and log it before future assignments. Never rewrite
-past snapshot decisions or alter running workers.
+For every write-capable assignment, also supply the loaded package's launcher path
+and require `python <launcher> --check-writes <absolute target paths>` before each
+edit batch, including both paths for moves. Exit 0 allows the cooperative write;
+exit 3 means defer and notify the parent; exit 2 means investigate before writing.
+Never remove another run's reservation. The parent follows the same check for its edits.
+On conflicts, read **Active review reservations** in `clanker-claude-cross-review.md`.
 
-Use native delegation with actual arguments supported by the active runtime, for example:
+## Review and integrate
 
-```text
-spawn_agent({
-  task_name: "backend_implementation",
-  fork_turns: "none",
-  model: "gpt-5.6-terra",
-  reasoning_effort: "medium",
-  message: "...focused assignment..."
-})
-```
+For substantial plans, select Claude review before implementation; for substantial
+integrated changes, select it before completion. This includes UI/API/data contracts,
+consequential architecture, auth, migrations/data integrity, deployment, and measured
+performance risk. Honor explicit requests and opt-outs, skip small low-risk edits,
+and record the reason. Planning-only authorization permits only the planning checkpoint.
 
-Do not use a full-history fork when selecting model or effort: it inherits the parent
-settings. `fork_turns: "none"` is preferred; a bounded history is allowed only when
-the added context is necessary. State the requested and observed settings separately
-in the assignment result and log.
+Before preparing or launching a selected Claude review, read
+`clanker-claude-cross-review.md` from the same source/reference layout as the specialists.
+It owns packet preparation, routing to the guarded launcher, stable-input coordination,
+prerequisites, reconciliation, and the one-automatic-recheck limit. Claude supplements
+native review and tests; it does not authorize implementation or deployment.
 
-## Role catalog and selection
+Keep each packet's static requirements and mapped evidence within its review scope.
+Assign browser/test acceptance separately with an owner and evidence status; do not
+ask a static reviewer to certify a live check. Run local `--prepare-only`, inspect
+coverage gaps and split warnings, and confirm that existing authorization covers the
+exact packet and destination before external dispatch. Split large reviews by coherent
+responsibility; the parent retains the full acceptance checklist and unresolved checks.
+For a bounded recheck, narrow both requirements and evidence, preserving the earlier
+review's scope and outstanding work in the log rather than silently dropping them.
 
-Select the smallest team justified by scope, dependencies, uncertainty, and risk.
-Each role has a separate instruction file with its working method and evidence
-requirements. The specialist files are bundled references, not separately
-discovered skills. The catalog selects the instructions to load; it does not replace
-them. The existing general-purpose code-review skill remains separately installed.
+For native correctness review, reuse `clanker-code-review` and prefer the current
+repository copy. Explicitly request task-owned committed, staged, unstaged, and untracked
+coverage: provide the verified base, committed diff, `git diff HEAD`, staged diff when
+relevant, and new file contents. Enumerate untracked paths with
+`git ls-files --others --exclude-standard`; names alone are not review evidence.
+Exclude unrelated user changes and record anything unreviewed.
 
-| Role | Required instructions | Select when it adds distinct evidence |
-| --- | --- | --- |
-| Product | `clanker-product-engineer` | User outcomes, scope, acceptance criteria, and edge cases. |
-| Architect | `clanker-architect` | Boundaries, interfaces, failure modes, and design tradeoffs. |
-| UX/UI | `clanker-ux-designer` | User flows, interaction states, accessibility, and visual direction. |
-| UI/UX reviewer | `clanker-ui-ux-reviewer` | Rendered application visuals, responsive layouts, interactions, and evidence-backed UX findings. |
-| Backend | `clanker-backend-developer` | Server behavior, APIs, integration, and domain logic. |
-| Database/data | `clanker-data-engineer` | Data contracts, queries, integrity, migrations, and backfills. |
-| UI implementation | `clanker-ui-developer` | Components, client state, forms, and responsive behavior. |
-| QA planning | `clanker-qa-engineer` | Acceptance scenarios, risk coverage, and test strategy. |
-| Test engineer | `clanker-test-engineer` | Implementing and executing reliable tests. |
-| Code/security reviewer | `clanker-code-review` | Correctness, security, regression, and OpenSpec coverage review. |
-| Documentation writer | `clanker-documentation-writer` | User and developer documentation grounded in verified behavior. |
-| DevOps engineer | `clanker-devops-engineer` | Build, CI, delivery, operations, and recovery. |
-| Performance engineer | `clanker-performance-engineer` | Measured bottlenecks and verified performance changes. |
+For UI visual acceptance, select `clanker-ui-ux-reviewer` with `visual-review` routing
+after integration. Supply application/startup details, routes, acceptance context,
+viewports, and artifact locations. Require rendered evidence; unavailable access means
+incomplete coverage. Assign browser ownership and recheck affected states after fixes.
 
-Resolve and read only the selected role instructions before dispatch:
+Verify worker findings and integrated results against actual artifacts and proportionate
+checks. Keep failed or unrun required validation visible and affected tasks incomplete.
+Use `clanker-refactor-review` only for requested improvement proposals and
+`clanker-sync-your-docs` when the task affects durable guidance.
 
-- Source checkout: specialist files are beside this coordinator in
-  `subagents/<role-name>.md`.
-- Installed package: specialist files are `references/<role-name>.md` relative to
-  the directory containing this coordinator's `SKILL.md`. They do not have their own
-  `SKILL.md`, metadata, or skill-menu entry.
-- Shared code review: use `skills/clanker-code-review.md` in this source checkout;
-  elsewhere resolve the actual catalog path or the existing sibling
-  `../clanker-code-review/SKILL.md` relative to the installed coordinator directory.
+## Keep a concise run log
 
-Use the layout of the coordinator actually loaded and verify the selected file exists
-and its frontmatter name matches. Do not substitute stale standalone specialist
-installations. If required instructions are missing or unreadable, report their name,
-log the affected assignment as blocked, and continue only independent work. Do not
-silently fall back to the catalog sentence or claim the guidance was loaded.
+Use `<repo>/.clanker/YYYY-MM-DD-orchestration-nation.md` with the local start date.
+Create a distinct run ID from a timezone-bearing timestamp plus a known session ID
+or checked ordinal. Retain the run ID and original file on resume or across midnight.
 
-Put the resolved absolute instruction path in the worker assignment and instruct the
-worker to read it before domain work. These files steer workers; native delegation
-creates the subagent and the parent supplies its model, effort, and bounded context.
-Require the result to identify the instruction file actually read and log that path.
-Unconfigured native planning/review defaults to Sol and implementation to Terra, including when one
-specialty participates in both phases. Apply the resolved interaction/specialist route when configured. Instructions must not override the assigned
-phase, file ownership, repository instructions, or existing user authorization.
+Append complete, run-attributed timestamped blocks; never rewrite a whole-file snapshot.
+Preserve other runs. Read relevant entries on resume or when reconciling uncertain
+state, rather than rereading the growing log before every append. Record:
 
-## Delegation rules
+- At start: workspace, branch, request, session when known, OpenSpec context, parent
+  settings, complexity/risk rationale, and any no-delegation decision.
+- Before dispatch: assignment ID, role/interaction, instruction path, ownership, concise
+  rationale, and routing evidence captured as described in the dispatch procedure.
+- On meaningful changes: actual dispatch outcome, observed settings or unknown,
+  verification results, review dispositions/waivers, blockers, and snapshot reloads.
+- At completion: completed, blocked, or interrupted outcome and remaining checks.
+  Reconcile pending events from observed state after an abrupt interruption.
 
-Use no more than three concurrent work assignments, counting an external Claude review,
-subject to a lower runtime concurrency limit. Run at most one Claude review per run at a time. Delegate
-only independent work that gives useful parallel evidence while the parent performs
-useful coordination, inspection, or integration. Combine or sequence work that changes
-the same file, schema, interface, or unsettled decision. Serialize overlapping edits.
+Reuse generated routing JSON and link review reports instead of restating their fields
+in narrative. Keep entries free of secrets, raw private payloads, and hidden reasoning.
+Disclose failed saves and do not claim a log exists when writing failed.
 
-Every assignment must include:
-
-- the requested role, phase, model, effort, and one-sentence rationale;
-- the verified absolute role-instruction path and instruction to read it before working;
-- repository path, relevant instructions, request summary, and selected OpenSpec
-  change/artifact paths plus task IDs and scenarios when applicable;
-- in-scope outcome, excluded scope, dependencies, exact file ownership, and whether
-  the worker may edit files or is advisory only;
-- required verification, expected response format, and instruction to report blockers;
-- instruction never to recursively delegate, modify the shared log, or update OpenSpec
-  planning artifacts or task state.
-
-Give independent implementers disjoint file ownership. The parent alone writes the
-run log, resolves and updates OpenSpec planning artifacts/task state, and integrates
-worker changes. A worker report is evidence, not proof of completion.
-
-Minimal assignment shape:
-
-```text
-Read first: <absolute path to selected specialist reference or shared SKILL.md>
-Role/phase: <role>; requested model/effort: <model>/<effort>; why: <brief reason>
-Repo: <absolute path>; task: <summary>; OpenSpec: <change, artifacts, task IDs>
-Own: <files or advisory-only>; dependencies: <known interfaces or none>
-Do: <bounded outcome>; do not: <excluded scope or delegation>
-Verify: <commands/scenarios>; return: loaded instruction path, changed files, evidence, blockers, observed settings.
-```
-
-For documentation, publish only verified behavior and identify evidence. QA planning
-must describe unrun checks as unrun; it cannot call tests passing. For performance,
-record baseline, method, comparable result, and limitations. For DevOps, retain the
-user's authorization boundary and do not deploy unless expressly requested.
-
-For visual acceptance after UI changes, select `clanker-ui-ux-reviewer` in the review
-interaction, defaulting to Sol without overrides. Supply the running application or documented startup workflow, target
-routes, design/acceptance context, viewports, and artifact locations. Require actual
-rendered inspection and evidence; source-only review cannot pass visual acceptance.
-Run it after the relevant UI changes are integrated and available in the target build.
-Assign browser/tab ownership explicitly and serialize workers that would change the
-same browser state or reviewed build. Treat unavailable visual access as incomplete
-coverage; send fixes to the assigned implementer and recheck affected states afterward.
-
-## Claude cross-review checkpoints
-
-Read `clanker-claude-cross-review.md` from the same source/reference layout as the
-specialists when selecting a Claude review. This is external reviewer guidance, not a
-native Codex worker role. The parent invokes its supporting launcher directly.
-Select relevant specialist instructions from the same role catalog above and include
-verified paths through guidance_paths. Log the chosen roles and instruction paths;
-Claude applies them as advisory criteria under its existing read-only restrictions.
-The cross-review reference explains how to interpret implementation-oriented profiles.
-
-Select an independent plan review before implementing a substantial plan, and an
-implementation review after the substantial change is integrated. Substantial scope
-includes UI/API/data contract changes, consequential architecture, authentication,
-authorization, migrations/data integrity, deployment, or measured performance risk.
-Skip small low-risk edits by default. Honor explicit requests and opt-outs and log the
-reason. A planning-only request authorizes only the planning checkpoint. Do not add a
-Claude call after every task or treat review as authorization to implement/deploy.
-
-Resolve the `claude-review` interaction once for the packet, without native specialist
-route overrides. Its unconfigured model is the generic Opus alias (`opus`); explicit user
-overrides take precedence. Pass the resolved model explicitly without changing persistent
-Claude configuration.
-
-Before each Claude dispatch, resolve fixed or Adaptive effort from the same run snapshot.
-Without overrides, the Claude profile maps mechanical/routine/complex to low/medium/high.
-Pass --effort explicitly and log the phase, choice, ceiling effects, and reason. Reassess effort for a recheck from its remaining
-scope/risk; do not automatically inherit, lower, or raise it. Keep the existing skip
-rules and one-recheck limit.
-
-Keep the initial packet free of other reviewers' conclusions. Sol review and tests
-remain applicable. Restrict Claude to a stable snapshot and read/search tools; the
-launcher verifies subscription authentication and refuses API/provider overrides.
-Unavailable prerequisites block the selected checkpoint, not independent work.
-
-The parent verifies each returned finding against the actual evidence, merges
-conflicting/duplicate findings, and records `accepted`, `rejected`, `deferred`, or
-`needs-evidence` with reasons and locations. Assign accepted fixes to the implementer;
-Claude does not edit. Recheck the source fingerprint before accepting any verdict.
-A successful process can still report defects; stale, failed, partial, or missing
-reports cannot approve the checkpoint. Accepted blocking findings remain unresolved
-until fixed and verified or explicitly waived by the user. A waiver must be logged as
-a waiver, never a pass. Allow one automatic recheck per phase after fixes or added
-context; after that report remaining issues and ask for direction instead of looping.
-
-Append selection, dispatch, report path, observed settings, outcome, reconciliation,
-and any waiver to the existing run log. Neither Claude nor the launcher may write
-that log or OpenSpec tasks. Preserve every attempt's report and keep incomplete
-verification visible in task state and the final response.
-
-## OpenSpec lifecycle
-
-Follow installed OpenSpec skills and their real resolved paths/state/store when they
-are available. Do not unconditionally propose, implement, synchronize, or archive a
-change. Respect phase boundaries and user intent:
-
-- Planning: clarify scope and create or revise only the requested OpenSpec artifacts.
-- Implementation: use the selected change's tasks and relevant scenarios as acceptance
-  evidence; the parent marks a task complete only after integrated verification.
-- Completion: synchronize or archive only when the user requests it or the applicable
-  OpenSpec workflow authorizes that step.
-
-If OpenSpec is unavailable for meaningful work, say so and do not fabricate CLI output
-or spec-driven completion. A tiny scoped fix may use a lightweight logged decision;
-the log does not replace requirements or authorize a scope change.
-
-## Run log
-
-At the local run start, choose `<repo>/.clanker/YYYY-MM-DD-orchestration-nation.md` using
-the local start date. Create a run ID from the timezone-bearing start timestamp plus a
-known session ID, or a checked ordinal if no session ID is available. Keep the same
-run ID and originally selected file when the run resumes or crosses midnight.
-
-Create the `.clanker` directory when absent. Before every append, read the current log
-if it exists. Start a distinct run for a new invocation; a continuation retains its run ID.
-Append one complete run-attributed block;
-never replace a loaded whole-file snapshot. Preserve other sessions and previous runs.
-The parent is the sole writer. On an append failure, disclose it and do not describe a
-file as saved. Never include secrets, raw private payloads, or hidden reasoning.
-
-Append a run header first, then timestamped events before dispatch and when observed
-outcomes change. Be concise, factual, and distinguish requested settings from known
-effective settings. Record complexity (low, moderate, or high) and the concrete factors
-behind that assessment in the initial entry and whenever it changes. Record a decision
-not to delegate and unavailable capabilities.
-
-Reusable event shape:
-
-```markdown
-## Run <run-id> — started <timestamp>
-Workspace: <path> | branch: <branch> | session: <known or unavailable>
-Request: <sanitized summary> | OpenSpec: <change/state or none>
-Requested settings: <parent/workers> | observed settings: <known or unknown>
-Complexity: <low|moderate|high> | factors: <scope, uncertainty, dependencies, risk>
-
-### Run <run-id> / event <ordinal> / <timestamp> / <assessment|dispatch|outcome|verification|final>
-Roles/skills/ownership: <roles, resolved instruction paths, and owned files>
-Decision: <brief rationale or no-delegation choice>
-Evidence/status: <actual command, artifact, result, failure, or unrun check>
-Blockers/next step: <sanitized blocker or none>
-```
-
-For dispatch, also log interaction, assessment tier/factors, fixed/Adaptive mode, proposed
-and requested effort, ceiling/source, field provenance, schema/policy version, snapshot
-path/fingerprint, explicit overrides, and capability status. Snapshot contents are
-parent-owned files, not raw payloads copied into the daily log. Observed settings
-remain unknown unless reported by the runtime. Log reloads as new snapshots.
-
-For dispatch, log role, resolved instruction path, requested model/effort, ownership, and status before calling
-the native tool. If it fails, append the failure without treating the worker as
-running. On resume, read existing entries and reconcile a pending event from observed
-state; do not assume success. Before ending when execution permits, append completed,
-blocked, or interrupted status, remaining checks, and the log path supplied to the
-user. An abrupt interruption may leave a running event.
-
-## Integrate and report
-
-Reconcile worker reports with repository evidence. Inspect integration boundaries and
-run the proportionate checks authorized by the task. Keep OpenSpec tasks incomplete
-when required validation failed or was not run. Assess review findings against the
-actual result; they are not proof by themselves.
-
-When an independent correctness review is warranted, use `clanker-code-review` if
-available, including its OpenSpec scenario coverage and drift checks. Prefer a relevant
-repository copy over an outdated installed copy. Explicitly request a working-tree-inclusive
-review rather than its default branch-only scope: provide the verified baseline ref,
-committed diff, `git diff HEAD`, staged diff when relevant, and an enumerated list of
-this task's untracked files from `git ls-files --others --exclude-standard`. Instruct the
-reviewer to read those untracked files as well as the diffs; names alone are not evidence.
-Include exact task-owned paths and exclude unrelated user work. If the review cannot
-cover part of that scope, record it as unreviewed rather than implying a full verdict.
-Use `clanker-refactor-review` only for requested improvement proposals,
-not as a mandatory second review. For meaningful documentation impact, reuse
-`clanker-sync-your-docs` when applicable, preserving existing user authorization.
-
-Tell the user what completed, what was verified, and any concrete unrun or failed
-checks. Include the log path when logging succeeded. Do not fabricate agent runs,
-test results, settings, performance improvements, deployments, or OpenSpec state.
-
-## Freeze review inputs cooperatively
-
-Before a final Claude review, wait for all writers touching its selected files,
-context, manifest, or external guidance to finish. The launcher publishes an active
-reservation in `~/.clanker/review-reservations/` before creating its snapshot and
-releases it when execution finishes, fails, times out, or is interrupted.
-Do not dispatch overlapping writes while that reservation exists. Independent
-work outside the reserved paths may continue. Include this worker instruction in
-EVERY write-capable assignment (including documentation and installed guidance):
-
-> Before each edit batch, run the installed review launcher with
-> `--check-writes <absolute paths to files or directories being changed>`.
-> Exit 0 permits the cooperative write; exit 3 means reserved: defer the work and
-> notify the coordinator. Exit 2 means the check failed: do not assume permission.
-> Check both source and destination for moves. Never remove another run's reservation.
-
-A check is advisory, not an atomic filesystem lock. The coordinator must serialize
-review startup with writer dispatch, and still validate final fingerprints. If
-scope must change, stop and await the owned reviewer, let it release its reservation,
-then edit and run a fresh review. Do not install updated shared guidance mid-review.
-A hard-killed launcher may leave a reservation behind. Do not expire it based on
-elapsed time or PID alone: verify the owning launcher and reviewer have stopped
-before explicitly removing that exact orphan record. Malformed records block writes
-until the coordinator investigates. Multiple read-only reviews may overlap; each
-retains its own reservation until completion.
+Tell the user what completed, what was verified, remaining limitations, and the saved
+log path. Do not infer successful execution from a routing preview or worker claim.

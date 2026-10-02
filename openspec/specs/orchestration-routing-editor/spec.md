@@ -7,15 +7,19 @@ Let users inspect and edit orchestration routing preferences through a local int
 ## Requirements
 
 ### Requirement: Editable interaction routes and inheritance
-The editor SHALL present native specialist agents and one Claude cross-review route in its primary worker matrix with a selected-route inspector, with model and Fixed or Adaptive reasoning. Native agent defaults SHALL be independently resettable by field and SHALL NOT erase activity-specific exceptions when edited. Inspector activity controls SHALL expose applicable activities and retain explicitly configured off-scenario exceptions. Existing interaction defaults SHALL remain editable in the Activity defaults tab. Adaptive ceilings SHALL remain reachable in route controls and model tier mappings SHALL be available in the Adaptive profiles tab; Fixed effort SHALL remain directly editable. The editor SHALL show global/project scope, inherited sources, unsaved changes and activity exceptions. It SHALL display differing inherited fields as varying by activity rather than silently selecting one value. Opening, expanding or refreshing SHALL NOT create overrides. CLI-only model and effort selection, parent session-controlled settings and existing save protection SHALL remain intact. Cross-review SHALL use a single route even when several specialist criteria are selected. Specialist filtering SHALL retain configured exceptions without changing stored preferences or resolver support.
+The editor SHALL present native specialist agents and one Claude cross-review route in its primary worker matrix with a selected-route inspector, with model and Fixed or Adaptive reasoning. Native agent defaults SHALL be independently resettable by field and SHALL NOT erase activity-specific exceptions when edited. Inspector activity controls SHALL expose applicable activities and retain explicitly configured off-scenario exceptions. Existing interaction defaults SHALL remain editable in the Activity defaults tab. Adaptive ceilings SHALL remain reachable in route controls and model tier mappings SHALL be available in the Adaptive profiles tab; Fixed effort SHALL remain directly editable. The editor SHALL show the global destination, inherited sources, unsaved changes and activity exceptions. It SHALL display differing inherited fields as varying by activity rather than silently selecting one value. Opening, expanding or refreshing SHALL NOT create overrides. CLI-only model and effort selection, parent session-controlled settings and existing save protection SHALL remain intact. Cross-review SHALL use a single route even when several specialist criteria are selected. Specialist filtering SHALL retain configured exceptions without changing stored preferences or resolver support.
 
 #### Scenario: Project override
-- **WHEN** a user opens a project with global defaults and changes only its implementation model
-- **THEN** the editor shows that field as project-owned and leaves other fields inherited without writing a flattened copy of global defaults
+- **WHEN** an existing project override is present when the global editor opens
+- **THEN** it is ignored and left untouched, and no project controls appear
+
+#### Scenario: Sparse global override
+- **WHEN** a user changes only the global implementation model
+- **THEN** the editor saves that field without flattening inherited bundled values
 
 #### Scenario: Reset an override
-- **WHEN** a user resets a project specialist override
-- **THEN** the inherited route becomes visible and saving removes that override without changing global preferences
+- **WHEN** a user resets a global specialist override
+- **THEN** its lower-precedence global or bundled route becomes visible and saving removes only that override
 
 #### Scenario: Set an agent default
 - **WHEN** the user changes only the backend agent model in global scope
@@ -30,23 +34,22 @@ The editor SHALL present native specialist agents and one Claude cross-review ro
 - **THEN** the matrix and owning tab indicate the error or customization, and selecting the erroneous route exposes its relevant controls so the user can inspect or reset the specific field without losing other preferences
 
 #### Scenario: Global and project defaults
-- **WHEN** a project edits or resets an agent field
-- **THEN** saving modifies only that project's sparse override, the displayed inherited and activity-specific values reflect the shared resolver, and the global document is unchanged
-
+- **WHEN** the user opens the editor
+- **THEN** only global configuration is editable and there is no project selection or project inheritance state
 
 #### Scenario: Fixed effort with differing activity models
 - **WHEN** an agent has no shared model and the user selects Fixed reasoning
 - **THEN** new effort choices respect the common policy-supported levels of all known reported activity models, unknown metadata is labeled unverified, existing saved values remain visible, and an empty intersection directs the user to a shared model or activity-specific reasoning
 
 ### Requirement: Explainable preview without execution
-The editor SHALL let users select an interaction, optional native specialist, task tier and risk factors, and temporary session overrides for preview. It SHALL display the predicted model/effort, provenance, rationale, ceiling effects, and capability status from the shared resolver. Preview SHALL NOT launch agents, call models, consume subscription usage, or save temporary session overrides as persistent settings. Previewing unsaved changes SHALL identify that draft state.
+The editor SHALL let users select an interaction, optional native specialist, one of straightforward, involved, or demanding and risk factors, and temporary session overrides for preview. It SHALL display the predicted model/effort, provenance, rationale, ceiling effects, and capability status from the shared resolver. Preview SHALL NOT launch agents, call models, consume subscription usage, or save temporary session overrides as persistent settings. Previewing unsaved changes SHALL identify that draft state.
 
 #### Scenario: Compare Luna ceilings
-- **WHEN** a user previews exceptional work with Luna Adaptive and changes the ceiling from xhigh to max
+- **WHEN** a user previews demanding work with Luna Adaptive and changes the ceiling from xhigh to max
 - **THEN** the preview shows the resulting effort change and its reason without dispatching an agent or saving the draft
 
 ### Requirement: Local validated persistence
-The editor SHALL read and save global preferences and optional preferences for the project explicitly selected at server startup. Saves SHALL validate configuration, be atomic, detect changes since the loaded revision before replacement and serialize cooperating editor saves, and report success only after persistence. Invalid drafts and write failures SHALL preserve prior saved content and keep the draft recoverable. Global preferences SHALL survive skill installation and upgrade. The editor SHALL make the destination and scope visible before saving; project preferences SHALL remain suitable for deliberate version control. The documented save guarantee SHALL acknowledge that a non-cooperating writer can race after the final revision check; atomic replacement alone SHALL NOT be presented as filesystem compare-and-swap.
+The editor SHALL read and save only global preferences. Saves SHALL validate configuration, be atomic, detect changes since the loaded revision before replacement and serialize cooperating editor saves, and report success only after persistence. Invalid drafts and write failures SHALL preserve prior saved content and keep the draft recoverable. Global preferences SHALL survive skill installation and upgrade. The editor SHALL make the global destination visible before saving; existing project preference files SHALL remain untouched. The documented save guarantee SHALL acknowledge that a non-cooperating writer can race after the final revision check; atomic replacement alone SHALL NOT be presented as filesystem compare-and-swap.
 
 #### Scenario: Concurrent edit
 - **WHEN** another cooperating editor changes a preferences file after loading, or an external edit exists before the final save revision check
@@ -57,10 +60,10 @@ The editor SHALL read and save global preferences and optional preferences for t
 - **THEN** the editor reports the error, preserves saved preferences, and keeps unsaved form values available
 
 ### Requirement: Restricted local service
-The editor service SHALL be loopback-only, accept configuration operations only for its fixed global and startup-selected project destinations, and reject unauthorized origins and write requests. It SHALL NOT expose arbitrary filesystem reads/writes, credential access, model execution, or arbitrary shell execution. An authenticated explicit Run Wrangler action MAY execute only the fixed source-checkout installer, with no browser-supplied command, arguments or paths; it SHALL reject concurrent runs and report bounded output, failure and timeout honestly. Paths escaping the allowed destinations through traversal or links SHALL be rejected. Project selection SHALL NOT be driven by untrusted browser-supplied filesystem paths.
+The editor service SHALL be loopback-only, accept configuration operations only for its fixed global destination, and reject unauthorized origins and write requests. It SHALL NOT expose arbitrary filesystem reads/writes, credential access, model execution, or arbitrary shell execution. An authenticated explicit Run Wrangler action MAY execute only the fixed source-checkout installer, with no browser-supplied command, arguments or paths; it SHALL reject concurrent runs and report bounded output, failure and timeout honestly. Paths escaping the allowed destinations through traversal or links SHALL be rejected. Project-scoped API requests SHALL be rejected without accessing a project file.
 
 #### Scenario: External or arbitrary-path request
-- **WHEN** a request comes from an unauthorized origin or attempts to write outside the selected configuration destinations
+- **WHEN** a request comes from an unauthorized origin or attempts to write outside the global configuration destination
 - **THEN** the service rejects it without accessing or changing the requested file
 
 #### Scenario: Automatic local session initialization
@@ -89,6 +92,10 @@ The source checkout SHALL provide root commands to build the editor, start the b
 - **WHEN** dependencies, supported Python, or a compatible initial build are unavailable
 - **THEN** startup fails with actionable instructions and leaves no owned server running
 
+#### Scenario: Removed project startup option
+- **WHEN** a caller passes --project to the Node launcher or Python editor service
+- **THEN** startup rejects the unsupported option before starting a server; the isolated --global-config-dir option remains available
+
 ### Requirement: Explicit local Wrangler installation
 The editor SHALL offer a Run Wrangler action with visible local-client installation scope, running and result states, and installer output. It SHALL preserve saved routing preferences and unsaved editor drafts. Installed bundles without the source installer SHALL explain that the action is unavailable.
 
@@ -101,7 +108,7 @@ The editor SHALL offer a Run Wrangler action with visible local-client installat
 - **THEN** the UI shows the unavailable or failed state and does not claim successful installation
 
 ### Requirement: Four-screen routing workspace
-The editor SHALL provide Worker routes, Activity defaults, Adaptive profiles, and Preview a route tabs sharing the same scope, unsaved draft and errors. The header SHALL expose scope selection, destination path, unsaved change count, save, export/reload, reset scope and Run Wrangler with anchored install details/output. Scope switching SHALL retain its unsaved-draft confirmation. Save revision/conflict and validation behavior SHALL remain unchanged. Global errors SHALL be dismissible below the tabs and field errors SHALL mark their owning tab. Themes SHALL follow system preference by default with a manual override, readable offline font fallbacks, focus-visible controls and touch targets of at least 40px.
+The editor SHALL provide Worker routes, Activity defaults, Adaptive profiles, and Preview a route tabs sharing one global unsaved draft and its errors. The header SHALL expose the global destination path, unsaved change count, save, export/reload, reset global preferences and Run Wrangler with anchored install details/output. Save revision/conflict and validation behavior SHALL remain unchanged. Global errors SHALL be dismissible below the tabs and field errors SHALL mark their owning tab. Themes SHALL follow system preference by default with a manual override, readable offline font fallbacks, focus-visible controls and touch targets of at least 40px.
 
 #### Scenario: Navigate an unsaved invalid draft
 - **WHEN** a user edits a route, receives a field error and switches tabs
@@ -123,7 +130,7 @@ The worker screen SHALL display API-provided roles and Codex activities with an 
 - **THEN** the alias warning, route controls and reset-to-inherited action are available
 
 ### Requirement: Dedicated default and profile screens
-Activity defaults SHALL show every Codex activity, provider, ownership, applicable specialists, model and segmented Adaptive/Fixed controls, ceiling notes and resets. Adaptive profiles SHALL show effective and own profiles, locally reported model customization, CLI-constrained editable override fields, inherited read-only fields, per-model effort meters, changed-field highlighting and reset. An example SHALL calculate complex effort capped by the first customized profile's ceiling locally without calling preview. Unavailable saved selections SHALL remain visible.
+Activity defaults SHALL show every Codex activity, provider, ownership, applicable specialists, model and segmented Adaptive/Fixed controls, ceiling notes and resets. Adaptive profiles SHALL show effective and own profiles, locally reported model customization, CLI-constrained editable override fields, inherited read-only fields, per-model effort meters, changed-field highlighting and reset. The profile table SHALL contain exactly three tier columns labeled Straightforward, Involved, and Demanding, each with a short accessible definition matching routing guidance. An example SHALL calculate involved effort capped by the first customized profile's ceiling locally without calling preview. Unavailable saved selections SHALL remain visible.
 
 #### Scenario: Customize and reset a profile
 - **WHEN** a locally reported inherited model profile is customized and changed
@@ -148,9 +155,36 @@ Activity defaults SHALL show every Codex activity, provider, ownership, applicab
 - **THEN** its aria-hidden meter has one bar per selectable model effort in provider order, including the current saved-unavailable effort once while excluding other disabled options; bars through the current effort use their own level colors and later bars use the empty color
 - **AND** light and dark effort tokens match the handoff, visible text conveys the value, and changed cells retain their accent border and fill independently of the meter
 
+#### Scenario: Three-tier profile controls
+- **WHEN** an inherited or customized profile is displayed on desktop or a narrow screen
+- **THEN** it exposes the three current tier values and the separate default ceiling, retains its model-specific effort options and meters, and permits keyboard users to find tier definitions and associated validation errors
+
 ### Requirement: Route preview explanation screen
-Preview SHALL retain activity, optional specialist, tier, risk flags, required reason and temporary session overrides, with an explicit unsaved-draft/no-execution explanation. Results SHALL show predicted model, requested and proposed effort, ceiling, capability, limitations, risk-adjusted tier and effort explanation. An eight-layer precedence table SHALL highlight winning model and reasoning sources independently. Known layer values SHALL be shown with earlier overridden values struck through. Unknown or inconsistent lower-layer values SHALL be shown as an em dash rather than invented; returned resolver winners remain authoritative. Catalog information SHALL NOT be presented as runtime availability proof.
+Preview SHALL retain activity, optional specialist, a current three-tier selection, risk flags, required reason and temporary session overrides, with an explicit unsaved-draft/no-execution explanation. Results SHALL show predicted model, requested and proposed effort, ceiling, capability, limitations, risk-adjusted tier and effort explanation. A five-layer precedence table (bundled defaults, global activity, global agent, global activity-specific specialist, session) SHALL highlight winning model and reasoning sources independently. Known layer values SHALL be shown with earlier overridden values struck through. Unknown or inconsistent lower-layer values SHALL be shown as an em dash rather than invented; returned resolver winners remain authoritative. Catalog information SHALL NOT be presented as runtime availability proof.
 
 #### Scenario: Prefilled preview and risk adjustment
 - **WHEN** preview is opened from a selected agent and submitted with risk flags
 - **THEN** the form has its applicable activity and agent selected, and the returned resolver decision explains the actual tier, effort and winning sources without saving or executing a model
+
+#### Scenario: Shared current-tier resolution
+- **WHEN** the user previews a current tier with the same preferences, reason, risk flags, and capabilities as a dispatch request
+- **THEN** the preview matches its tier, effort, ceiling effects, and provenance and does not execute a model or persist temporary overrides
+
+### Requirement: Visible migration on explicit save
+Legacy preferences SHALL display as converted three-tier profiles without changing the saved file or creating overrides on open. The editor SHALL explain the mapping and retirement of mechanical before save. An explicit save SHALL persist global preferences in current form, retaining an exact recoverable copy of the previous legacy document. Existing validation, revision, lock, atomic-write, and path protections SHALL apply; migration SHALL NOT read or modify project preferences.
+
+#### Scenario: Load and save a legacy profile
+- **WHEN** legacy global preferences are opened, previewed, and then explicitly saved
+- **THEN** open and preview leave its bytes unchanged, the UI identifies the pending conversion, and save preserves the original bytes in a reported backup before persisting the three-tier values
+
+#### Scenario: Conversion conflicts or backup fails
+- **WHEN** the source revision changes before save or its required backup cannot be safely persisted
+- **THEN** the save fails without replacing the preferences, preserves the draft, and reports the conflict or failure
+
+#### Scenario: Install or reload without saving
+- **WHEN** the editor is reloaded or the skill bundle is installed with legacy preferences present
+- **THEN** preference files remain unchanged and no migration backup or extra override is created
+
+#### Scenario: Old editor assets
+- **WHEN** a current routing service is paired with assets built for a different policy version
+- **THEN** startup rejects the mismatch with rebuild instructions instead of serving an incompatible profile form

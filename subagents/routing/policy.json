@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "policy_version": "2",
+  "policy_version": "4",
   "interactions": [
     {"id": "planning", "label": "Planning and design", "provider": "codex", "default_model": "gpt-5.6-sol"},
     {"id": "implementation", "label": "Implementation and testing", "provider": "codex", "default_model": "gpt-5.6-terra"},
@@ -46,16 +46,16 @@
       "claude-review": {"model": "opus", "reasoning": {"mode": "adaptive"}}
     },
     "adaptive_profiles": {
-      "codex:gpt-6-astra": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"},
-      "codex:gpt-5.6-sol": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"},
-      "codex:gpt-5.6-terra": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"},
-      "codex:gpt-5.6-luna": {"tiers": {"mechanical": "medium", "routine": "high", "complex": "xhigh", "exceptional": "max"}, "default_ceiling": "xhigh"},
-      "claude:default": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
-      "claude:opus": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
-      "claude:opus[1m]": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
-      "claude:claude-fable-5-1[1m]": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
-      "claude:sonnet": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"},
-      "claude:claude-opus-5": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "high"}, "default_ceiling": "high"}
+      "codex:gpt-6-astra": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "xhigh"},
+      "codex:gpt-5.6-sol": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "xhigh"},
+      "codex:gpt-5.6-terra": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "xhigh"},
+      "codex:gpt-5.6-luna": {"tiers": {"straightforward": "high", "involved": "xhigh", "demanding": "max"}, "default_ceiling": "xhigh"},
+      "claude:default": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"},
+      "claude:opus": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"},
+      "claude:opus[1m]": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"},
+      "claude:claude-fable-5-1[1m]": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"},
+      "claude:sonnet": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"},
+      "claude:claude-opus-5": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "high"}, "default_ceiling": "high"}
     }
   }
 }

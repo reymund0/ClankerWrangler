@@ -40,7 +40,7 @@ class EffortTests(unittest.TestCase):
                 process = mock.Mock(returncode=0)
                 process.communicate.return_value = (json.dumps({"is_error": False, "subtype": "success", "structured_output": payload}), "")
                 argv = ["review", "--manifest", str(manifest), "--output-dir", str(root / "reports"), "--effort", effort]
-                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": None}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": None}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "plan.md", "state": "included", "sha256": "x"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(review.main(), 0)
                 self.assertEqual(preflight.call_args.args[2], effort)
                 command = launch.call_args.args[0]
@@ -59,7 +59,7 @@ class EffortTests(unittest.TestCase):
                 process = mock.Mock(returncode=0)
                 process.communicate.return_value = (json.dumps({"is_error": False, "subtype": "success", "structured_output": payload}), "")
                 argv = ["review", "--manifest", str(manifest), "--output-dir", str(root / "reports"), "--effort", "medium", *extra]
-                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort: {"requested_model": model}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort: {"requested_model": model}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "plan.md", "state": "included", "sha256": "x"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(review.main(), 0)
                 self.assertEqual(preflight.call_args.args[1], expected)
                 command = launch.call_args.args[0]
@@ -133,10 +133,12 @@ class EffortTests(unittest.TestCase):
     def test_unsupported_effort_preflight_has_no_fallback(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True, capture_output=True)
+            (root / "plan.md").write_text("Planning evidence for the effort check.", encoding="utf-8")
             manifest = root / "manifest.json"
             manifest.write_text(json.dumps({"repository": str(root), "phase": "plan", "run_id": "effort", "selected_paths": ["plan.md"], "requirements": ["R1"], "verification_evidence": ["Planning only"]}), encoding="utf-8")
             argv = ["review", "--manifest", str(manifest), "--output-dir", str(root / "reports"), "--effort", "unavailable"]
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=review.ReviewError("Requested Claude effort is unsupported by this CLI")) as preflight, mock.patch.object(review, "invoke") as invoke, contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=review.ReviewError("Requested Claude effort is unsupported by this CLI")) as preflight, mock.patch.object(review, "invoke") as invoke, contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(review.main(), 2)
             preflight.assert_called_once()
             invoke.assert_not_called()

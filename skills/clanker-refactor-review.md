@@ -1,6 +1,6 @@
 ---
 name: clanker-refactor-review
-description: Propose refactors for the code the current branch touches, anchored to the branch diff and directly related code. Covers function extraction, conditional complexity, duplication, magic values, naming, local convention drift, dead code, oversized files, and file placement. Use after implementation work is done and before committing or opening a pull request, when you want improvement proposals rather than a defect hunt. Plans only; it does not implement changes. Use clanker-code-review for correctness, regressions, and requirement coverage; use clanker-refactor-sisyphus for repo-wide structural debt.
+description: Propose refactors for the code the current branch touches, anchored to the branch diff and directly related code. Covers function extraction, conditional complexity, duplication, magic values, naming, local convention drift, dead code, oversized files, and file placement. Use after implementation work is done and before committing or opening a pull request, when you want improvement proposals rather than a defect hunt. Plans only; it does not implement changes. Use clanker-code-review for correctness, regressions, and requirement coverage.
 ---
 
 # Clanker Refactor Review

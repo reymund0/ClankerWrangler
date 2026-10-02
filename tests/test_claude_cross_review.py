@@ -229,12 +229,12 @@ class ClaudeCrossReviewTests(unittest.TestCase):
                 captured.update(report)
                 return root / "report.json"
             argv = ["runner", "--manifest", str(manifest_path), "--output-dir", str(root / "out"), "--effort", "medium"]
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "configured"}), mock.patch.object(review, "collect_snapshot", return_value=(snapshot, files, "fingerprint")), mock.patch.object(review, "current_fingerprint", return_value="fingerprint"), mock.patch.object(review, "invoke", side_effect=invoke_side_effect), mock.patch.object(review, "write_report", side_effect=writer), mock.patch.object(review, "cleanup_snapshot"):
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "configured"}), mock.patch.object(review, "collect_snapshot", return_value=(snapshot, files, "fingerprint")), mock.patch.object(review, "current_fingerprint", return_value="fingerprint"), mock.patch.object(review, "invoke", side_effect=invoke_side_effect), mock.patch.object(review, "write_report", side_effect=writer), mock.patch.object(review, "cleanup_snapshot"):
                 self.assertEqual(3, review.main())
             self.assertEqual("stale", captured["execution_status"])
             self.assertEqual("incomplete", captured["verdict"])
 
-    def test_main_marks_excluded_scope_and_incomplete_coverage_incomplete(self):
+    def test_main_blocks_excluded_scope_before_claude_preflight(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             manifest_path = root / "manifest.json"
@@ -242,12 +242,14 @@ class ClaudeCrossReviewTests(unittest.TestCase):
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             snapshot = pathlib.Path(tempfile.mkdtemp(prefix="claude-cross-review-"))
             captured = {}
-            result = {"verdict": "clean", "coverage": [{"subject": "file.py", "status": "partial", "evidence": "partial"}], "findings": [], "limitations": [], "observed_settings": {}}
             argv = ["runner", "--manifest", str(manifest_path), "--output-dir", str(root / "out"), "--effort", "medium"]
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": None}), mock.patch.object(review, "collect_snapshot", return_value=(snapshot, [{"path": "file.py", "state": "excluded", "reason": "binary"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "invoke", return_value=result), mock.patch.object(review, "write_report", side_effect=lambda _d, report: captured.update(report) or root / "report.json"), mock.patch.object(review, "cleanup_snapshot"):
-                self.assertEqual(0, review.main())
-            self.assertEqual("completed", captured["execution_status"])
-            self.assertEqual("incomplete", captured["verdict"])
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", side_effect=AssertionError("excluded scope resolved Claude")), mock.patch.object(review, "preflight") as preflight, mock.patch.object(review, "collect_snapshot", return_value=(snapshot, [{"path": "file.py", "state": "excluded", "reason": "binary"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "invoke") as invoke, mock.patch.object(review, "write_report", side_effect=lambda _d, report: captured.update(report) or root / "report.json"), mock.patch.object(review, "cleanup_snapshot"):
+                self.assertEqual(2, review.main())
+            self.assertEqual("blocked", captured["execution_status"])
+            self.assertEqual("blocked", captured["readiness"]["status"])
+            self.assertEqual("evidence_preparation", captured["diagnostic"]["stage"])
+            preflight.assert_not_called()
+            invoke.assert_not_called()
 
     def test_invoke_rejects_denied_read_and_usage_exhaustion_envelopes(self):
         args = types.SimpleNamespace(max_turns=1, model=None, effort=None, timeout_seconds=1)

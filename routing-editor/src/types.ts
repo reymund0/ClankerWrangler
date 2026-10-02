@@ -1,4 +1,3 @@
-export type Scope = 'global' | 'project'
 export type Reasoning = { mode: 'fixed'; effort: string } | { mode: 'adaptive'; max_effort?: string }
 
 export type Route = {
@@ -20,7 +19,7 @@ export type AgentRoute = {
 }
 
 export type AdaptiveProfile = {
-  tiers: Record<'mechanical' | 'routine' | 'complex' | 'exceptional', string>
+  tiers: Record<'straightforward' | 'involved' | 'demanding', string>
   default_ceiling: string
 }
 
@@ -67,12 +66,12 @@ export type EffectiveRoute = {
   specialists?: Record<string, EffectiveRoute>
 }
 
-export type ConfigScope = { path: string; revision: string; document: Preferences | null; error?: string }
+export type ConfigScope = { path: string; revision: string; document: Preferences | null; error?: string; migration_pending?: boolean; migration_backup?: string }
 export type ConfigResponse = {
   wrangler?: { available: boolean; running: boolean; reason?: string }
   schema_version: 1
   policy_version: string
-  scopes: { global: ConfigScope; project: ConfigScope | null }
+  scopes: { global: ConfigScope }
   bundle: Bundle
   effective: { agents?: Record<string, EffectiveRoute>; interactions: Record<string, EffectiveRoute>; profiles: Record<string, AdaptiveProfile> } | null
   error?: string

@@ -18,7 +18,6 @@ function configFixture(): ConfigResponse {
     policy_version: '1',
     scopes: {
       global: { path: '/global.json', revision: 'global', document: { schema_version: 1 } },
-      project: { path: '/project.json', revision: 'project', document: { schema_version: 1 } },
     },
     bundle: {
       schema_version: 1,
@@ -50,16 +49,16 @@ function setSpecialistRoute(config: ConfigResponse, activity: string, model: str
 }
 
 describe('agent route presentation', () => {
-  it('shows mixed activity values when the effective agent route came from the current scope', () => {
+  it('shows mixed activity values when the effective agent route came from global preferences', () => {
     const config = configFixture()
     config.effective!.agents![role.id] = {
       route: { model: 'gpt-5.6-luna', reasoning: { mode: 'fixed', effort: 'high' } },
-      provenance: { model: 'project.agents.clanker-ui-developer.model', reasoning: 'project.agents.clanker-ui-developer.reasoning' },
+      provenance: { model: 'global.agents.clanker-ui-developer.model', reasoning: 'global.agents.clanker-ui-developer.reasoning' },
     }
     setSpecialistRoute(config, 'planning', 'gpt-5.6-terra', { mode: 'adaptive' })
     setSpecialistRoute(config, 'implementation', 'gpt-5.6-luna', { mode: 'fixed', effort: 'high' })
 
-    const state = deriveAgentState(config, { schema_version: 1 }, 'project', role)
+    const state = deriveAgentState(config, { schema_version: 1 }, role)
 
     expect(state.baseline?.route).toEqual({})
     expect(state.actualModels).toEqual(['gpt-5.6-terra', 'gpt-5.6-luna'])
@@ -69,22 +68,21 @@ describe('agent route presentation', () => {
     expect(state.valueReasoning).toBeUndefined()
   })
 
-  it('keeps own agent defaults and both project and inherited activity exceptions in the inspector state', () => {
+  it('keeps global agent defaults and global activity exceptions in the inspector state', () => {
     const config = configFixture()
     config.bundle.roles = [{ id: 'clanker-backend-developer', label: 'Backend developer' }]
-    config.scopes.global.document = {
-      schema_version: 1,
-      interactions: { 'visual-review': { specialists: { 'clanker-backend-developer': { model: 'gpt-5.6-sol' } } } },
-    }
     const document: Preferences = {
       schema_version: 1,
       agents: { 'clanker-backend-developer': { model: 'gpt-5.6-terra' } },
-      interactions: { implementation: { specialists: { 'clanker-backend-developer': { reasoning: { mode: 'fixed', effort: 'high' } } } } },
+      interactions: {
+        implementation: { specialists: { 'clanker-backend-developer': { reasoning: { mode: 'fixed', effort: 'high' } } } },
+        'visual-review': { specialists: { 'clanker-backend-developer': { model: 'gpt-5.6-sol' } } },
+      },
     }
     setSpecialistRoute(config, 'implementation', 'gpt-5.6-luna', { mode: 'fixed', effort: 'high' }, 'clanker-backend-developer')
     setSpecialistRoute(config, 'visual-review', 'gpt-5.6-sol', { mode: 'adaptive' }, 'clanker-backend-developer')
 
-    const state = deriveAgentState(config, document, 'project', 'clanker-backend-developer')
+    const state = deriveAgentState(config, document, 'clanker-backend-developer')
 
     expect(state.valueModel).toBe('gpt-5.6-terra')
     expect(state.own).toEqual({ model: 'gpt-5.6-terra' })

@@ -38,7 +38,7 @@ The skill selects specialists for the task: product, architecture, UX/UI design 
 review, backend, data, UI development, QA, code/security review, documentation, DevOps, and
 performance engineering. It requests GPT-5.6 Sol for planning and review and
 GPT-5.6 Terra for implementation, choosing reasoning effort for each assignment.
-Global and optional project routing preferences can override these worker defaults.
+Global routing preferences can override these worker defaults.
 It uses Codex's native subagent tools and reports unavailable models or tools;
 this skill keeps your selected session model and effort as the orchestrator. Astra or
 Fable are optional suggestions where available; choosing another parent model does
@@ -126,7 +126,7 @@ values appear as **Varies by activity** until you choose a shared default.
 The **Activity defaults**, **Adaptive profiles**, and **Preview a route** tabs share
 the same unsaved draft. Activity-default resets retain specialist exceptions, and
 profile editing uses locally reported model and effort choices. Preview explains
-route precedence and effort without saving or launching workers. Scope, save,
+route precedence and effort without saving or launching workers. Global destination, save,
 export/reload, reset, and Run Wrangler controls remain in the header. Themes follow
 your system by default and allow a manual override; system fonts keep the editor
 usable offline. Your parent session model and effort remain unchanged.
@@ -156,14 +156,14 @@ repeat `build` after changing compatibility metadata. Neither command installs
 dependencies automatically. The dependencies remain in `routing-editor/package-lock.json`;
 the root launcher adds no packages.
 
-Pass an optional project or isolated preference directory after the literal `"--"`
+Pass an isolated global preference directory after the literal `"--"`
 separator (quoting it also preserves it through PowerShell npm wrappers):
 
 ```text
-npm run dev "--" --project "path/to/my project" --global-config-dir "path/to/test preferences"
+npm run dev "--" --global-config-dir "path/to/test preferences"
 ```
 
-Without `--project`, only global preferences are editable. Paths you supply are
+Only global preferences are editable. Paths you supply are
 relative to the invocation directory; launcher-owned paths resolve from the checkout.
 The launcher discovers Python 3.10+ automatically. Set `CLANKER_PYTHON` to an executable
 path if needed (an executable only, not a shell command); an invalid explicit override
@@ -179,7 +179,7 @@ Node remains optional when running an already-built source editor or an installe
 bundle directly with Python:
 
 ```text
-python routing-editor/scripts/routing_editor.py --project "path/to/my project"
+python routing-editor/scripts/routing_editor.py
 ```
 
 Use a verified Python executable (`python3` may be appropriate). The root launcher
@@ -193,15 +193,15 @@ Focused launcher integration checks run with `node --test routing-editor/tests/t
 after installing dependencies and building the UI; they use temporary preferences.
 
 After a build, run Wrangler to package it with the skill. From an installed bundle,
-run its `scripts/routing_editor.py` with the same project argument. Wrangler copies
+run its `scripts/routing_editor.py`. Wrangler copies
 available build assets without running npm or starting a service. Without a build,
 it installs the routing helpers and reports the editor unavailable. Incompatible
 build/helper versions require rebuilding and reinstalling.
 
-Preferences are sparse JSON files outside the installed bundle:
-
-- Global: `~/.clanker/orchestration-routing.json`.
-- Project: `<project>/.clanker/orchestration-routing.json`.
+Preferences are one sparse JSON file outside the installed bundle:
+`~/.clanker/orchestration-routing.json`. Existing project preference files are
+ignored and left untouched; no automatic merge or deletion occurs. The removed
+`--project` option is rejected by both editor launchers and snapshot creation.
 
 For isolated testing, start the editor with `--global-config-dir <temporary-directory>`.
 The browser cannot change that destination or select arbitrary filesystem paths.
@@ -212,19 +212,26 @@ race after the final revision check. Stale `.lock` files carry owner details: ve
 the owner exited before manually removing a stale lock.
 
 Precedence is bundled defaults, global activity, global agent, global activity-specific
-specialist, project activity, project agent, project activity-specific specialist,
-then explicit worker-assignment requests. The UI
-shows sources and preview decisions. A selected project intentionally outranks global
-settings. Preview is configuration evaluation, not proof of runtime/account access.
+specialist, then explicit worker-assignment requests. The UI shows these five
+layers and their preview decisions. Preview is configuration evaluation, not proof of runtime/account access.
 Unsupported requests never silently fall back to a different model or effort.
 
-Adaptive maps mechanical, routine, complex, and exceptional work using the selected
+Adaptive maps straightforward, involved, and demanding work using the selected
 model profile, then applies its ceiling. An unset ceiling uses the model default;
 an explicit inherited ceiling remains when only the model changes. The initial Luna
-mapping is medium/high/xhigh/max with an xhigh default ceiling. Thus max requires
-both exceptional scope and a ceiling allowing it. Mappings are editable starting
+mapping is high/xhigh/max with an xhigh default ceiling. Thus max requires
+both demanding work and a ceiling allowing it. Mappings are editable starting
 policies, not quality guarantees or billing limits. Claude defaults stay Opus 5 and
-low/medium/high by scope, with supported explicit effort overrides available.
+medium/high/high by tier, with supported explicit effort overrides available.
+
+Choose **straightforward** for an established approach with limited decisions and
+direct checks, **involved** for meaningful decisions or bounded interacting behavior,
+and **demanding** for substantial unresolved reasoning across coupled constraints or
+difficult correctness conditions. Give one short reason specific to the assignment.
+Investigation can be demanding while implementing its resolved design is straightforward.
+Security, data-integrity, and recovery responsibilities impose an involved floor;
+flags describe the worker's actual responsibility, not merely the surrounding project.
+No scorecard, classifier, or new request fields are required.
 
 New model selections come only from metadata advertised by installed Codex and Claude
 CLIs. Manual model-ID entry and bundled alternative choices are not offered. Catalog loading is separate from
@@ -245,10 +252,10 @@ credentials or edits CLI settings. Claude uses isolated bare-mode metadata and d
 not verify account entitlement. Catalogs are suggestions, not dispatch authorization.
 Aliases remain exact tokens and may resolve differently later. A newly selected model
 needs its own Adaptive profile or Fixed mode; discovery never invents a tier mapping. Astra has a
-bundled Adaptive profile (low/medium/high/xhigh, default ceiling xhigh), so selecting
+bundled Adaptive profile (medium/high/xhigh, default ceiling xhigh), so selecting
 it does not require creating a profile. Claude CLI choices `default`, `opus[1m]`,
 `claude-fable-5-1[1m]`, and `sonnet` use the existing review mapping
-(low/medium/high/high, ceiling high). Alias labels are preserved as reported;
+(medium/high/high, ceiling high). Alias labels are preserved as reported;
 `opus[1m]` identifies an Opus alias with a 1M context designation, not a pinned version.
 Haiku reports unknown effort metadata and has no inferred Adaptive mapping.
 
@@ -263,15 +270,31 @@ A run snapshots preferences under `.clanker/routing-snapshots/`; saving affects 
 runs. An explicit reload creates another snapshot for future assignments without
 changing already-running workers. Invalid saved files or missing Python block routing
 with an actionable message. Only an explicit user instruction can bypass a named
-invalid preferences file for a run. New runs use policy version 2; frozen version-1
-snapshots retain their original routing. Preference schema remains 1. Older helpers
-reject the new `agents` key, so rollback requires a deliberately exported pre-agent
-document and matching helpers/assets; no automatic preference backup is created.
+invalid preferences file for a run. Only policy-version-4 snapshots are supported. After updating, start a new run
+instead of resuming an older snapshot. Preference/API
+schema remains 1. Rebuild with root `npm run build`, then run `./wrangle.ps1` on
+Windows or `./wrangle.sh` on Unix to update installed helpers and matching assets.
+Old assets fail with rebuild/reinstall guidance.
+
+Complete old profiles are converted in memory using routine → straightforward,
+complex → involved, and exceptional → demanding, retaining the ceiling and unrelated
+settings. Mechanical is retired, so its old assignments can receive different effort.
+**Adaptive Profiles** shows the three tiers and separate ceiling; **Preview** uses the
+same tiers. Opening, previewing, and reinstalling do not rewrite preference files.
+Pending conversion enables **Save** even without edits.
+
+Saving legacy global preferences first preserves its exact original bytes beside the preference
+file as `orchestration-routing.json.pre-three-tier.<sha256>.bak`, where the hash
+identifies the original content. The success message shows that path. An identical
+backup is reused; a different existing backup, backup failure, or revision conflict
+prevents replacement. Current-format saves need no migration backup. Project files
+remain untouched. To roll back, stop the editor, copy the backup over the global
+`orchestration-routing.json`, and restore matching older helpers/assets.
+The backup retains the retired mechanical mapping as well as all other original data.
 
 See [routing usage](subagents/routing/usage.md) for CLI commands, request/schema examples,
 capability checks, logging fields, recommended ignore patterns, and rollback. Target
-projects can version the routing JSON while ignoring logs, snapshots, `.lock`, and
-`.tmp` files. The editor and installers do not change their ignore files.
+projects can ignore logs and snapshots. The editor and installers do not change their ignore files.
 
 Run focused checks from the repository root and editor directory respectively:
 
@@ -328,19 +351,26 @@ It cannot edit the application, run a shell, launch more
 agents, or inspect the live browser. Codex checks its findings and assigns justified
 fixes. The initial review does not include another reviewer's conclusions.
 
+Keep each packet focused on a coherent static contract. Optional `requirement_paths`
+maps each requirement to selected evidence; `parent_checks` records separately owned
+browser and test checks with their status and evidence. A clean static review does not
+complete pending parent checks. Git changes are supplied as readable `.diff` files
+under `_clanker_packet/diffs/`, with paths and hashes in the packet metadata.
+
 Reports are saved beneath `.clanker/reviews/<run-id>/<phase>-<attempt>/` and linked from
 the daily orchestration log. Each includes coverage, findings, settings, limitations,
 and execution status. Source changes invalidate an earlier verdict. A failed or partial
 review remains visible; an explicit waiver is recorded as a waiver, never a pass.
-Default execution bounds are 2700 seconds (45 minutes) and 20 turns, with one automatic recheck per
+The default execution bound is 2700 seconds (45 minutes), with one automatic recheck per
 phase after fixes or additional context. Override the wall-clock limit for an individual
-review with `--timeout-seconds`; the turn limit is separate. The longer default allows
+review with `--timeout-seconds`. The longer default allows
 20–30 minute reviews to complete without removing the finite execution bound.
 
 For direct launcher use, read its help from the loaded package:
 
 ```powershell
 python subagents/scripts/claude_cross_review.py --help
+python subagents/scripts/claude_cross_review.py --manifest review-manifest.json --output-dir .clanker/reviews --prepare-only
 ```
 
 Use a verified Python executable (the command may be `python3` on your machine).
@@ -349,6 +379,18 @@ skill, the helper is at `scripts/claude_cross_review.py` beside `SKILL.md`.
 Review execution requires explicit `--effort <selected-effort>`; there is no fixed
 default. Existing direct commands must add that argument. Freshness-only
 `--check-current <report.json>` does not require it.
+
+`--prepare-only` checks packet evidence and local filesystem readiness without
+launching Claude, checking login, or requiring effort. Its unique report includes file
+and byte counts, advisory scope warnings, and missing or filtered required evidence.
+Preparation is neither review approval nor authorization to export the packet; normal
+execution repeats the checks. Failed attempts report a stage, category, and suggested
+action without exposing raw CLI output.
+
+The coordinator checks available worker capacity before dispatch and reuses a worker
+only when its known model and effort match the assignment. Worker handoffs state
+`draft`, `locally checked`, or `ready for integration`, name the checks actually run,
+and identify remaining acceptance work. The coordinator still verifies integration.
 
 ## Cross-Review Verification
 
