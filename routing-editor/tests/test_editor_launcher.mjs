@@ -41,6 +41,11 @@ test('help and invalid arguments do not launch a service', () => {
   const help = run('--help');
   assert.equal(help.status, 0, help.stderr);
   assert.match(help.stdout, /dev/);
+  assert.doesNotMatch(help.stdout, /--project/);
+  const removed = run('start', '--project', 'unused');
+  assert.notEqual(removed.status, 0);
+  assert.match(removed.stderr, /Unknown option: --project/);
+  assert.doesNotMatch(removed.stdout, /Open the local editor:/);
   const bad = run('start', '--not-a-real-flag');
   assert.notEqual(bad.status, 0);
   assert.doesNotMatch(bad.stdout, /Open the local editor:/);
@@ -90,7 +95,7 @@ test('development startup without Node dependencies cleans its Python backend', 
       await copyFile(path.join(root, name), path.join(fixture, name));
     }
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
-    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '2' }));
+    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '4' }));
     const result = spawnSync(process.execPath, [path.join(fixture, 'routing-editor/scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
       encoding: 'utf8', timeout: 12000, windowsHide: true,
     });
@@ -124,8 +129,10 @@ for (const mode of ['start', 'dev']) {
     const fixture = await mkdtemp(path.join(tmpdir(), 'clanker launcher '));
     const globalDir = path.join(fixture, 'global prefs');
     const project = path.join(fixture, 'project with spaces');
-    await mkdir(project);
-    const child = fork(launcher, [mode, '--global-config-dir', 'global prefs', '--project', 'project with spaces'], {
+    await mkdir(path.join(project, ".clanker"), { recursive: true });
+    const ignored = path.join(project, ".clanker", "orchestration-routing.json");
+    await writeFile(ignored, "malformed ignored project preferences");
+    const child = fork(launcher, [mode, '--global-config-dir', 'global prefs'], {
       cwd: fixture, silent: true, windowsHide: true, env: process.env,
     });
     let origin;
@@ -154,7 +161,8 @@ for (const mode of ['start', 'dev']) {
       const configResponse = await fetch(`${origin}/api/config`, { headers });
       assert.equal(configResponse.status, 200);
       const config = await configResponse.json();
-      assert.equal(path.resolve(config.scopes.project.path), path.join(project, '.clanker', 'orchestration-routing.json'));
+      assert.deepEqual(Object.keys(config.scopes), ['global']);
+      assert.equal(path.resolve(config.scopes.global.path), path.join(globalDir, 'orchestration-routing.json'));
       assert.equal((await fetch(`${origin}/api/config`)).status, 403);
       assert.equal((await fetch(`${origin}/api/config`, { headers: { ...headers, Origin: 'http://untrusted.example' } })).status, 403);
       assert.equal((await fetch(`${origin}/api/config`, { headers: { ...headers, Host: 'untrusted.example' } })).status, 403);
@@ -170,6 +178,7 @@ for (const mode of ['start', 'dev']) {
       });
       assert.equal(saved.status, 200, await saved.text());
       assert.deepEqual(JSON.parse(await readFile(path.join(globalDir, 'orchestration-routing.json'), 'utf8')), document);
+      assert.equal(await readFile(ignored, 'utf8'), 'malformed ignored project preferences');
     } finally {
       const exit = exited ? Promise.resolve() : once(child, 'exit');
       if (child.connected) child.disconnect();

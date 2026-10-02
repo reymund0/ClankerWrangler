@@ -1,54 +1,66 @@
 # Routing preferences and dispatch preparation
 
-In the source checkout, shared `routing_policy.py` lives in `subagents/scripts/`
-and the optional editor's `routing_editor.py` lives in `routing-editor/scripts/`.
-Installed coordinator packages keep both in their `scripts/` directory. Policy
-data and this guide live in `routing/` beside the coordinator's `SKILL.md`
-(source checkout: `subagents/`). Verify the actual Python 3.10+ executable and read
-`--help`. Node is needed only to develop/build the optional React editor.
+Read **Dispatch procedure** for ordinary orchestration. The remaining sections are
+reference material for configuring routes or using the editor.
 
-## Snapshot once, resolve each assignment
+## Dispatch procedure
 
-The parent resolves the actual target repository and creates a unique run ID. Read
-`~/.clanker/orchestration-routing.json` and the target project's optional
-`.clanker/orchestration-routing.json`. Missing files mean inherit; invalid present
-files block. Do not search parent repositories or infer another project's settings.
-The CLI takes explicit paths, allowing isolated tests without changing real global
-preferences. A missing Python executable blocks all configured routing, including a
-run using bundled defaults.
+### Prepare the run snapshot
 
-Create an exclusive parent-owned snapshot file beneath the target project's
-`.clanker/routing-snapshots/`, with an unused filename-safe run ID and ordinal.
-For example, replace timestamp colons with hyphens for Windows filenames; retain
-the original run ID in the log. The helper creates missing parent directories. Example command
-shape (substitute verified absolute paths; do not copy placeholders literally):
+Locate `scripts/routing_policy.py` and `routing/` relative to the loaded coordinator
+package (source checkout: `subagents/`). Verify Python 3.10+ and read the helper's
+`--help`. Disclose the Python prerequisite and global preference source at run
+start. Missing Python or invalid configuration blocks routing; there is no silent fallback.
+
+Use the actual target repository and a unique filename-safe run ID. The helper reads
+only the explicit global preference path; a missing file means inherit.
+Create the snapshot once, under the target repository's `.clanker/routing-snapshots/`:
 
 ```text
-python <package>/scripts/routing_policy.py snapshot --global <home>/.clanker/orchestration-routing.json --project <repo>/.clanker/orchestration-routing.json --output <repo>/.clanker/routing-snapshots/<run-id>-1.json
+python <package>/scripts/routing_policy.py snapshot --global <home>/.clanker/orchestration-routing.json --output <repo>/.clanker/routing-snapshots/<run-id>-1.json
 python <package>/scripts/routing_policy.py resolve --snapshot <saved-snapshot.json> --request <assignment-request.json>
 ```
 
-The snapshot freezes exact input documents and bundled policy plus fingerprints;
-resolve validates it and does not reread live preferences. Keep it for the run.
-For an explicitly requested reload create the next ordinal; never overwrite the old
-snapshot. Log the new fingerprint before subsequent assignments. Snapshot hashes
-identify content, not an authenticated claim about model availability.
+Substitute verified paths. The helper creates an exclusive snapshot containing the
+preferences, bundled policy, sources, versions, and fingerprints. Keep it for the run.
+Reload only on explicit user direction, with a new ordinal and a logged snapshot link;
+do not overwrite previous snapshots or change running workers. Only explicit user
+instruction permits `snapshot --bypass <exact-file-path>` for an invalid source.
 
-Only an explicit user instruction authorizes `snapshot --bypass <exact-file-path>`.
-It ignores that entire named file for this run and records the bypass. Do not use it
-to work around an error on your own initiative.
+### Supply the assignment judgment
 
-## Inputs and interpretation
+Use `planning`, `implementation`, `native-review`, `visual-review`, or `claude-review`
+for `interaction`, and the full specialist ID for native `role`. Several Claude
+specialist profiles still use one `claude-review` route without a native role override.
+`session_override` contains only explicit user choices for this assignment, never
+inferred parent-session settings.
 
-An assignment request has an interaction, optional native specialist ID, assessed
-tier, concise reason, risk flags, optional explicit worker overrides, and available
-runtime capabilities. Example for a bounded native assignment:
+Assess `tier` from the reasoning this assignment needs, independently of model:
+
+- `straightforward`: established approach, limited decisions, and direct checks;
+  for example, extend a handler using an existing validated pattern.
+- `involved`: meaningful decisions, bounded uncertainty, or interacting behavior;
+  for example, coordinate a handler and UI with understood compatibility constraints.
+- `demanding`: substantial unresolved reasoning across coupled constraints or
+  difficult correctness conditions; for example, establish a safe recovery protocol
+  when concurrent state transitions and failure ordering are still unresolved.
+
+Supply one tier and one short assignment-specific `reason`; no scorecard or extra
+assessment fields are required. Reassess each new assignment: investigation may be
+demanding while implementation of its established solution is straightforward.
+Include applicable `risk_flags`: `security`, `data-integrity`, `recovery`,
+`cross-layer`, `uncertainty`, or `performance`. The first three impose at least
+involved, but only when that worker owns the consequential behavior. A copy change
+on a security page does not itself make the worker responsible for authorization.
+File count, role, project importance, or model price alone do not select the tier.
+
+Example request shape (replace the example model/efforts with active runtime evidence):
 
 ```json
 {
   "interaction": "implementation",
   "role": "clanker-backend-developer",
-  "tier": "routine",
+  "tier": "straightforward",
   "risk_flags": [],
   "reason": "Bounded handler change with a defined input contract",
   "session_override": {},
@@ -60,40 +72,43 @@ runtime capabilities. Example for a bounded native assignment:
 }
 ```
 
-The capability values above are illustrative: transcribe the active runtime's
-actual advertised combinations, not this example or the bundled model catalog.
-Native dispatch requires a supported exact requested pair. Unknown/unsupported
-combinations block without fallback. Evidence is parent-attested and does not
-prove the worker's observed effective settings. Keep observed values unknown unless
-the runtime reports them. Supply worker `model` and `reasoning_effort` from the
-resolved decision, using an empty or bounded-history fork; never a full-history fork
-when requesting different settings.
+Capability evidence must come from the active collaboration tool, not the saved model
+catalog. Supply the advertised supported combinations needed to validate the selected
+route. Keep request text free of secrets and private payloads.
 
-`session_override` means the user's explicit request for this worker assignment;
-it never means the model/effort selected for the parent session. Available interactions:
-`planning`, `implementation`, `native-review`, `visual-review`, `claude-review`.
-Use full specialist IDs from the role catalog only for native routes. Multiple
-Claude specialist instructions still share one `claude-review` route.
+### Interpret the result and dispatch
 
-Tier assessment is a parent judgment, not automatic semantic classification by
-Python. Mechanical is a clear transformation, routine is bounded work, complex
-covers uncertainty or consequential risk, and exceptional requires a specific
-reason for unusually difficult reasoning. `security`, `data-integrity`, or `recovery`
-risk imposes at least complex. Other flags: `cross-layer`, `uncertainty`, `performance`.
-Fixed effort remains authoritative. Adaptive maps the tier through the selected
-model's profile and ceiling; model choice alone does not justify max. An explicit
-inherited cap persists through a model-only override. Omitting/resetting the cap
-uses the model profile default. Disclose limiting caps and low fixed effort for
-consequential work; do not claim quality equivalence or silently change models.
+The resolver handles precedence, defaults, fixed/Adaptive effort, profiles, ceilings,
+and capability validation. Its JSON includes the selected `model`/`effort`, limitations,
+provenance, versions, and snapshot fingerprint. Do not recompute those decisions.
 
-For Claude, resolve without inventing capability evidence. A
-`requires_launcher_preflight` result with `launcher_allowed` permits only calling
-the existing `claude_cross_review.py` with explicit resolved `--model` and `--effort`.
-It does not authorize direct model execution or bypass preflight. The launcher checks
-subscription authentication and CLI controls before requesting the review. Reconcile
-its report, record any blocked/failed execution, and retain the ordinary review
-checkpoint and recheck rules. A direct launcher call without `--model` still defaults
-to the generic Opus alias and still requires explicit `--effort`.
+- Native: dispatch only when `dispatch_allowed` is true, using the exact returned pair.
+- Claude: `requires_launcher_preflight` with `launcher_allowed` permits only the guarded
+  `claude_cross_review.py` launcher with explicit resolved `--model` and `--effort`.
+  Follow the cross-review reference; do not invent capability evidence or bypass preflight.
+- Errors or blocked results: report the concrete limitation and continue independent
+  work. Do not substitute models, raise effort, or bypass invalid configuration silently.
+
+Disclose consequential limitations, including ceiling
+constraints or low fixed effort. Profiles express policy, not quality guarantees.
+A successful resolver exit or preview is not proof of dispatch or model execution.
+
+### Capture routing evidence without rewriting it
+
+The snapshot command saves its output when `--output` is supplied. The resolve command
+only prints JSON; capture that output and append it as a compact JSON code block in the
+assignment's run-log event before dispatch. Do not manually transcribe its fields.
+
+Record the snapshot path and configuration source paths once per snapshot. Alongside
+each decision, record explicit `session_override` values (absent from the decision
+JSON), assignment ID/ownership, and instruction path. The generated decision preserves
+schema/policy versions, fingerprint, tier/reason, mode, proposed/requested effort,
+ceiling effects, provenance, and capability status. Summarize only meaningful limitations.
+
+Record dispatch success/failure separately, with observed model/effort only when the
+runtime reports them; otherwise use unknown. Preserve earlier attempts and snapshot
+records. The parent owns these writes; neither resolver previews nor worker reports
+establish successful execution.
 
 ## Preferences and inheritance
 
@@ -101,10 +116,10 @@ Sparse documents contain `schema_version: 1`, optional `agents`, `interactions`,
 `adaptive_profiles`. Native `agents` entries contain a model and/or reasoning and
 use the existing native role IDs. Claude continues to use `interactions.claude-review`.
 Merge order for each route field is bundled defaults, global interaction, global
-agent default, global activity-specific specialist, project interaction, project
-agent default, project activity-specific specialist, then explicit worker override. Reasoning objects and individual profile maps are atomic units.
-Disclose active project overrides at run start. User-selected project precedence is
-intentional; the editor does not add a separate trust/consent system.
+agent default, global activity-specific specialist, then explicit worker override.
+Reasoning objects and individual profile maps are atomic units.
+Project preference files are ignored and left untouched; they are not imported into
+the global configuration.
 
 ```json
 {
@@ -122,29 +137,19 @@ This sets a shared backend-agent default, retaining any activity exceptions. Edi
 an agent field never deletes its activity exceptions; removing that field restores
 inheritance. Requests without a native role ignore agent defaults.
 
-This permits, but does not force, max for Luna. A routine assignment uses high under
-the provisional bundled mapping. Exceptional work maps to max only when its cap
+This permits, but does not force, max for Luna. A straightforward assignment uses high under
+the provisional bundled mapping. Demanding work maps to max only when its cap
 permits it. All mappings are editable policy, not measured quality guarantees.
 A new exact model ID works with fixed effort when runtime evidence supports it;
 Adaptive needs a complete profile keyed `codex:<model>` or `claude:<model>` with
-`tiers` for mechanical/routine/complex/exceptional and `default_ceiling`.
-
-## Run evidence
-
-Log the snapshot path/fingerprint, schema/policy version, field sources, interaction,
-role, assessed tier/factors, fixed/Adaptive mode, proposed versus requested effort,
-ceiling/source, capability state, overrides, and requested versus observed settings.
-For example, a ceiling-limited Luna exceptional assignment records proposed max,
-requested xhigh, its cap source, and unknown observed effort until reported. A failed
-dispatch stays failed; a preview never counts as execution. Keep these concise and
-parent-owned; never log credentials or hidden reasoning.
+`tiers` for straightforward/involved/demanding and `default_ceiling`.
 
 ## Editor and persistence
 
 Build in `routing-editor/` using `npm ci` then `npm run build`. From the checkout:
 
 ```text
-python routing-editor/scripts/routing_editor.py --project <target-project>
+python routing-editor/scripts/routing_editor.py
 ```
 
 From an installed package use its `scripts/routing_editor.py`. Wrangler copies the
@@ -154,7 +159,7 @@ and removed from browser history. Stopping the process invalidates the session.
 For isolated checks pass `--global-config-dir <temporary-global-directory>`; this
 startup-only choice is visible in provenance and cannot be changed by the browser.
 
-The editor saves only its selected global or startup-selected project destination,
+The editor saves only its fixed global destination,
 validates first, and preserves drafts on failed/conflicting saves. Reset saves an
 empty versioned override document. Invalid saved JSON is never silently replaced;
 explicitly repair/reset it in the editor. Linked paths below the pinned roots are
@@ -174,11 +179,20 @@ nor editor changes the target project's ignore file):
 .clanker/*.tmp
 ```
 
-These preserve the option to version `.clanker/orchestration-routing.json`. Reinstall
+Project routing preferences are no longer supported. Reinstall
 updates package defaults/helpers, never preference files. A build/helper version
 mismatch is an error; rebuild/reinstall. Removing overrides restores defaults.
-New snapshots use policy version 2; previously frozen policy-1 snapshots retain their
-original resolution and reported version. Preference/API schema remains 1. An older
-helper rejects the new `agents` key rather than silently ignoring it. For rollback,
-restore a deliberately exported pre-agent preference document with compatible
-helpers/assets; the editor does not create an automatic backup.
+Only policy-version-4 snapshots are supported. Older or unknown snapshot versions
+are rejected with instructions to start a new run. Reinstalling the bundle preserves
+global preferences. Preference/API schema remains 1.
+
+Complete legacy profiles normalize in memory: routine becomes straightforward,
+complex becomes involved, exceptional becomes demanding, and default_ceiling stays
+unchanged. Mechanical is retired; its old assignments can receive a different effort.
+Opening, previewing, and reinstalling never rewrite preferences. The editor marks
+pending conversion and allows Save without further edits. Save backs up exact original
+bytes next to the global file as `orchestration-routing.json.pre-three-tier.<sha256>.bak`
+before writing current profiles. A backup failure or revision conflict prevents the
+write; project files are untouched. To roll back, stop the editor and restore that
+backup to `orchestration-routing.json`, together with compatible helpers/assets.
+Backups contain the entire original document, including retired mechanical values.

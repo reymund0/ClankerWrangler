@@ -1,6 +1,6 @@
-import { emptyPreferences, getOwnAgentRoute, getOwnRoute } from './draft'
+import { getOwnAgentRoute, getOwnRoute } from './draft'
 import { specialistChoices } from './specialists'
-import type { AgentRoute, ConfigResponse, EffectiveRoute, Interaction, Preferences, Reasoning, Role, Scope } from './types'
+import type { AgentRoute, ConfigResponse, EffectiveRoute, Interaction, Preferences, Reasoning, Role } from './types'
 
 function uniform<T>(values: T[]): T | undefined {
   if (values.length === 0) return undefined
@@ -8,15 +8,15 @@ function uniform<T>(values: T[]): T | undefined {
   return values.every((value) => JSON.stringify(value) === serialized) ? values[0] : undefined
 }
 
-export function deriveAgentState(config: ConfigResponse, document: Preferences, scope: Scope, role: Role | string) {
+export function deriveAgentState(config: ConfigResponse, document: Preferences, role: Role | string) {
   const roleId = typeof role === 'string' ? role : role.id
   const own = getOwnAgentRoute(document, roleId)
   const activities = config.bundle.interactions.filter((interaction) =>
-    interaction.provider === 'codex' && specialistChoices(config, document, scope, interaction.id).some((candidate) => candidate.id === roleId))
+    interaction.provider === 'codex' && specialistChoices(config, document, interaction.id).some((candidate) => candidate.id === roleId))
   const rawBaseline = config.effective?.agents?.[roleId]
   const baseline: EffectiveRoute | undefined = rawBaseline ? { ...rawBaseline, route: {
-    ...(rawBaseline.route?.model && !(rawBaseline.provenance?.model?.startsWith(`${scope}.agents.`) && !own?.model) ? { model: rawBaseline.route.model } : {}),
-    ...(rawBaseline.route?.reasoning && !(rawBaseline.provenance?.reasoning?.startsWith(`${scope}.agents.`) && !own?.reasoning) ? { reasoning: rawBaseline.route.reasoning } : {}),
+    ...(rawBaseline.route?.model && !(rawBaseline.provenance?.model?.startsWith('global.agents.') && !own?.model) ? { model: rawBaseline.route.model } : {}),
+    ...(rawBaseline.route?.reasoning && !(rawBaseline.provenance?.reasoning?.startsWith('global.agents.') && !own?.reasoning) ? { reasoning: rawBaseline.route.reasoning } : {}),
   } } : undefined
   const actual = activities
     .map((interaction) => ({ interaction, route: config.effective?.interactions[interaction.id]?.specialists?.[roleId] }))
@@ -29,9 +29,8 @@ export function deriveAgentState(config: ConfigResponse, document: Preferences, 
   const reasoningMixed = !own?.reasoning && !baseline?.route?.reasoning && actualReasoning.length > 1 && !uniform(actualReasoning)
   const valueModel = own?.model ?? inheritedModel ?? ''
   const valueReasoning = own?.reasoning ?? inheritedReasoning
-  const globalDocument = scope === 'project' ? config.scopes.global.document ?? emptyPreferences() : emptyPreferences()
   const exceptionActivities = activities
-    .filter((interaction) => Boolean(getOwnRoute(document, interaction.id, roleId) || getOwnRoute(globalDocument, interaction.id, roleId)))
+    .filter((interaction) => Boolean(getOwnRoute(document, interaction.id, roleId)))
     .map((interaction) => interaction.id)
   const actualDiffers = actual.some(({ route }) =>
     (baseline?.route?.model !== undefined && route.route?.model !== baseline.route.model) ||

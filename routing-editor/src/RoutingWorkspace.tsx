@@ -4,9 +4,15 @@ import { WranglerPanel } from './WranglerPanel'
 import { clone, emptyPreferences, getOwnRoute, reasoningFor, resetAgentField, resetAgentRoute, resetField, resetRoute, updateAgentRoute, updateRoute } from './draft'
 import { specialistChoices } from './specialists'
 import { deriveAgentState } from './routePresentation'
-import type { AdaptiveProfile, AgentRoute, ConfigResponse, Decision, EffectiveRoute, Interaction, ModelCatalogResponse, Preferences, Reasoning, Route, Scope } from './types'
+import type { AdaptiveProfile, AgentRoute, ConfigResponse, Decision, EffectiveRoute, Interaction, ModelCatalogResponse, Preferences, Reasoning, Route } from './types'
 
-const tiers = ['mechanical', 'routine', 'complex', 'exceptional'] as const
+const tiers = ['straightforward', 'involved', 'demanding'] as const
+const tierLabels: Record<typeof tiers[number], string> = { straightforward: 'Straightforward', involved: 'Involved', demanding: 'Demanding' }
+const tierDefinitions: Record<typeof tiers[number], string> = {
+  straightforward: 'Established approach, limited remaining decisions, and direct acceptance checks.',
+  involved: 'Meaningful decisions or bounded uncertainty involving related behavior.',
+  demanding: 'Substantial unresolved reasoning across interacting constraints or difficult correctness arguments.',
+}
 const risks = ['security', 'data-integrity', 'recovery', 'cross-layer', 'uncertainty', 'performance'] as const
 type Provider = 'codex' | 'claude'
 type Choice = { id: string; label: string }
@@ -20,12 +26,12 @@ function effectiveRoute(config: ConfigResponse, interaction: string, role?: stri
 
 function sourceLabel(source?: string | null): string {
   if (!source || source === 'bundle.defaults') return 'Inherited from bundled defaults'
-  if (source === 'this scope') return 'Set in this scope'
+  if (source === 'global preferences') return 'Set in global preferences'
   return source.replaceAll('_', ' ')
 }
 
-function documentFor(scope: Scope, config: ConfigResponse): Preferences {
-  return clone(config.scopes[scope]?.document ?? emptyPreferences())
+function documentFor(config: ConfigResponse): Preferences {
+  return clone(config.scopes.global.document ?? emptyPreferences())
 }
 
 function errorsFor(error: unknown, fallback: string): Record<string, string> {
@@ -149,14 +155,14 @@ function RouteEditor({ config, catalog, document, interaction, role, errors, onC
     <label>Model
       <ModelPicker catalog={catalog} provider={provider} value={valueModel} describedBy={described('model')}
         onChange={(model) => onChange(updateRoute(document, interaction, role, { model }), [`${path}.model`])} />
-      <span id={`${path}-model-help`} className="field-help">{sourceLabel(own?.model ? 'this scope' : effective.provenance?.model)}</span>
+      <span id={`${path}-model-help`} className="field-help">{sourceLabel(own?.model ? 'global preferences' : effective.provenance?.model)}</span>
       <FieldError id={`${path}-model-error`} error={modelError} /><FieldError id={`${path}-route-error`} error={routeError} />
     </label>
     <div className="field-action"><button type="button" className="text-button" onClick={() => reset('model')} disabled={!own?.model}>Reset model</button></div>
     <div className="reasoning-field">
       <span className="field-label">Reasoning mode</span>
       <Segmented label={`${interaction} reasoning mode`} values={['adaptive', 'fixed']} value={valueReasoning.mode} onChange={(mode) => onChange(updateRoute(document, interaction, role, { reasoning: reasoningFor(mode as 'fixed' | 'adaptive', valueReasoning) }), [`${path}.reasoning`])} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
-      <span id={`${path}-reasoning-help`} className="field-help">{sourceLabel(own?.reasoning ? 'this scope' : effective.provenance?.reasoning)}</span>
+      <span id={`${path}-reasoning-help`} className="field-help">{sourceLabel(own?.reasoning ? 'global preferences' : effective.provenance?.reasoning)}</span>
     </div>
     <div className="field-action"><button type="button" className="text-button" onClick={() => reset('reasoning')} disabled={!own?.reasoning}>Reset reasoning</button></div>
     <label className="effort-field">{valueReasoning.mode === 'fixed' ? 'Effort' : 'Adaptive maximum'}
@@ -189,10 +195,9 @@ function RouteSummary({ route, fallback = 'Unresolved' }: { route?: Route; fallb
   return <><span className="route-model">{model}</span><span className="route-effort">{summary}</span></>
 }
 
-function WorkerMatrix({ config, document, scope, selectedRole, errors, onSelect }: {
+function WorkerMatrix({ config, document, selectedRole, errors, onSelect }: {
   config: ConfigResponse
   document: Preferences
-  scope: Scope
   selectedRole: string
   errors: Record<string, string>
   onSelect: (role: string, activity?: string) => void
@@ -201,22 +206,22 @@ function WorkerMatrix({ config, document, scope, selectedRole, errors, onSelect 
   return <div className="matrix-shell">
     <div className="matrix-scroll"><table className="route-matrix"><caption className="sr-only">Worker routes by activity</caption><thead><tr><th scope="col">Specialist</th><th scope="col">Agent default</th>{interactions.map((item) => <th scope="col" key={item.id}>{item.label}</th>)}</tr></thead><tbody>
       {config.bundle.roles.map((role) => {
-        const state = deriveAgentState(config, document, scope, role)
+        const state = deriveAgentState(config, document, role)
         const exceptionCount = state.exceptionActivities.length
         const agentError = errorFor(errors, `agents.${role.id}`)
         const specialistErrors = interactions.filter((activity) => errorFor(errors, `interactions.${activity.id}.specialists.${role.id}`))
         const rowError = Boolean(agentError || specialistErrors.length)
         const defaultModelLabel = state.modelMixed || state.reasoningMixed ? 'Varies by activity' : state.valueModel || 'Unresolved'
         const defaultReasoningLabel = state.modelMixed || state.reasoningMixed ? 'Choose a default' : state.valueReasoning?.mode === 'fixed' ? `fixed · ${state.valueReasoning.effort}` : state.valueReasoning?.mode === 'adaptive' ? `adaptive ≤ ${state.valueReasoning.max_effort ?? 'profile default'}` : 'reasoning unresolved'
-        const defaultStateLabel = state.modelMixed || state.reasoningMixed ? 'Varies' : state.own?.model || state.own?.reasoning ? 'Set in this scope' : 'Inherited'
+        const defaultStateLabel = state.modelMixed || state.reasoningMixed ? 'Varies' : state.own?.model || state.own?.reasoning ? 'Set globally' : 'Inherited'
         return <tr className={`matrix-row${selectedRole === role.id ? ' is-selected' : ''}${rowError ? ' has-error' : ''}`} key={role.id}>
           <th scope="row" className="matrix-specialist"><button type="button" className="specialist-select" onClick={() => onSelect(role.id)} aria-label={`Inspect ${role.label}${rowError ? ', has field errors' : ''}`} aria-pressed={selectedRole === role.id}><strong>{role.label}</strong><span className="mono">{role.id}</span>{rowError && <span className="row-error-label">Field error</span>}</button>{exceptionCount > 0 && <span className="exception-note">{exceptionCount} exception{exceptionCount === 1 ? '' : 's'}</span>}</th>
           <td><button type="button" className={`route-cell ${state.modelMixed || state.reasoningMixed ? 'state-varies' : state.own?.model || state.own?.reasoning ? 'state-set' : 'state-inherited'}`} onClick={() => onSelect(role.id)} aria-label={`${role.label}, agent default: ${defaultModelLabel}, ${defaultReasoningLabel}, ${defaultStateLabel}`}>
             {state.modelMixed || state.reasoningMixed ? <><span className="route-model">Varies by activity</span><span className="route-effort">Choose a default</span></> : <RouteSummary route={{ model: state.valueModel || undefined, reasoning: state.valueReasoning }} />}
-            <span className="state-tag">{state.modelMixed || state.reasoningMixed ? 'Varies' : state.own?.model || state.own?.reasoning ? 'Set in this scope' : 'Inherited'}</span>
+            <span className="state-tag">{state.modelMixed || state.reasoningMixed ? 'Varies' : state.own?.model || state.own?.reasoning ? 'Set globally' : 'Inherited'}</span>
           </button></td>
           {interactions.map((interaction) => {
-            const applicable = specialistChoices(config, document, scope, interaction.id).some((candidate) => candidate.id === role.id)
+            const applicable = specialistChoices(config, document, interaction.id).some((candidate) => candidate.id === role.id)
             if (!applicable) return <td className="not-used" key={interaction.id}><span>Not used</span></td>
             const ownException = getOwnRoute(document, interaction.id, role.id)
             const actual = effectiveRoute(config, interaction.id, role.id).route
@@ -236,7 +241,7 @@ function WorkerMatrix({ config, document, scope, selectedRole, errors, onSelect 
         return <tr className="matrix-row claude-row" key={interaction.id}>
           <th scope="row" className="matrix-specialist"><button type="button" className="specialist-select" onClick={() => onSelect('claude-review')} aria-pressed={selectedRole === 'claude-review'}><strong>Claude cross-review</strong><span className="mono">{interaction.id}</span></button></th>
           <td className="matrix-claude-cell" colSpan={interactions.length + 1}><button type="button" className="route-cell state-claude" onClick={() => onSelect('claude-review')} aria-label={`Claude cross-review: ${model || 'Unresolved'}`}>
-            <RouteSummary route={{ model, reasoning: own?.reasoning ?? route?.reasoning }} /><span className="state-tag">{own?.model || own?.reasoning ? 'Set in this scope' : 'Inherited'}</span>{model && isClaudeAlias(model) && <span className="badge">Alias · resolution may change</span>}
+            <RouteSummary route={{ model, reasoning: own?.reasoning ?? route?.reasoning }} /><span className="state-tag">{own?.model || own?.reasoning ? 'Set globally' : 'Inherited'}</span>{model && isClaudeAlias(model) && <span className="badge">Alias · resolution may change</span>}
           </button></td>
         </tr>
       })}
@@ -244,10 +249,9 @@ function WorkerMatrix({ config, document, scope, selectedRole, errors, onSelect 
   </div>
 }
 
-function AgentInspector({ config, catalog, scope, document, roleId, selectedActivity, selectionSerial, errors, onChange, onPreview }: {
+function AgentInspector({ config, catalog, document, roleId, selectedActivity, selectionSerial, errors, onChange, onPreview }: {
   config: ConfigResponse
   catalog: ModelCatalogResponse | null
-  scope: Scope
   document: Preferences
   roleId: string
   selectedActivity: string
@@ -260,7 +264,7 @@ function AgentInspector({ config, catalog, scope, document, roleId, selectedActi
   const role = config.bundle.roles.find((item) => item.id === roleId)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
-  const agentState = role && !claude ? deriveAgentState(config, document, scope, role) : null
+  const agentState = role && !claude ? deriveAgentState(config, document, role) : null
   const exceptionErrorKeys = role ? Object.keys(errors).filter((field) => field.startsWith('interactions.') && field.includes(`.specialists.${role.id}`)).sort().join('\n') : ''
   useEffect(() => {
     const selectedIsApplicable = Boolean(selectedActivity && agentState?.activities.some((item) => item.id === selectedActivity))
@@ -307,14 +311,14 @@ function AgentInspector({ config, catalog, scope, document, roleId, selectedActi
     <fieldset className="agent-fields"><legend>Agent default</legend>
       <label>Model
         <ModelPicker catalog={catalog} provider="codex" value={model} emptyLabel={state.modelMixed ? 'Varies by activity — choose a default' : 'Inherited model unresolved'} describedBy={pathHelp('model')} onChange={(value) => update({ model: value }, 'model')} />
-        <span id={`${path}-model-help`} className="field-help">{state.modelMixed ? 'Varies by activity. Choose a default to replace only this field.' : own?.model ? sourceLabel('this scope') : state.baseline?.route?.model ? sourceLabel(state.baseline.provenance?.model) : state.inheritedModel ? 'Derived from activity routes' : sourceLabel()}</span>
+        <span id={`${path}-model-help`} className="field-help">{state.modelMixed ? 'Varies by activity. Choose a default to replace only this field.' : own?.model ? sourceLabel('global preferences') : state.baseline?.route?.model ? sourceLabel(state.baseline.provenance?.model) : state.inheritedModel ? 'Derived from activity routes' : sourceLabel()}</span>
         <FieldError id={`${path}-model-error`} error={modelError} /><FieldError id={`${path}-route-error`} error={routeError} />
       </label>
       <button type="button" className="text-button" disabled={!own?.model} onClick={() => onChange(resetAgentField(document, role.id, 'model'), [`${path}.model`])}>Reset model</button>
       <div className="reasoning-field"><span className="field-label">Reasoning mode</span>
         {state.reasoningMixed && !own?.reasoning && <span className="field-help">Varies by activity. Choose a mode to set a sparse agent default.</span>}
         <Segmented label={`${role.label} reasoning mode`} values={['adaptive', 'fixed']} value={reasoning?.mode ?? ''} onChange={(mode) => update({ reasoning: reasoningFor(mode as 'fixed' | 'adaptive', reasoning) }, 'reasoning')} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
-        <span id={`${path}-reasoning-help`} className="field-help">{state.reasoningMixed ? 'Varies by activity' : own?.reasoning ? sourceLabel('this scope') : state.baseline?.route?.reasoning ? sourceLabel(state.baseline.provenance?.reasoning) : state.inheritedReasoning ? 'Derived from activity routes' : sourceLabel()}</span>
+        <span id={`${path}-reasoning-help`} className="field-help">{state.reasoningMixed ? 'Varies by activity' : own?.reasoning ? sourceLabel('global preferences') : state.baseline?.route?.reasoning ? sourceLabel(state.baseline.provenance?.reasoning) : state.inheritedReasoning ? 'Derived from activity routes' : sourceLabel()}</span>
         <FieldError id={`${path}-reasoning-error`} error={reasoningError} />
       </div>
       <button type="button" className="text-button" disabled={!own?.reasoning} onClick={() => onChange(resetAgentField(document, role.id, 'reasoning'), [`${path}.reasoning`])}>Reset reasoning</button>
@@ -343,10 +347,9 @@ function AgentInspector({ config, catalog, scope, document, roleId, selectedActi
   </aside>
 }
 
-function ActivityDefaultCard({ config, catalog, scope, document, interaction, errors, onChange }: {
+function ActivityDefaultCard({ config, catalog, document, interaction, errors, onChange }: {
   config: ConfigResponse
   catalog: ModelCatalogResponse | null
-  scope: Scope
   document: Preferences
   interaction: Interaction
   errors: Record<string, string>
@@ -354,7 +357,7 @@ function ActivityDefaultCard({ config, catalog, scope, document, interaction, er
 }) {
   const own = getOwnRoute(document, interaction.id)
   const hasOwnRoute = Boolean(own?.model || own?.reasoning)
-  const users = specialistChoices(config, document, scope, interaction.id)
+  const users = specialistChoices(config, document, interaction.id)
   const effective = effectiveRoute(config, interaction.id)
   const resetOwnRoute = () => {
     const modelReset = resetField(document, interaction.id, undefined, 'model')
@@ -386,10 +389,9 @@ function profileFamily(key: string): string {
   return `Codex · ${family}`
 }
 
-function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
+function ProfileTable({ config, catalog, document, errors, onChange }: {
   config: ConfigResponse
   catalog: ModelCatalogResponse | null
-  scope: Scope
   document: Preferences
   errors: Record<string, string>
   onChange: (draft: Preferences, changedPaths?: string[]) => void
@@ -399,9 +401,8 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
   const [model, setModel] = useState('')
   const availableModels = modelChoices(catalog, provider)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const globalProfiles = config.scopes.global.document?.adaptive_profiles ?? {}
   const bundledProfiles = config.bundle.defaults.adaptive_profiles ?? {}
-  const keys = [...new Set([...Object.keys(config.effective?.profiles ?? {}), ...Object.keys(bundledProfiles), ...Object.keys(globalProfiles), ...Object.keys(ownProfiles)])].sort()
+  const keys = [...new Set([...Object.keys(config.effective?.profiles ?? {}), ...Object.keys(bundledProfiles), ...Object.keys(ownProfiles)])].sort()
   const families = [...new Set(keys.map(profileFamily))].sort((a, b) => {
     if (a === b) return 0
     if (a.startsWith('Claude')) return -1
@@ -414,8 +415,8 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
   const errorSignature = JSON.stringify({ families: errorFamilies, errors: Object.entries(errors).filter(([path]) => path.startsWith('adaptive_profiles.')) })
   useEffect(() => {
     const affected = (JSON.parse(errorSignature) as { families: string[] }).families
-    if (affected.length) setExpanded((current) => ({ ...current, ...Object.fromEntries(affected.map((family) => [`${scope}:${family}`, true])) }))
-  }, [errorSignature, scope])
+    if (affected.length) setExpanded((current) => ({ ...current, ...Object.fromEntries(affected.map((family) => [`global:${family}`, true])) }))
+  }, [errorSignature])
   useEffect(() => { if (!availableModels.some((item) => item.id === model)) setModel('') }, [availableModels, model])
 
   const customizeKey = (key: string) => {
@@ -424,9 +425,9 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
     const profileProvider = key.slice(0, separator) as Provider
     const profileModel = key.slice(separator + 1)
     if (!modelChoices(catalog, profileProvider).some((item) => item.id === profileModel)) return
-    const inherited = scope === 'project' ? globalProfiles[key] ?? bundledProfiles[key] : bundledProfiles[key]
-    const fallback = inherited ?? config.effective?.profiles[key] ?? { tiers: { mechanical: 'low', routine: 'medium', complex: 'high', exceptional: 'xhigh' }, default_ceiling: 'xhigh' }
-    setExpanded((current) => ({ ...current, [`${scope}:${profileFamily(key)}`]: true }))
+    const inherited = bundledProfiles[key]
+    const fallback = inherited ?? config.effective?.profiles[key] ?? { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'xhigh' }
+    setExpanded((current) => ({ ...current, [`global:${profileFamily(key)}`]: true }))
     onChange({ ...clone(document), adaptive_profiles: { ...ownProfiles, [key]: clone(fallback) } }, [`adaptive_profiles.${key}`])
     if (model === profileModel && provider === profileProvider) setModel('')
   }
@@ -454,15 +455,16 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
       <button type="button" className="primary" onClick={customize} disabled={!model || Boolean(ownProfiles[`${provider}:${model}`])}>Customize profile</button>
     </div>
     {!availableModels.length && <p className="field-help">No models were reported by the local {provider} CLI.</p>}
+    <section className="profile-tier-guide" aria-label="Adaptive tier definitions">{tiers.map((tier) => <div key={tier}><strong>{tierLabels[tier]}</strong><span>{tierDefinitions[tier]}</span></div>)}</section>
     {keys.length === 0 ? <p className="empty">No profile data was reported. Select a locally reported model to customize its profile.</p> : <div className="profile-table-scroll"><div className="profile-table" role="table" aria-label="Adaptive model profiles">
-      <div className="profile-row profile-heading" role="row"><span role="columnheader">Model</span>{tiers.map((tier) => <span role="columnheader" key={tier}>{tier}</span>)}<span role="columnheader">Default ceiling</span><span role="columnheader">Actions</span></div>
+      <div className="profile-row profile-heading" role="row"><span role="columnheader">Model</span>{tiers.map((tier) => <span role="columnheader" key={tier} aria-label={`${tierLabels[tier]}: ${tierDefinitions[tier]}`} title={tierDefinitions[tier]}><span>{tierLabels[tier]}</span><span id={`tier-definition-${tier}`} className="sr-only">{tierDefinitions[tier]}</span></span>)}<span role="columnheader">Default ceiling</span><span role="columnheader">Actions</span></div>
       {families.map((family) => {
         const familyKeys = keys.filter((key) => profileFamily(key) === family)
         const customized = familyKeys.filter((key) => ownProfiles[key]).length
-        const stateKey = `${scope}:${family}`
+        const stateKey = `global:${family}`
         const isExpanded = expanded[stateKey] ?? (customized > 0 || errorFamilies.includes(family))
         return <div role="rowgroup" key={family}>
-          <div role="row" className="profile-family-heading"><div role="cell" aria-colspan={7}>
+          <div role="row" className="profile-family-heading"><div role="cell" aria-colspan={6}>
             <button type="button" aria-expanded={isExpanded} onClick={() => setExpanded((current) => ({ ...current, [stateKey]: !isExpanded }))}>
               <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span><strong>{family}</strong><span>{familyKeys.length} models</span>{customized > 0 && <span>· {customized} customized here</span>}
             </button>
@@ -472,24 +474,25 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
         const profileProvider = key.slice(0, separator) as Provider
         const profileModel = key.slice(separator + 1)
         const own = ownProfiles[key]
-        const inherited = scope === 'project' ? globalProfiles[key] ?? bundledProfiles[key] : bundledProfiles[key]
+        const inherited = bundledProfiles[key]
         const displayed = own ?? inherited ?? config.effective?.profiles[key]
         if (!displayed) return null
         const path = `adaptive_profiles.${key}`
         const profileError = errorFor(errors, path)
-        const fields = [...tiers.map((tier) => ({ label: tier, field: `tiers.${tier}` as const, value: displayed.tiers[tier], inheritedValue: inherited?.tiers[tier] })), { label: 'Default ceiling', field: 'default_ceiling' as const, value: displayed.default_ceiling, inheritedValue: inherited?.default_ceiling }]
+        const fields = [...tiers.map((tier) => ({ label: tierLabels[tier], field: `tiers.${tier}` as const, value: displayed.tiers[tier], inheritedValue: inherited?.tiers[tier] })), { label: 'Default ceiling', field: 'default_ceiling' as const, value: displayed.default_ceiling, inheritedValue: inherited?.default_ceiling }]
         const effortOrder = config.bundle.effort_orders[profileProvider] ?? []
         return <div role="row" key={key} className={`profile-row${own ? ' is-customized' : ''}`}>
           <div role="rowheader" className="profile-model"><span className="mono">{key}</span><FieldError id={`${path}-error`} error={profileError} />{own && <span className="state-tag">Customized here</span>}</div>
           {fields.map(({ label, field, value, inheritedValue }) => {
             const fieldPath = `${path}.${field}`
             const fieldError = errorFor(errors, fieldPath) ?? (field.startsWith('tiers.') ? errorFor(errors, `${path}.tiers`) : undefined)
+            const tierDescription = field.startsWith('tiers.') ? `tier-definition-${field.slice(6)}` : ''
             const choices = effortChoices(config, catalog, profileProvider, profileModel, value)
             const meterLevels = [...new Set(choices.options.filter((item) => !item.disabled).map((item) => item.value))]
               .sort((a, b) => (effortOrder.includes(a) ? effortOrder.indexOf(a) : effortOrder.length) - (effortOrder.includes(b) ? effortOrder.indexOf(b) : effortOrder.length))
             const changed = Boolean(own && inheritedValue !== undefined && value !== inheritedValue)
             return <div role="cell" className={`profile-value${changed ? ' differs' : ''}`} key={field}>
-              {own ? <label className="profile-editor"><span className="sr-only">{key} {label}</span><select value={value} aria-describedby={[fieldError ? `${fieldPath}-error` : '', choices.note ? `${fieldPath}-help` : ''].filter(Boolean).join(' ') || undefined} onChange={(event) => modify(key, field, event.target.value)}>{choices.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select></label> : <span className="profile-effort">{value}</span>}
+              {own ? <label className="profile-editor"><span className="sr-only">{key} {label}</span><select value={value} aria-describedby={[tierDescription, fieldError ? `${fieldPath}-error` : '', choices.note ? `${fieldPath}-help` : ''].filter(Boolean).join(' ') || undefined} onChange={(event) => modify(key, field, event.target.value)}>{choices.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select></label> : <span className="profile-effort">{value}</span>}
               <span className="effort-meter" aria-hidden="true">{meterLevels.map((level, index) => <i key={level} data-effort={level} className={index <= meterLevels.indexOf(value) ? `filled effort-${level}` : ''} />)}</span>
               {own && choices.note && <span id={`${fieldPath}-help`} className="field-help">{choices.note}</span>}
               {changed && <span className="field-help">Different from inherited {inheritedValue}</span>}
@@ -502,11 +505,13 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
         </div>
       })}
     </div></div>}
+    {config.scopes.global.migration_pending && <p className="profile-migration" role="status"><strong>Legacy profile conversion is pending.</strong> Routine maps to Straightforward, Complex to Involved, and Exceptional to Demanding. Mechanical is retired and its value is not reused as a new tier. Saving explicitly converts global preferences and preserves the original document in a backup.</p>}
+    {config.scopes.global.migration_backup && !config.scopes.global.migration_pending && <p className="profile-migration profile-migration--saved" role="status"><strong>Profile conversion saved.</strong> Original preferences backup: <code>{config.scopes.global.migration_backup}</code></p>}
     {Object.entries(ownProfiles)[0] ? (() => {
       const [key, profile] = Object.entries(ownProfiles)[0]
       const providerForKey = key.slice(0, key.indexOf(':')) as Provider
-      const example = profileEffort(config, providerForKey, profile, 'complex')
-      return <p className="profile-example"><strong>Example:</strong> A complex task on <span className="mono">{key.slice(key.indexOf(':') + 1)}</span> maps to <strong>{example.mapped}</strong>; the {profile.default_ceiling} ceiling yields requested effort <strong>{example.requested}</strong>.</p>
+      const example = profileEffort(config, providerForKey, profile, 'involved')
+      return <p className="profile-example"><strong>Example:</strong> An involved task on <span className="mono">{key.slice(key.indexOf(':') + 1)}</span> maps to <strong>{example.mapped}</strong>; the {profile.default_ceiling} ceiling yields requested effort <strong>{example.requested}</strong>.</p>
     })() : null}
     <p className="profile-footnote">Only efforts reported by the local CLI can be chosen. Profiles are routing policy, not a quality guarantee.</p>
   </>
@@ -515,20 +520,15 @@ function ProfileTable({ config, catalog, scope, document, errors, onChange }: {
 type TraceLayer = { label: string; source: string; route: Route }
 type TraceDecision = { layers: TraceLayer[]; modelWinner: number | null; reasoningWinner: number | null; modelTrusted: boolean; reasoningTrusted: boolean }
 
-function traceDecision(config: ConfigResponse, scope: Scope, document: Preferences, interaction: string, role: string, sessionRoute: Route, decision: Decision): TraceDecision {
+function traceDecision(config: ConfigResponse, document: Preferences, interaction: string, role: string, sessionRoute: Route, decision: Decision): TraceDecision {
   const bundled = config.bundle.defaults.interactions?.[interaction]
   const layers: TraceLayer[] = [
     { label: 'Bundled defaults', source: 'bundle.defaults', route: { model: bundled?.model, reasoning: bundled?.reasoning } },
   ]
-  const scopeDocuments: { name: 'global' | 'project'; value: Preferences }[] = scope === 'global'
-    ? [{ name: 'global', value: document }, { name: 'project', value: emptyPreferences() }]
-    : [{ name: 'global', value: config.scopes.global.document ?? emptyPreferences() }, { name: 'project', value: document }]
-  for (const item of scopeDocuments) {
-    const activityRoute = item.value.interactions?.[interaction]
-    layers.push({ label: `${item.name === 'global' ? 'Global' : 'Project'} activity`, source: `${item.name}.interactions.${interaction}`, route: { model: activityRoute?.model, reasoning: activityRoute?.reasoning } })
-    layers.push({ label: `${item.name === 'global' ? 'Global' : 'Project'} agent default`, source: `${item.name}.agents.${role}`, route: role ? item.value.agents?.[role] ?? {} : {} })
-    layers.push({ label: `${item.name === 'global' ? 'Global' : 'Project'} activity exception`, source: `${item.name}.interactions.${interaction}.specialists.${role}`, route: role ? activityRoute?.specialists?.[role] ?? {} : {} })
-  }
+  const activityRoute = document.interactions?.[interaction]
+  layers.push({ label: 'Global activity', source: `global.interactions.${interaction}`, route: { model: activityRoute?.model, reasoning: activityRoute?.reasoning } })
+  layers.push({ label: 'Global agent default', source: `global.agents.${role}`, route: role ? document.agents?.[role] ?? {} : {} })
+  layers.push({ label: 'Global activity-specific specialist', source: `global.interactions.${interaction}.specialists.${role}`, route: role ? activityRoute?.specialists?.[role] ?? {} : {} })
   layers.push({ label: 'Session override', source: 'session_override', route: sessionRoute })
 
   let resolvedModel: string | undefined
@@ -541,7 +541,7 @@ function traceDecision(config: ConfigResponse, scope: Scope, document: Preferenc
   })
   const exactWinner = (source: string, field: 'model' | 'reasoning'): number | null => {
     if (source === 'bundle.defaults') return 0
-    if (source === 'session_override' || source === `session_override.${field}`) return 7
+    if (source === 'session_override' || source === `session_override.${field}`) return 4
     return layers.findIndex((layer, index) => index > 0 && source === `${layer.source}.${field}`) >= 0
       ? layers.findIndex((layer, index) => index > 0 && source === `${layer.source}.${field}`)
       : null
@@ -565,10 +565,9 @@ function effortExplanation(decision: Decision, selectedTier: string, selectedRis
   </ol>
 }
 
-function Preview({ config, catalog, scope, document, prefill, onError, onSuccess }: {
+function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
   config: ConfigResponse
   catalog: ModelCatalogResponse | null
-  scope: Scope
   document: Preferences
   prefill: Prefill | null
   onError: (error: unknown) => void
@@ -576,7 +575,7 @@ function Preview({ config, catalog, scope, document, prefill, onError, onSuccess
 }) {
   const [interaction, setInteraction] = useState(config.bundle.interactions.some((item) => item.id === 'implementation') ? 'implementation' : config.bundle.interactions[0]?.id ?? '')
   const [role, setRole] = useState('')
-  const [tier, setTier] = useState<typeof tiers[number]>('routine')
+  const [tier, setTier] = useState<typeof tiers[number]>('straightforward')
   const [reason, setReason] = useState('Preview a saved routing choice')
   const [selectedRisks, setSelectedRisks] = useState<string[]>([])
   const [sessionModel, setSessionModel] = useState('')
@@ -589,7 +588,7 @@ function Preview({ config, catalog, scope, document, prefill, onError, onSuccess
   useEffect(() => { requestVersion.current += 1; setDecision(null); setBusy(false); onSuccess() }, [document, interaction, role, tier, reason, selectedRisks, sessionModel, sessionMode, sessionEffort])
   const selected = config.bundle.interactions.find((item) => item.id === interaction) ?? config.bundle.interactions[0]
   const selectedProvider = selected?.provider ?? 'codex'
-  const specialists = specialistChoices(config, document, scope, interaction)
+  const specialists = specialistChoices(config, document, interaction)
   useEffect(() => { if (role && !specialists.some((item) => item.id === role)) setRole('') }, [role, specialists])
   const specialistModel = role ? getOwnRoute(document, interaction, role)?.model : undefined
   const interactionModel = getOwnRoute(document, interaction)?.model
@@ -601,7 +600,7 @@ function Preview({ config, catalog, scope, document, prefill, onError, onSuccess
     setBusy(true)
     const session_override = sessionModel || sessionEffort ? { ...(sessionModel ? { model: sessionModel } : {}), ...(sessionEffort ? { reasoning: reasoningFor(sessionMode, undefined, sessionEffort) } : {}) } : undefined
     try {
-      const response = await api.preview(scope, document, { interaction, ...(role ? { role } : {}), tier, risk_flags: selectedRisks, reason, ...(session_override ? { session_override } : {}) })
+      const response = await api.preview(document, { interaction, ...(role ? { role } : {}), tier, risk_flags: selectedRisks, reason, ...(session_override ? { session_override } : {}) })
       if (version === requestVersion.current) { setDecision(response.decision); onSuccess() }
     } catch (error) {
       if (version === requestVersion.current) { setDecision(null); onError(error) }
@@ -609,12 +608,12 @@ function Preview({ config, catalog, scope, document, prefill, onError, onSuccess
   }
   const toggleRisk = (risk: string) => setSelectedRisks((current) => current.includes(risk) ? current.filter((item) => item !== risk) : [...current, risk])
   const sessionRoute: Route = { ...(sessionModel ? { model: sessionModel } : {}), ...(sessionEffort ? { reasoning: reasoningFor(sessionMode, undefined, sessionEffort) } : {}) }
-  const trace = decision ? traceDecision(config, scope, document, decision.interaction, decision.role ?? '', sessionRoute, decision) : null
+  const trace = decision ? traceDecision(config, document, decision.interaction, decision.role ?? '', sessionRoute, decision) : null
 
   return <section className="preview-workspace" aria-labelledby="preview-title">
     <form onSubmit={runPreview} className="preview-form-panel">
       <p className="eyebrow">Draft preview</p><h1 id="preview-title">Preview a route</h1>
-      <p className="preview-intro">Uses this unsaved {scope} draft. Nothing is saved or run.</p>
+      <p className="preview-intro">Uses this unsaved global draft. Nothing is saved or run.</p>
       <label>Activity<select value={interaction} onChange={(event) => { setInteraction(event.target.value); setRole('') }}>{config.bundle.interactions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
       {selectedProvider === 'codex' && <label>Specialist (optional)<select value={role} onChange={(event) => setRole(event.target.value)}><option value="">Activity route</option>{specialists.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>}
       <div><span className="field-label">Task tier</span><Segmented label="Task tier" values={tiers} value={tier} onChange={(value) => setTier(value as typeof tier)} format={(value) => value[0].toUpperCase() + value.slice(1)} /></div>
@@ -635,8 +634,8 @@ function Preview({ config, catalog, scope, document, prefill, onError, onSuccess
           <div className="decision-lead"><strong className="mono">{decision.model}</strong><strong>{decision.effort}</strong></div>
           <dl><div><dt>Proposed</dt><dd>{decision.proposed_effort}</dd></div><div><dt>Ceiling</dt><dd>{decision.ceiling ?? 'None'}</dd></div><div><dt>Capability</dt><dd>{decision.capability_status}</dd></div></dl><p>{decision.reason}</p>
         </section>
-        <section className="trace-section"><h2>How it resolved</h2><p className="field-help">Saved global and project values are shown at their precedence layer; the resolver identifies the winning source for each field.</p>
-          <div className="trace-scroll"><div role="table" className="trace-table" aria-label="Eight routing precedence layers">
+        <section className="trace-section"><h2>How it resolved</h2><p className="field-help">Global values are shown at their precedence layer; the resolver identifies the winning source for each field.</p>
+          <div className="trace-scroll"><div role="table" className="trace-table" aria-label="Five routing precedence layers">
             <div role="row" className="trace-row trace-heading"><span role="columnheader">Layer</span><span role="columnheader">Model</span><span role="columnheader">Reasoning</span></div>
             {trace?.layers.map((layer, index) => {
               const modelKnown = trace.modelTrusted ? layer.route.model : trace.modelWinner === index ? decision.model : undefined
@@ -694,7 +693,6 @@ export function RoutingWorkspace() {
   const [catalogError, setCatalogError] = useState('')
   const [catalogLoading, setCatalogLoading] = useState(false)
   const [displayEffective, setDisplayEffective] = useState<ConfigResponse['effective']>(null)
-  const [scope, setScope] = useState<Scope>('global')
   const [draft, setDraft] = useState<Preferences>(emptyPreferences())
   const [dirty, setDirty] = useState(false)
   const [persistentErrors, setErrors] = useState<Record<string, string>>({})
@@ -715,7 +713,6 @@ export function RoutingWorkspace() {
   const [prefillSerial, setPrefillSerial] = useState(0)
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])
   const draftVersion = useRef(0)
-  const scopeRef = useRef(scope)
   const loadVersion = useRef(0)
   const catalogVersion = useRef(0)
 
@@ -740,13 +737,12 @@ export function RoutingWorkspace() {
   const load = async (): Promise<boolean> => {
     const version = ++loadVersion.current
     const versionAtStart = draftVersion.current
-    const scopeAtStart = scopeRef.current
     setLoading(true); setDisplayEffective(null)
     try {
       const next = await api.config()
       if (version !== loadVersion.current) return false
-      if (draftVersion.current !== versionAtStart || scopeRef.current !== scopeAtStart) return false
-      setConfig(next); setDraft(documentFor(scopeAtStart, next)); setDirty(false); setErrors(next.error ? { load: next.error } : {}); setPreviewErrors({}); setValidationErrors({}); setDismissedAlerts([])
+      if (draftVersion.current !== versionAtStart) return false
+      setConfig(next); setDraft(documentFor(next)); setDirty(false); setErrors(next.error ? { load: next.error } : {}); setPreviewErrors({}); setValidationErrors({}); setDismissedAlerts([])
       return true
     } catch (error) {
       if (version === loadVersion.current) { setErrors({ load: error instanceof Error ? error.message : 'Unable to load configuration' }); setDismissedAlerts([]) }
@@ -773,38 +769,35 @@ export function RoutingWorkspace() {
     if (!config) return
     let stale = false
     const timer = window.setTimeout(() => {
-      void api.preview(scope, draft).then((response) => { if (!stale) { setDisplayEffective(response.effective); setValidationErrors({}) } }).catch((error) => { if (!stale) setValidationErrors(errorsFor(error, 'validation')) })
+      void api.preview(draft).then((response) => { if (!stale) { setDisplayEffective(response.effective); setValidationErrors({}) } }).catch((error) => { if (!stale) setValidationErrors(errorsFor(error, 'validation')) })
     }, 180)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [config, scope, draft])
+  }, [config, draft])
 
   useEffect(() => {
     if (!config?.bundle.roles.length) return
     if (selectedRole === 'claude-review' || selectedRole && config.bundle.roles.some((role) => role.id === selectedRole)) return
     setSelectedRole(config.bundle.roles[0].id)
   }, [config])
-  const switchScope = (next: Scope) => {
-    if (next === scope || saving) return
-    if (dirty && !window.confirm('Discard your unsaved changes and switch scope?')) return
-    scopeRef.current = next; draftVersion.current += 1; setDisplayEffective(null); setScope(next); setDismissedAlerts([])
-    if (config) { setDraft(documentFor(next, config)); setDirty(false); setErrors({}); setPreviewErrors({}); setValidationErrors({}); setNotice('') }
-  }
   const save = async () => {
     if (!config || saving || loading) return
-    const scopeAtSave = scopeRef.current
-    const revision = config.scopes[scopeAtSave]?.revision
+    const revision = config.scopes.global.revision
     if (!revision) return
     const versionAtSave = draftVersion.current
     const documentAtSave = draft
     setSaving(true)
     try {
-      const next = await api.save(scopeAtSave, documentAtSave, revision)
+      const next = await api.save(documentAtSave, revision)
       setConfig(next)
-      if (draftVersion.current === versionAtSave && scopeRef.current === scopeAtSave) { setDraft(documentFor(scopeAtSave, next)); setDirty(false); setErrors({}); setPreviewErrors({}); setValidationErrors({}); setNotice(`Saved ${scopeAtSave} preferences.`); setDismissedAlerts([]) }
-      else setNotice(`Saved ${scopeAtSave} preferences. Newer changes remain unsaved.`)
+      if (draftVersion.current === versionAtSave) {
+        setDraft(documentFor(next)); setDirty(false); setErrors({}); setPreviewErrors({}); setValidationErrors({})
+        setNotice('Saved global preferences.')
+        setDismissedAlerts([])
+      }
+      else setNotice('Saved global preferences. Newer changes remain unsaved.')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Save failed'
-      if (draftVersion.current === versionAtSave && scopeRef.current === scopeAtSave) { replaceSaveErrors(error, message, true); setNotice((error instanceof ApiError && error.status === 409) || /changed since loading|changed during saving|locked/i.test(message) ? 'Save conflict: your draft is still available. Export it before reloading.' : ''); setDismissedAlerts([]) }
+      if (draftVersion.current === versionAtSave) { replaceSaveErrors(error, message, true); setNotice((error instanceof ApiError && error.status === 409) || /changed since loading|changed during saving|locked/i.test(message) ? 'Save conflict: your draft is still available. Export it before reloading.' : ''); setDismissedAlerts([]) }
       else { replaceSaveErrors(error, message, false); setNotice('Save did not replace newer changes.') }
     } finally { setSaving(false) }
   }
@@ -812,12 +805,12 @@ export function RoutingWorkspace() {
     if (saving) return
     if (dirty) {
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' })
-      const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = `routing-${scope}-draft.json`; anchor.click(); URL.revokeObjectURL(anchor.href)
+      const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = 'routing-global-draft.json'; anchor.click(); URL.revokeObjectURL(anchor.href)
       if (!window.confirm('Your draft was exported. Discard it and reload the latest saved preferences?')) return
     }
     if (await load()) setNotice('Reloaded saved preferences.')
   }
-  const reset = () => { updateDraft(emptyPreferences(), ['agents', 'interactions', 'adaptive_profiles']); setNotice(`Empty ${scope} override is ready to save.`) }
+  const reset = () => { updateDraft(emptyPreferences(), ['agents', 'interactions', 'adaptive_profiles']); setNotice('Empty global preferences are ready to save.') }
   const openPreview = (interaction: string, role: string) => {
     const serial = prefillSerial + 1
     setPrefillSerial(serial); setPrefill({ interaction, role, serial }); setScreen('preview')
@@ -827,31 +820,30 @@ export function RoutingWorkspace() {
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
     if (next >= 0) { event.preventDefault(); setScreen(tabs[next].id); document.getElementById(`tab-${tabs[next].id}`)?.focus() }
   }
-  const currentPath = config?.scopes[scope]?.path
-  const projectPathParts = config?.scopes.project?.path.split(/[\\/]/).filter(Boolean) ?? []
-  const projectName = projectPathParts.at(-2) === '.clanker' ? projectPathParts.at(-3) ?? 'selected' : 'selected'
+  const currentPath = config?.scopes.global.path
   const displayConfig = config ? { ...config, effective: displayEffective } : null
   const fieldErrorScreens = new Set(Object.keys(errors).map(errorTab).filter((item): item is Screen => item !== null))
-  const savedChanges = config ? countChanges(documentFor(scope, config), draft) : 0
+  const savedChanges = config ? countChanges(documentFor(config), draft) : 0
   const dirtyLabel = savedChanges === 1 ? '1 unsaved change' : `${savedChanges} unsaved changes`
+  const migrationPending = Boolean(config?.scopes.global.migration_pending)
   const knownAlerts = ['load', 'save', 'validation', 'preview']
   const alerts = [
     ...(dirty && notice ? [{ key: 'notice', message: notice }] : []),
     ...knownAlerts.flatMap((key) => errors[key] ? [{ key, message: errors[key] }] : []),
     ...Object.entries(errors).filter(([key]) => !knownAlerts.includes(key) && errorTab(key) === null).map(([key, message]) => ({ key: `field:${key}`, message })),
   ]
-  const resetScopeLabel = `Reset ${scope} override`
 
   return <div className="routing-workspace">
     <header className="workspace-header">
       <div className="header-top">
         <div className="brand-block"><span className="brand-mark" aria-hidden="true">ON</span><div><strong>Orchestration Nation</strong><span>Routing</span></div></div>
-        <div className="scope-switch" role="group" aria-label="Scope"><button type="button" aria-pressed={scope === 'global'} disabled={saving || loading} onClick={() => switchScope('global')}>Global</button><button type="button" aria-pressed={scope === 'project'} disabled={!config?.scopes.project || saving || loading} onClick={() => switchScope('project')}>Project{config?.scopes.project ? ' · ' + projectName : ' · unavailable'}</button></div>
         <div className="header-path"><span className="sr-only">Configuration file</span><code>{currentPath ?? 'Loading configuration path…'}</code></div>
         <div className={`save-state ${dirty ? 'dirty' : ''}`} aria-live="polite" role="status">{dirty ? dirtyLabel : notice || 'All changes saved'}</div>
         <label className="theme-select">Theme<select aria-label="Theme" value={theme} onChange={(event) => setTheme(event.target.value as typeof theme)}><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
-        <div className="header-actions"><WranglerPanel status={config?.wrangler} /><button type="button" className="secondary" onClick={() => void reload()} disabled={saving || loading}>Export draft &amp; reload</button><button type="button" className="secondary" onClick={reset} disabled={saving || loading}>{resetScopeLabel}</button><button type="button" className="primary save-button" onClick={() => void save()} disabled={!dirty || saving || loading}>{saving ? 'Saving…' : `Save ${scope === 'global' ? 'global' : 'project'} preferences`}</button></div>
+        <div className="header-actions"><WranglerPanel status={config?.wrangler} /><button type="button" className="secondary" onClick={() => void reload()} disabled={saving || loading}>Export draft &amp; reload</button><button type="button" className="secondary" onClick={reset} disabled={saving || loading}>Reset global preferences</button><button type="button" className="primary save-button" onClick={() => void save()} disabled={(!dirty && !config?.scopes.global.migration_pending) || saving || loading}>{saving ? 'Saving…' : 'Save global preferences'}</button></div>
       </div>
+      {migrationPending && <div className="header-migration-row"><p className="migration-save-note" role="status">Legacy conversion pending: Routine → Straightforward, Complex → Involved, Exceptional → Demanding; Mechanical is retired. Save converts global preferences and preserves the original document in a backup.</p></div>}
+      {!migrationPending && config?.scopes.global.migration_backup && <div className="header-migration-row"><p className="migration-save-note migration-save-note--saved" role="status"><strong>Profile conversion saved.</strong> Original preferences backup: <code>{config.scopes.global.migration_backup}</code></p></div>}
     </header>
     <nav className="screen-tabs" role="tablist" aria-label="Routing editor screens" onKeyDown={(event) => { if (event.target instanceof HTMLButtonElement) handleTabKey(event as unknown as KeyboardEvent<HTMLButtonElement>) }}>
       {tabs.map((tab) => <button id={`tab-${tab.id}`} key={tab.id} type="button" role="tab" aria-selected={screen === tab.id} aria-controls={`panel-${tab.id}`} tabIndex={screen === tab.id ? 0 : -1} onClick={() => setScreen(tab.id)}>
@@ -863,24 +855,24 @@ export function RoutingWorkspace() {
     {!config && !loading && dismissedAlerts.includes('load') && <div className="alert-stack"><p>Routing preferences are unavailable.</p><button type="button" className="secondary" onClick={() => void load()}>Retry load</button></div>}
     {displayConfig && <main className="screen-content">
       <section id="panel-routes" className="tab-panel" role="tabpanel" aria-labelledby="tab-routes" hidden={screen !== 'routes'}>
-        <div className="screen-title"><div><p className="eyebrow">Configure native specialists</p><h1>Worker routes</h1><p>Compare each specialist’s default with its activity routes, then inspect or edit the selected worker.</p></div><div className="legend"><span><i className="legend-dot inherited" />Inherited</span><span><i className="legend-dot set" />Set in this scope</span><span><i className="legend-dot exception" />Activity exception</span></div></div>
+        <div className="screen-title"><div><p className="eyebrow">Configure native specialists</p><h1>Worker routes</h1><p>Compare each specialist’s global default with its activity routes, then inspect or edit the selected worker.</p></div><div className="legend"><span><i className="legend-dot inherited" />Inherited</span><span><i className="legend-dot set" />Set globally</span><span><i className="legend-dot exception" />Activity exception</span></div></div>
         <p className="session-note"><strong>Parent session settings are session-controlled.</strong> They remain read-only and are not changed by worker routes.</p>
         <CatalogStatusPanel catalog={catalog} loading={catalogLoading} error={catalogError} onRefresh={() => void loadCatalog(true)} />
-        <div className="worker-layout"><section className="matrix-panel" aria-label="Worker route matrix"><div className="panel-heading"><h2>Route matrix</h2><p>Choose a cell to inspect that specialist.</p></div><WorkerMatrix config={displayConfig} document={draft} scope={scope} selectedRole={selectedRole} errors={errors} onSelect={(role, activity) => { setSelectedRole(role); setSelectedActivity(activity ?? ''); setSelectionSerial((current) => current + 1) }} /></section>
-          <AgentInspector config={displayConfig} catalog={catalog} scope={scope} document={draft} roleId={selectedRole} selectedActivity={selectedActivity} selectionSerial={selectionSerial} errors={errors} onChange={updateDraft} onPreview={openPreview} />
+        <div className="worker-layout"><section className="matrix-panel" aria-label="Worker route matrix"><div className="panel-heading"><h2>Route matrix</h2><p>Choose a cell to inspect that specialist.</p></div><WorkerMatrix config={displayConfig} document={draft} selectedRole={selectedRole} errors={errors} onSelect={(role, activity) => { setSelectedRole(role); setSelectedActivity(activity ?? ''); setSelectionSerial((current) => current + 1) }} /></section>
+          <AgentInspector config={displayConfig} catalog={catalog} document={draft} roleId={selectedRole} selectedActivity={selectedActivity} selectionSerial={selectionSerial} errors={errors} onChange={updateDraft} onPreview={openPreview} />
         </div>
       </section>
       <section id="panel-activities" className="tab-panel" role="tabpanel" aria-labelledby="tab-activities" hidden={screen !== 'activities'}>
-        <div className="screen-title"><div><p className="eyebrow">Shared routes</p><h1>Activity defaults</h1><p>Within each scope, activity defaults are followed by agent defaults and activity exceptions. Project settings override global settings, including global agent defaults.</p></div></div>
-        <ol className="precedence-strip"><li>Bundled defaults</li><li aria-current="step">Activity default</li><li>Agent default</li><li>Activity exception</li></ol>
-        <div className="interaction-grid activity-grid">{displayConfig.bundle.interactions.filter((item) => item.provider === 'codex').map((interaction) => <ActivityDefaultCard key={interaction.id} config={displayConfig} catalog={catalog} scope={scope} document={draft} interaction={interaction} errors={errors} onChange={updateDraft} />)}</div>
+        <div className="screen-title"><div><p className="eyebrow">Global routes</p><h1>Activity defaults</h1><p>Global activity defaults are followed by global agent defaults, then activity-specific specialist routes.</p></div></div>
+        <ol className="precedence-strip"><li>Bundled defaults</li><li aria-current="step">Global activity</li><li>Global agent</li><li>Global specialist</li></ol>
+        <div className="interaction-grid activity-grid">{displayConfig.bundle.interactions.filter((item) => item.provider === 'codex').map((interaction) => <ActivityDefaultCard key={interaction.id} config={displayConfig} catalog={catalog} document={draft} interaction={interaction} errors={errors} onChange={updateDraft} />)}</div>
       </section>
       <section id="panel-profiles" className="tab-panel" role="tabpanel" aria-labelledby="tab-profiles" hidden={screen !== 'profiles'}>
         <div className="screen-title"><div><p className="eyebrow">Adaptive reasoning policy</p><h1>Adaptive profiles</h1><p>Task tiers map to model effort levels, then the route ceiling caps the requested effort.</p></div></div>
-        <ProfileTable config={displayConfig} catalog={catalog} scope={scope} document={draft} errors={errors} onChange={updateDraft} />
+        <ProfileTable config={displayConfig} catalog={catalog} document={draft} errors={errors} onChange={updateDraft} />
       </section>
       <section id="panel-preview" className="tab-panel preview-panel-wrap" role="tabpanel" aria-labelledby="tab-preview" hidden={screen !== 'preview'}>
-        <Preview config={displayConfig} catalog={catalog} scope={scope} document={draft} prefill={prefill} onError={(error) => { setPreviewErrors(errorsFor(error, 'preview')); setDismissedAlerts([]) }} onSuccess={() => setPreviewErrors({})} />
+        <Preview config={displayConfig} catalog={catalog} document={draft} prefill={prefill} onError={(error) => { setPreviewErrors(errorsFor(error, 'preview')); setDismissedAlerts([]) }} onSuccess={() => setPreviewErrors({})} />
       </section>
     </main>}
   </div>
