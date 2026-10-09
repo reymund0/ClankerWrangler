@@ -215,7 +215,7 @@ The packet SHALL provide committed, staged, and unstaged Git differences as ordi
 - **THEN** the reviewer can read the corresponding differences by line without extracting long JSON strings, and unrelated or private contents remain excluded
 
 ### Requirement: Actionable sanitized launch failures
-Failure reports SHALL identify the failed stage and a safe diagnostic category with a suggested next action. Known permission, authentication, usage, model, and process errors SHALL NOT expose raw stdout/stderr, credentials, or private source. Unknown errors SHALL remain unknown with their exit code or exception type. Each attempt SHALL retain its own report.
+Failure reports SHALL identify the failed stage and a safe diagnostic category with a suggested next action. Reports and console output SHALL NOT expose raw stdout/stderr, credentials, or private source. Known CLI errors MAY retain fixed recognized diagnostic phrases without surrounding payloads. Unknown errors SHALL remain unknown with their exit code or exception type; numeric OS error codes SHALL be retained when available. The launcher and Claude exit codes SHALL be distinguished, with Claude's unsigned 32-bit hex exit code available. An explicit --debug option MAY capture raw review stdout/stderr locally as they arrive, in per-attempt Git-ignored files referenced by path rather than echoed into the parent context. Each attempt SHALL retain its own report.
 
 #### Scenario: Permission failure before model execution
 - **WHEN** the report or reservation location is not writable
@@ -223,4 +223,23 @@ Failure reports SHALL identify the failed stage and a safe diagnostic category w
 
 #### Scenario: CLI failure contains sensitive text
 - **WHEN** Claude exits with an error containing a recognizable failure and private payload
-- **THEN** the report retains only a fixed diagnostic category, exit code, stage, and action, without echoing the payload
+- **THEN** the report retains a safe diagnostic category, exit code, stage, action, and recognized fixed phrases, without echoing the private payload
+
+#### Scenario: Unknown error with local debug capture
+- **WHEN** the user enables --debug and Claude returns an unknown failure
+- **THEN** local stdout/stderr files retain the raw review output, while reports and console output retain safe metadata and capture paths without echoing the payload
+
+### Requirement: Persistent review progress
+The launcher SHALL print the unique attempt directory and diagnostic paths to stderr before launching Claude, retaining one final JSON result on stdout. It SHALL persist flushed stage events and atomically replaced progress metadata containing launcher/Claude PIDs, elapsed time, process state, output byte counts, and last observed output time. While awaiting review output, it SHALL update progress every 30 seconds without printing heartbeats or transcript content. Available timeout/interruption reasons SHALL be recorded before owned-process termination. These artifacts SHALL remain useful when the launcher is stopped before final report creation, without treating a stale running state as proof of continued model progress or diagnosing an external caller's exit code.
+
+#### Scenario: Silent running review
+- **WHEN** Claude remains running without producing output for a heartbeat interval
+- **THEN** the local event/progress files update elapsed time and process state while preserving the last observed output time, and the console receives no transcript or heartbeat
+
+#### Scenario: Launcher stopped before final report
+- **WHEN** the caller stops the launcher before a final report can be written
+- **THEN** previously flushed events and progress remain at the already printed attempt paths, with no completed-review claim
+
+#### Scenario: Owned timeout or interruption
+- **WHEN** the launcher times out or receives a handled interruption
+- **THEN** it records the termination reason, terminates the owned process tree, and retains safe progress and an incomplete final result

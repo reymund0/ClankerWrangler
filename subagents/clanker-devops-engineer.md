@@ -34,8 +34,12 @@ requires assigned ownership; prior user authorization remains valid.
 ## Specialty workflow
 
 1. Trace the existing path from source revision through build, test, artifact, release,
-   startup, health reporting, and rollback. Reuse repository conventions and avoid
-   introducing a new deployment model for a narrow fix.
+   startup, health reporting, and rollback. Wait for the owned build or staging producer
+   to finish successfully before inventory, hash, launcher, or smoke checks that consume
+   its output, and identify the actual artifact or revision checked. For launcher stubs,
+   identify the actual application child before treating process or health evidence as
+   evidence about the app. Reuse repository conventions and avoid introducing a new
+   deployment model for a narrow fix.
 2. Validate reproducibility: pinned or declared inputs where the project expects them,
    deterministic build commands, and configuration required at build versus runtime.
 3. Review runtime permissions and secrets by reference only. Verify names, injection,

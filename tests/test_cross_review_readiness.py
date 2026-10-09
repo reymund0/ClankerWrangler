@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import io
 import json
 from pathlib import Path
 import subprocess
@@ -19,9 +20,14 @@ spec.loader.exec_module(review)
 
 class ReadinessTests(unittest.TestCase):
     def setUp(self):
-        self.temp = tempfile.TemporaryDirectory(prefix="clanker-readiness-")
+        ignored_temp_root = Path(__file__).resolve().parents[1] / ".clanker"
+        ignored_temp_root.mkdir(parents=True, exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(prefix="clanker-readiness-", dir=ignored_temp_root)
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
+        previous_tempdir = tempfile.tempdir
+        tempfile.tempdir = str(self.root)
+        self.addCleanup(setattr, tempfile, "tempdir", previous_tempdir)
         self.repo = self.root / "repo"
         self.repo.mkdir()
         self.git("init", "-q")
@@ -124,16 +130,6 @@ class ReadinessTests(unittest.TestCase):
     def test_readiness_packet_byte_count_matches_snapshot_with_guidance_and_metadata(self):
         guidance = self.root / "review-guidance.md"
         guidance.write_text("Check compatibility and keep parent acceptance separate.\n", encoding="utf-8")
-        captured = {}
-        cleanup = review.cleanup_snapshot
-
-        def capture_snapshot_bytes(snapshot):
-            packet_files = [path for path in snapshot.rglob("*") if path.is_file()]
-            captured["snapshot"] = snapshot
-            captured["bytes"] = sum(path.stat().st_size for path in packet_files)
-            captured["paths"] = {path.relative_to(snapshot).as_posix() for path in packet_files}
-            cleanup(snapshot)
-
         code, stdout, _ = self.invoke_main(
             self.manifest(guidance_paths=[str(guidance)]),
             "--prepare-only",
@@ -141,26 +137,36 @@ class ReadinessTests(unittest.TestCase):
                 mock.patch.object(review, "resolve_claude", side_effect=AssertionError("prepare resolved Claude")),
                 mock.patch.object(review, "preflight", side_effect=AssertionError("prepare ran preflight")),
                 mock.patch.object(review, "invoke", side_effect=AssertionError("prepare invoked Claude")),
-                mock.patch.object(review, "cleanup_snapshot", side_effect=capture_snapshot_bytes),
             ],
         )
         self.assertEqual(0, code)
-        _, report = self.emitted_report(stdout)
+        result, report = self.emitted_report(stdout)
         counts = report["readiness"]["counts"]
         self.assertEqual(1, counts["guidance"])
-        self.assertEqual(captured["bytes"], counts["packet_bytes"])
-        self.assertIn("_clanker_packet/evidence.json", captured["paths"])
-        self.assertTrue(any(path.startswith("_clanker_packet/guidance/") for path in captured["paths"]))
-        self.assertFalse(captured["snapshot"].exists())
+        packet = Path(report["source_evidence"]["read_scope"]["packet"])
+        packet_files = [path for path in packet.rglob("*") if path.is_file()]
+        packet_paths = {path.relative_to(packet).as_posix() for path in packet_files}
+        self.assertTrue(packet.exists())
+        self.assertEqual(sum(path.stat().st_size for path in packet_files), counts["packet_bytes"])
+        self.assertEqual(str(packet.resolve()), report["source_evidence"]["read_scope"]["packet"])
+        self.assertEqual(str(self.repo.resolve()), report["source_evidence"]["read_scope"]["repository"])
+        self.assertIn("_clanker_packet/evidence.json", packet_paths)
+        self.assertTrue(any(path.startswith("_clanker_packet/guidance/") for path in packet_paths))
 
     def test_static_mapping_and_parent_checks_are_reported_separately(self):
+        supporting_context = self.repo / "supporting.md"
+        supporting_context.write_text("Optional background for the reviewer.\n", encoding="utf-8")
+        guidance = self.root / "role-guidance.txt"
+        guidance.write_text("Apply this guidance without a coverage item.\n", encoding="utf-8")
+        additional_root = self.root / "declared-read-root"
+        additional_root.mkdir()
         browser_check = {
             "subject": "Rendered settings page at 1440x900",
             "owner": "parent",
             "status": "pending",
             "evidence": "Browser acceptance remains with the coordinator.",
         }
-        manifest = self.manifest(requirement_paths={"R1": ["app.py"]}, parent_checks=[browser_check])
+        manifest = self.manifest(context_paths=["supporting.md"], guidance_paths=[str(guidance)], read_roots=[str(additional_root)], requirement_paths={"R1": ["app.py"]}, parent_checks=[browser_check])
         seen = {}
         def inspect_manifest(executable, snapshot, passed_manifest, args):
             seen.update(passed_manifest)
@@ -183,6 +189,7 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual([browser_check], report["parent_checks"])
         self.assertEqual([browser_check], report["source_evidence"]["parent_checks"])
         self.assertEqual({"R1": ["app.py"]}, report["source_evidence"]["requirement_paths"])
+        self.assertEqual([str(additional_root.resolve())], report["source_evidence"]["read_scope"]["additional_roots"])
         self.assertNotIn(browser_check["subject"], [item["subject"] for item in report["coverage"]])
         self.assertEqual("pending", seen["parent_checks"][0]["status"])
         self.assertEqual("parent", seen["parent_checks"][0]["owner"])
@@ -208,9 +215,111 @@ class ReadinessTests(unittest.TestCase):
                 self.assertEqual(2, code)
                 self.assertNotIn("Traceback", stdout + stderr)
 
-    def test_filtered_and_missing_required_evidence_block_before_preflight(self):
-        (self.repo / ".env").write_text("PRIVATE_READINESS_MARKER=never-send-this\n", encoding="utf-8")
-        (self.repo / "ignored.txt").write_text("IGNORED_READINESS_MARKER=never-send-this\n", encoding="utf-8")
+    def test_missing_optional_context_warns_while_required_context_blocks(self):
+        optional_code, optional_stdout, _ = self.invoke_main(
+            self.manifest(context_paths=["missing-context.md"]),
+            "--prepare-only",
+        )
+        self.assertEqual(0, optional_code)
+        _, optional_report = self.emitted_report(optional_stdout)
+        self.assertEqual("ready", optional_report["readiness"]["status"])
+        warnings = [item for item in optional_report["readiness"]["warnings"] if "missing-context.md" in item]
+        self.assertEqual(1, len(warnings), optional_report["readiness"]["warnings"])
+
+        required_code, required_stdout, _ = self.invoke_main(
+            self.manifest(context_paths=["missing-context.md"], required_context_paths=["missing-context.md"]),
+            "--prepare-only",
+        )
+        self.assertEqual(2, required_code)
+        _, required_report = self.emitted_report(required_stdout)
+        self.assertEqual("blocked", required_report["readiness"]["status"])
+        self.assertTrue(any(item.get("subject") == "missing-context.md" for item in required_report["readiness"]["blockers"]))
+
+    def test_optional_directory_warns_once_and_keeps_completed_result_when_query_is_unavailable(self):
+        context_directory = self.repo / "supporting-directory"
+        context_directory.mkdir()
+        code, stdout, stderr = self.invoke_main(
+            self.manifest(context_paths=["supporting-directory"]),
+            "--effort", "medium",
+            patches=[
+                mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
+                mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
+                mock.patch.object(review, "invoke", side_effect=self.clean_static_review),
+            ],
+        )
+        self.assertEqual(0, code, stdout + stderr)
+        result, report = self.emitted_report(stdout)
+        self.assertEqual("completed", report["execution_status"])
+        self.assertEqual("clean", report["verdict"])
+        warnings = [item for item in report["readiness"]["warnings"] if "supporting-directory" in item]
+        self.assertEqual(1, len(warnings), report["readiness"]["warnings"])
+        evidence = next(item for item in report["source_evidence"]["files"] if item["path"] == "supporting-directory")
+        self.assertEqual("unavailable", evidence["state"])
+        self.assertEqual("unavailable", report["source_changes"]["status"])
+        directory_change = next(item for item in report["source_changes"]["entries"] if item["path"] == "supporting-directory")
+        self.assertEqual("unavailable", directory_change["status"])
+        self.assertEqual("optional", directory_change["kind"])
+        self.assertEqual("optional context was not captured because it is a directory", directory_change["reason"])
+
+        report_path = Path(result["report"])
+        saved = report_path.read_bytes()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(3, review.check_current(report_path))
+        query = json.loads(output.getvalue())
+        self.assertFalse(query["current"])
+        self.assertEqual("completed", query["execution_status"])
+        self.assertEqual("unavailable", query["source_changes"]["status"])
+        self.assertEqual(saved, report_path.read_bytes())
+
+    def test_unreadable_optional_context_warns_once_without_claiming_freshness(self):
+        context_file = self.repo / "unreadable-context.md"
+        context_file.write_text("Permission-controlled optional context.\n", encoding="utf-8")
+        original_open = Path.open
+
+        def deny_context_open(candidate, *args, **kwargs):
+            if candidate.resolve() == context_file.resolve():
+                raise PermissionError("fixture unreadable context")
+            return original_open(candidate, *args, **kwargs)
+
+        with mock.patch.object(Path, "open", autospec=True, side_effect=deny_context_open):
+            code, stdout, stderr = self.invoke_main(
+                self.manifest(context_paths=["unreadable-context.md"]),
+                "--effort", "medium",
+                patches=[
+                    mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
+                    mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
+                    mock.patch.object(review, "invoke", side_effect=self.clean_static_review),
+                ],
+            )
+            self.assertEqual(0, code, stdout + stderr)
+            result, report = self.emitted_report(stdout)
+            self.assertEqual("completed", report["execution_status"])
+            self.assertEqual("clean", report["verdict"])
+            warnings = [item for item in report["readiness"]["warnings"] if "unreadable-context.md" in item]
+            self.assertEqual(1, len(warnings), report["readiness"]["warnings"])
+            evidence = next(item for item in report["source_evidence"]["files"] if item["path"] == "unreadable-context.md")
+            self.assertEqual("unavailable", evidence["state"])
+            self.assertEqual("unavailable", report["source_changes"]["status"])
+            source_change = next(item for item in report["source_changes"]["entries"] if item["path"] == "unreadable-context.md")
+            self.assertEqual("unavailable", source_change["status"])
+            self.assertEqual("optional", source_change["kind"])
+            self.assertIn("remains unreadable", source_change["reason"])
+
+            report_path = Path(result["report"])
+            saved = report_path.read_bytes()
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                self.assertEqual(3, review.check_current(report_path))
+            query = json.loads(output.getvalue())
+            self.assertFalse(query["current"])
+            self.assertEqual("completed", query["execution_status"])
+            self.assertEqual("unavailable", query["source_changes"]["status"])
+            self.assertEqual(saved, report_path.read_bytes())
+
+    def test_selected_filtered_formerly_and_missing_required_evidence(self):
+        (self.repo / ".env").write_text("SELECTED_ENV_READINESS_MARKER=fixture-value\n", encoding="utf-8")
+        (self.repo / "ignored.txt").write_text("SELECTED_IGNORED_READINESS_MARKER=fixture-value\n", encoding="utf-8")
         manifest = self.manifest(selected_paths=[".env", "ignored.txt", "never-existed.txt"])
         preflight = mock.Mock(side_effect=AssertionError("incomplete evidence reached Claude preflight"))
         invoke = mock.Mock(side_effect=AssertionError("incomplete evidence reached Claude"))
@@ -231,8 +340,10 @@ class ReadinessTests(unittest.TestCase):
         self.assertIn("coverage", report["diagnostic"]["category"])
         self.assertIn(".env", json.dumps(report["source_evidence"]))
         self.assertIn("never-existed.txt", json.dumps(report["source_evidence"]))
-        self.assertNotIn("PRIVATE_READINESS_MARKER", json.dumps(report))
-        self.assertNotIn("IGNORED_READINESS_MARKER", json.dumps(report))
+        captured = {item["path"]: item["state"] for item in report["source_evidence"]["files"]}
+        self.assertEqual("included", captured[".env"])
+        self.assertEqual("included", captured["ignored.txt"])
+        self.assertEqual("missing", captured["never-existed.txt"])
         self.assertNotIn("Traceback", stdout + stderr)
         preflight.assert_not_called()
         invoke.assert_not_called()
@@ -257,7 +368,42 @@ class ReadinessTests(unittest.TestCase):
         source_files = report["source_evidence"]["files"]
         self.assertTrue(any(item.get("path") == "./deleted.txt" and item["state"] == "missing" for item in source_files))
 
-    def test_deleted_binary_file_blocks_preparation_before_claude(self):
+    def test_absolute_in_repository_selection_retains_git_history_for_deleted_source(self):
+        source = self.repo / "absolute-deleted.py"
+        original = "absolute baseline implementation remains reviewable\n"
+        source.write_text(original, encoding="utf-8")
+        self.git("add", "absolute-deleted.py")
+        self.git("commit", "-qm", "add absolute-selection fixture")
+        absolute_reference = str(source.resolve())
+        source.unlink()
+
+        code, stdout, stderr = self.invoke_main(
+            self.manifest(selected_paths=[absolute_reference]),
+            "--prepare-only",
+            patches=[
+                mock.patch.object(review, "resolve_claude", side_effect=AssertionError("prepare resolved Claude")),
+                mock.patch.object(review, "preflight", side_effect=AssertionError("prepare ran preflight")),
+                mock.patch.object(review, "invoke", side_effect=AssertionError("prepare invoked Claude")),
+            ],
+        )
+
+        self.assertEqual(0, code, stdout + stderr)
+        _, report = self.emitted_report(stdout)
+        self.assertEqual("prepared", report["execution_status"])
+        self.assertEqual("ready", report["readiness"]["status"])
+        item = next(entry for entry in report["source_evidence"]["files"] if entry.get("path") == absolute_reference)
+        self.assertEqual("missing", item["state"])
+        self.assertEqual("absolute-deleted.py", item["git_path"])
+        git_item = next(entry for entry in report["source_evidence"]["files"] if entry["path"] == "@git")
+        self.assertIn("absolute-deleted.py", git_item["deleted_paths"])
+        artifact_text = "\n".join(
+            (Path(report["source_evidence"]["read_scope"]["packet"]) / artifact["path"]).read_text(encoding="utf-8")
+            for artifact in git_item["diffs"].values()
+        )
+        self.assertIn(original.strip(), artifact_text)
+        self.assertFalse(source.exists())
+
+    def test_deleted_binary_file_keeps_diff_reference_and_prepares(self):
         binary = self.repo / "ordinary.dat"
         binary.write_bytes(b"PRIVATE_BINARY_MARKER\x00payload")
         self.git("add", "ordinary.dat")
@@ -272,32 +418,31 @@ class ReadinessTests(unittest.TestCase):
                 mock.patch.object(review, "invoke", side_effect=AssertionError("binary deletion launched Claude")),
             ],
         )
-        self.assertEqual(2, code)
+        self.assertEqual(0, code)
         _, report = self.emitted_report(stdout)
-        self.assertEqual("blocked", report["execution_status"])
-        self.assertEqual("evidence_preparation", report["diagnostic"]["stage"])
-        self.assertEqual("evidence", report["diagnostic"]["category"])
-        self.assertNotIn("PRIVATE_BINARY_MARKER", json.dumps(report))
+        self.assertEqual("prepared", report["execution_status"])
+        self.assertEqual("ready", report["readiness"]["status"])
+        git_evidence = next(item for item in report["source_evidence"]["files"] if item["path"] == "@git")
+        diffs = git_evidence["diffs"]
+        self.assertTrue(any(item["path"].startswith("_clanker_packet/diffs/") for item in diffs.values()))
 
-    def test_reservation_filesystem_denial_is_reported_before_claude(self):
+    def test_prepare_does_not_consult_reservation_registry(self):
         reservation_file = self.root / "not-a-directory"
         reservation_file.write_text("block reservation directory creation", encoding="utf-8")
         code, stdout, _ = self.invoke_main(
             self.manifest(),
             "--prepare-only",
             patches=[
-                mock.patch.object(review, "reservation_root", return_value=reservation_file),
+                mock.patch.object(review, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")),
                 mock.patch.object(review, "resolve_claude", side_effect=AssertionError("filesystem failure resolved Claude")),
                 mock.patch.object(review, "preflight", side_effect=AssertionError("filesystem failure ran preflight")),
                 mock.patch.object(review, "invoke", side_effect=AssertionError("filesystem failure launched Claude")),
             ],
         )
-        self.assertEqual(2, code)
+        self.assertEqual(0, code)
         _, report = self.emitted_report(stdout)
-        self.assertEqual("blocked", report["execution_status"])
-        self.assertEqual("filesystem_preparation", report["diagnostic"]["stage"])
-        self.assertEqual("filesystem", report["diagnostic"]["category"])
-        self.assertTrue(report["diagnostic"]["action"])
+        self.assertEqual("prepared", report["execution_status"])
+        self.assertEqual("ready", report["readiness"]["status"])
 
     def test_process_diagnostics_keep_fixed_metadata_and_drop_cli_payload(self):
         cases = (
@@ -348,6 +493,36 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual("OSError", report["diagnostic"]["exception_type"])
         self.assertTrue(report["diagnostic"]["action"])
         self.assertNotIn("PRIVATE_LAUNCH_ERROR", json.dumps(report))
+
+    def test_negative_claude_exit_is_distinct_from_launcher_exit_and_logs_exist_before_launch(self):
+        process = mock.Mock(pid=456, returncode=-1)
+        process.communicate.return_value = ("opaque credential=PRIVATE_FAILURE", "")
+
+        def start(_command, _snapshot):
+            startup = json.loads(sys.stderr.getvalue().splitlines()[0])
+            for path in startup["logs"].values():
+                self.assertTrue(Path(path).is_file())
+            self.assertFalse((Path(startup["report_directory"]) / "report.json").exists())
+            return process
+
+        code, stdout, stderr = self.invoke_main(self.manifest(), "--effort", "medium", patches=[
+            mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
+            mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
+            mock.patch.object(review, "start_review_process", side_effect=start),
+            mock.patch.object(review, "close_review_job"),
+        ])
+        self.assertEqual(2, code)
+        self.assertEqual(1, len(stdout.splitlines()))
+        result, report = self.emitted_report(stdout)
+        self.assertEqual(2, result["launcher_exit_code"])
+        self.assertEqual(-1, result["diagnostic"]["exit_code"])
+        self.assertEqual("0xFFFFFFFF", result["diagnostic"]["exit_code_hex"])
+        self.assertEqual(-1, report["process"]["claude_exit_code"])
+        self.assertEqual(2, report["process"]["launcher_exit_code"])
+        self.assertNotIn("PRIVATE_FAILURE", stdout + stderr + json.dumps(report))
+        progress = json.loads(Path(result["logs"]["progress"]).read_text(encoding="utf-8"))
+        self.assertEqual("finished", progress["stage"])
+        self.assertFalse(progress["claude_running"])
 
     def test_report_directory_denial_stops_before_claude(self):
         code, stdout, stderr = self.invoke_main(
