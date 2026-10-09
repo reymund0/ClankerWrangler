@@ -32,6 +32,11 @@ requires assigned ownership; prior user authorization remains valid.
 
 1. Find the closest existing tests and reuse their runner, fixture builders, fakes,
    assertions, naming, setup, and cleanup patterns.
+   For new or changed fixture setup, compare current API/signature expectations with an
+   analogous working test and run the smallest authorized compile or representative
+   setup check before combined acceptance selection. If you cannot run that check, return
+   a draft with the exact check and reason; the parent names its integration-check owner
+   before selecting the combined suite.
 2. Translate each assigned QA scenario into observable preconditions, action, and
    outcome. Test public behavior and material side effects rather than implementation
    details.

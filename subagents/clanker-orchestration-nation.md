@@ -108,13 +108,22 @@ checks passed and no known blocker). For executable changes, run the smallest re
 authorized compile or contract check before claiming readiness. If execution is outside
 the assignment or unavailable, return a draft with the unrun command and reason.
 Include exact results and remaining gaps; none of these labels replaces parent verification.
+For test assignments, confirm fixture/API signatures against an analogous working test
+and complete the smallest authorized compile or representative setup check before the
+combined acceptance selection. If the worker cannot execute it, keep the handoff at draft
+and name a parent-owned integration check before selecting the combined suite.
 
-For every write-capable assignment, also supply the loaded package's launcher path
-and require `python <launcher> --check-writes <absolute target paths>` before each
-edit batch, including both paths for moves. Exit 0 allows the cooperative write;
-exit 3 means defer and notify the parent; exit 2 means investigate before writing.
-Never remove another run's reservation. The parent follows the same check for its edits.
-On conflicts, read **Active review reservations** in `clanker-claude-cross-review.md`.
+Advisory workers that cannot access required evidence should promptly report the exact
+gap, continue useful accessible inspection, and state the resulting coverage limit. The
+parent resolves access or keeps the review at draft; missing evidence does not require
+unrelated project execution.
+
+For new cross-reviews, coordinate writes through assignment ownership and dependencies;
+the review does not create a source reservation or require a pre-review write check.
+Before integration, reconcile changed paths with assigned ownership and resolve any
+unowned or conflicting change. Legacy callers may still query old reservation records
+with `--check-writes`; preserve those records for their original owner to clean up after
+its process has stopped.
 
 ## Review and integrate
 
@@ -126,18 +135,21 @@ and record the reason. Planning-only authorization permits only the planning che
 
 Before preparing or launching a selected Claude review, read
 `clanker-claude-cross-review.md` from the same source/reference layout as the specialists.
-It owns packet preparation, routing to the guarded launcher, stable-input coordination,
-prerequisites, reconciliation, and the one-automatic-recheck limit. Claude supplements
-native review and tests; it does not authorize implementation or deployment.
+It owns packet preparation, routing to the launcher, prerequisites, source-change
+reconciliation, and the one-automatic-recheck limit. Claude supplements native review
+and tests; it does not authorize implementation or deployment. A completed review keeps
+its captured-version verdict when source comparison reports later changes; the parent
+reconciles changed paths against current findings before applying them.
 
-Keep each packet's static requirements and mapped evidence within its review scope.
-Assign browser/test acceptance separately with an owner and evidence status; do not
-ask a static reviewer to certify a live check. Run local `--prepare-only`, inspect
-coverage gaps and split warnings, and confirm that existing authorization covers the
-exact packet and destination before external dispatch. Split large reviews by coherent
+Keep each packet's static requirements and mapped evidence within the parent's authorized
+read scope. Selected evidence follows parent scope decisions; ordinary context is
+optional by default, while mapped evidence and declared `required_context_paths` control
+acceptance. Assign browser/test acceptance separately with an owner and evidence status;
+do not ask a static reviewer to certify a live check. Run local `--prepare-only` to check
+required evidence and output readiness before dispatch. Split large reviews by coherent
 responsibility; the parent retains the full acceptance checklist and unresolved checks.
-For a bounded recheck, narrow both requirements and evidence, preserving the earlier
-review's scope and outstanding work in the log rather than silently dropping them.
+For a bounded recheck, narrow required evidence to the correction and keep broader
+acceptance with the parent.
 
 For native correctness review, reuse `clanker-code-review` and prefer the current
 repository copy. Explicitly request task-owned committed, staged, unstaged, and untracked
@@ -153,6 +165,9 @@ incomplete coverage. Assign browser ownership and recheck affected states after 
 
 Verify worker findings and integrated results against actual artifacts and proportionate
 checks. Keep failed or unrun required validation visible and affected tasks incomplete.
+Before accepting inventory, bytecode, hash, or smoke checks that consume build or staging
+output, wait for the owned producer to finish successfully and record the artifact or
+revision consumed.
 Use `clanker-refactor-review` only for requested improvement proposals and
 `clanker-sync-your-docs` when the task affects durable guidance.
 
@@ -172,6 +187,11 @@ state, rather than rereading the growing log before every append. Record:
   rationale, and routing evidence captured as described in the dispatch procedure.
 - On meaningful changes: actual dispatch outcome, observed settings or unknown,
   verification results, review dispositions/waivers, blockers, and snapshot reloads.
+  Use readable timestamped blocks that name the run and assignment, status, owned paths,
+  evidence/check, and next owner. At closure, state task completion separately from
+  native review, external review, and runtime acceptance; mark each evidence state
+  complete, partial, pending, or excluded, and explain exclusions without treating them
+  as waivers.
 - At completion: completed, blocked, or interrupted outcome and remaining checks.
   Reconcile pending events from observed state after an abrupt interruption.
 

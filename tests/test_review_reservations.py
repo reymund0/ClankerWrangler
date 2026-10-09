@@ -14,6 +14,13 @@ spec.loader.exec_module(review)
 
 
 class ReservationTests(unittest.TestCase):
+    def setUp(self):
+        ignored_temp_root = Path(__file__).resolve().parents[1] / ".clanker"
+        ignored_temp_root.mkdir(parents=True, exist_ok=True)
+        previous_tempdir = tempfile.tempdir
+        tempfile.tempdir = str(ignored_temp_root)
+        self.addCleanup(setattr, tempfile, "tempdir", previous_tempdir)
+
     def test_overlap_external_guidance_missing_files_and_independent_reviews(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -48,26 +55,22 @@ class ReservationTests(unittest.TestCase):
                 with self.assertRaises(review.ReviewError):
                     review.check_write_reservations([str(root / "file")])
 
-    def test_cleanup_on_success_failure_timeout_interrupt_and_snapshot_failure(self):
-        for outcome in [None, review.ReviewError("Claude review timed out"), review.ReviewError("Claude exited"), KeyboardInterrupt(), "snapshot", "stale"]:
+    def test_new_reviews_never_create_or_clean_legacy_reservations(self):
+        for outcome in [None, review.ReviewError("Claude review timed out"), review.ReviewError("Claude exited"), KeyboardInterrupt(), "snapshot"]:
             with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as temp:
                 root = Path(temp)
                 manifest_path = root / "manifest.json"
                 manifest_path.write_text(json.dumps({"repository": str(root), "phase": "plan", "run_id": "test", "selected_paths": ["code.py"], "requirements": ["works"], "verification_evidence": ["unrun"]}))
                 registry = root / "registry"
                 def invoke(*args):
-                    self.assertEqual(len(list(registry.glob("*.json"))), 1)
+                    self.assertFalse(registry.exists())
                     if isinstance(outcome, BaseException):
                         raise outcome
                     return {"verdict": "clean", "coverage": [{"subject": s, "status": "covered", "evidence": "checked"} for s in ["code.py", "works"]], "findings": [], "limitations": []}
-                with mock.patch.object(review, "reservation_root", return_value=registry), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": "claude-opus-5"}), mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [], "fp"), side_effect=review.ReviewError("snapshot failed") if outcome == "snapshot" else None), mock.patch.object(review, "invoke", side_effect=invoke), mock.patch.object(review, "current_fingerprint", return_value="changed" if outcome == "stale" else "fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch("sys.argv", ["review", "--manifest", str(manifest_path), "--output-dir", str(root / "reports"), "--effort", "high"]), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(review, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": "claude-opus-5"}), mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "code.py", "state": "included", "kind": "required", "sha256": "fixture"}], "fp"), side_effect=review.ReviewError("snapshot failed") if outcome == "snapshot" else None), mock.patch.object(review, "invoke", side_effect=invoke), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "compare_source_changes", return_value={"status": "current", "attribution": "unattributed", "entries": []}), mock.patch.object(review, "cleanup_snapshot"), mock.patch("sys.argv", ["review", "--manifest", str(manifest_path), "--output-dir", str(root / "reports"), "--effort", "high"]), contextlib.redirect_stdout(io.StringIO()):
                     code = review.main()
-                self.assertEqual(code, 0 if outcome is None else 3 if outcome == "stale" else 2)
-                if outcome == "stale":
-                    report = json.loads((root / "reports/test/plan-1/report.json").read_text())
-                    self.assertEqual(report["execution_status"], "stale")
-                    self.assertIn("Review completed, but inputs changed", report["limitations"][-1])
-                self.assertEqual(list(registry.glob("*.json")), [])
+                self.assertEqual(code, 0 if outcome is None else 2)
+                self.assertFalse(registry.exists())
 
 
 if __name__ == "__main__":

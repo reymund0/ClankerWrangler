@@ -17,6 +17,13 @@ spec.loader.exec_module(review)
 
 
 class EffortTests(unittest.TestCase):
+    def setUp(self):
+        ignored_temp_root = Path(__file__).resolve().parents[1] / ".clanker"
+        ignored_temp_root.mkdir(parents=True, exist_ok=True)
+        previous_tempdir = tempfile.tempdir
+        tempfile.tempdir = str(ignored_temp_root)
+        self.addCleanup(setattr, tempfile, "tempdir", previous_tempdir)
+
     def test_missing_or_blank_effort_stops_before_preflight(self):
         for option in ([], ["--effort", ""], ["--effort", "   "]):
             with self.subTest(option=option), mock.patch.object(sys, "argv", ["review", "--manifest", "unused.json", "--output-dir", "unused", *option]), mock.patch.object(review, "preflight") as preflight, contextlib.redirect_stderr(io.StringIO()):
@@ -59,7 +66,7 @@ class EffortTests(unittest.TestCase):
                 process = mock.Mock(returncode=0)
                 process.communicate.return_value = (json.dumps({"is_error": False, "subtype": "success", "structured_output": payload}), "")
                 argv = ["review", "--manifest", str(manifest), "--output-dir", str(root / "reports"), "--effort", "medium", *extra]
-                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort: {"requested_model": model}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "plan.md", "state": "included", "sha256": "x"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort, repository: {"requested_model": model}) as preflight, mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "plan.md", "state": "included", "sha256": "x"}], "fp")), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "cleanup_snapshot"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
                     self.assertEqual(review.main(), 0)
                 self.assertEqual(preflight.call_args.args[1], expected)
                 command = launch.call_args.args[0]
@@ -67,12 +74,14 @@ class EffortTests(unittest.TestCase):
                 self.assertEqual(command[command.index("--effort") + 1], "medium")
                 self.assertNotIn("--fallback-model", command)
                 self.assertNotIn("--max-turns", command)
+                for removed in ("--safe-mode", "--restricted", "--tools", "--allowedTools", "--disallowedTools", "--permission-prompts", "--strict-mcp-config", "--mcp-config", "--no-session-persistence", "--dangerously-skip-permissions"):
+                    self.assertNotIn(removed, command)
                 report = json.loads((root / "reports/model/plan-1/report.json").read_text(encoding="utf-8"))
                 self.assertEqual(report["requested_settings"]["model"], expected)
                 self.assertIsNone(report["observed_settings"]["model_usage"])
 
     def test_real_preflight_validates_advertised_effort_without_model_call(self):
-        controls = " ".join(("--safe-mode", "--restricted", "--tools", "--allowedTools", "--disallowedTools", "--permission-prompts", "--strict-mcp-config", "--mcp-config", "--no-session-persistence", "--output-format", "--json-schema"))
+        controls = "--output-format --json-schema --model --add-dir"
         help_text = controls + "\n  --effort <level>  Effort level for the session\n      (low, medium, high, xhigh, max)\n  --environment <id> Other option"
         for effort, help_output, accepted in (("medium", help_text, True), ("xhigh", help_text, True), ("unavailable", help_text, False), (" high ", help_text, False), ("high", controls + " --effort", False)):
             with self.subTest(effort=effort, accepted=accepted), mock.patch.dict("os.environ", {name: "ambient-override" for name in review.MODEL_ENVIRONMENT_KEYS}, clear=True), mock.patch.object(review, "configured_review_model", return_value=None), mock.patch.object(review, "run_local", side_effect=[subprocess.CompletedProcess([], 0, "2.1.278", ""), subprocess.CompletedProcess([], 0, help_output, ""), subprocess.CompletedProcess([], 0, json.dumps({"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty", "subscriptionType": "pro"}), "")]) as local:
@@ -85,6 +94,35 @@ class EffortTests(unittest.TestCase):
                     self.assertEqual(local.call_count, 2)
                 for call in local.call_args_list:
                     self.assertNotIn("-p", call.args[0])
+
+    def test_preflight_checks_provider_overrides_in_user_project_and_local_settings_from_repo_cwd(self):
+        cases = (
+            ("user", "settings.json", {"apiKeyHelper": "private-user-helper"}),
+            ("project", ".claude/settings.json", {"env": {"ANTHROPIC_API_KEY": "private-project-key"}}),
+            ("local", ".claude/settings.local.json", {"env": {"CLAUDE_CODE_USE_VERTEX": "1"}}),
+        )
+        for label, relative_path, document in cases:
+            with self.subTest(source=label), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                repository = root / "repository"
+                repository.mkdir()
+                config_directory = root / "user-config"
+                target_root = config_directory if label == "user" else repository
+                target = target_root / relative_path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(json.dumps(document), encoding="utf-8")
+                auth = {"loggedIn": True, "authMethod": "claude.ai", "apiProvider": "firstParty", "subscriptionType": "pro", "configDirectory": str(config_directory)}
+                responses = [
+                    subprocess.CompletedProcess([], 0, "2.1.278", ""),
+                    subprocess.CompletedProcess([], 0, "--add-dir --output-format --json-schema", ""),
+                    subprocess.CompletedProcess([], 0, json.dumps(auth), ""),
+                ]
+                with mock.patch.dict(os.environ, {}, clear=True), mock.patch.object(review, "run_local", side_effect=responses) as local:
+                    with self.assertRaisesRegex(review.ReviewError, "override|apiKeyHelper") as raised:
+                        review.preflight(Path("claude"), None, None, repository=repository)
+                self.assertNotIn("private-user-helper", str(raised.exception))
+                self.assertNotIn("private-project-key", str(raised.exception))
+                self.assertEqual([repository] * 3, [call.kwargs["cwd"] for call in local.call_args_list])
 
     def test_model_mapping_environment_is_ignored_without_changing_parent(self):
         model_environment = {name: "ambient-override" for name in review.MODEL_ENVIRONMENT_KEYS}
