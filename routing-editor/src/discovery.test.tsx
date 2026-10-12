@@ -5,8 +5,8 @@ import { App } from './App'
 import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
 
 const fixture: ConfigResponse = {
-  schema_version: 1, policy_version: '5', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
-  bundle: { schema_version: 1, policy_version: '5', roles: [], defaults: { schema_version: 1 },
+  schema_version: 1, policy_version: '6', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
+  bundle: { schema_version: 1, policy_version: '6', roles: [], defaults: { schema_version: 1 },
     interactions: [{ id: 'planning', label: 'Planning', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'implementation', label: 'Implementation', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5' }],
     models: [{ id: 'gpt-5.6-sol', label: 'Sol', provider: 'codex', efforts: ['low', 'high'] }, { id: 'claude-opus-5', label: 'Opus', provider: 'claude', efforts: ['low', 'high'] }],
     effort_orders: { codex: ['low', 'medium', 'high', 'xhigh'], claude: ['low', 'medium', 'high', 'max'] } },

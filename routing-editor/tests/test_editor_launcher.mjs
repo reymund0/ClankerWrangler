@@ -73,7 +73,7 @@ test('a checkout without built assets reports the initial build prerequisite', a
     assert.doesNotMatch(result.stdout, /Open the local editor:/);
     await mkdir(path.join(fixture, 'routing-editor/dist'));
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
-    for (const manifest of ['not-json', JSON.stringify({ schema_version: 999, policy_version: 'unsupported' })]) {
+    for (const manifest of ['not-json', JSON.stringify({ schema_version: 999, policy_version: 'unsupported' }), JSON.stringify({ schema_version: 1, policy_version: '5' })]) {
       await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), manifest);
       const incompatible = spawnSync(process.execPath, [copy, 'start'], { encoding: 'utf8', timeout: 15000, windowsHide: true });
       assert.notEqual(incompatible.status, 0);
@@ -95,7 +95,7 @@ test('development startup without Node dependencies cleans its Python backend', 
       await copyFile(path.join(root, name), path.join(fixture, name));
     }
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
-    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '5' }));
+    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '6' }));
     const result = spawnSync(process.execPath, [path.join(fixture, 'routing-editor/scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
       encoding: 'utf8', timeout: 12000, windowsHide: true,
     });

@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { specialistChoices } from './specialists'
 import type { ConfigResponse } from './types'
+import bundledPolicy from '../../subagents/routing/policy.json'
 
 const config: ConfigResponse = {
-  schema_version: 1, policy_version: '5',
+  schema_version: 1, policy_version: '6',
   scopes: { global: { path: '/home/test/.clanker/orchestration-routing.json', revision: 'abc', document: { schema_version: 1 } } },
   bundle: {
-    schema_version: 1, policy_version: '5',
+    schema_version: 1, policy_version: '6',
     interactions: [
       { id: 'planning', label: 'Planning and design', provider: 'codex', default_model: 'gpt-5.6-sol' },
       { id: 'implementation', label: 'Implementation and testing', provider: 'codex', default_model: 'gpt-5.6-terra' },
@@ -117,6 +118,32 @@ async function render(fetchMock: ReturnType<typeof vi.fn>, initialTab = 'Activit
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.unstubAllGlobals(); vi.useRealTimers() })
 
 describe('routing editor', () => {
+  it('shows the active catalog without reviving retired overrides in any selector', async () => {
+    const loaded = structuredClone(config)
+    loaded.bundle.roles = bundledPolicy.roles
+    const retired = ['clanker-ux-designer', 'clanker-documentation-writer', 'clanker-product-engineer']
+    const draft = { schema_version: 1 as const, interactions: { planning: { specialists: Object.fromEntries(retired.map((id) => [id, { model: 'gpt-5.6-sol' }])) } } }
+    for (const activity of loaded.bundle.interactions) {
+      expect(specialistChoices(loaded, draft, activity.id).some((role) => retired.includes(role.id))).toBe(false)
+    }
+    await render(vi.fn().mockResolvedValue(response(loaded)), 'Worker routes')
+    const rows = [...activePanel().querySelectorAll('.matrix-row')]
+    expect(rows).toHaveLength(11)
+    for (const role of bundledPolicy.roles) expect(activePanel().textContent).toContain(role.id)
+    expect(activePanel().textContent).toContain('Claude cross-review')
+    for (const tab of ['Worker routes', 'Activity defaults', 'Preview a route']) {
+      await openTab(tab)
+      for (const id of retired) expect(activePanel().textContent).not.toContain(id)
+      if (tab === 'Preview a route') {
+        const interaction = previewForm().querySelector('label select') as HTMLSelectElement
+        for (const activity of loaded.bundle.interactions.filter((item) => item.provider === 'codex')) {
+          await setInput(interaction, activity.id)
+          for (const id of retired) expect(previewForm().querySelector(`option[value="${id}"]`)).toBeNull()
+        }
+      }
+    }
+  })
+
   it('filters activity chips and preview choices by scenario', async () => {
     const loaded = structuredClone(config)
     loaded.bundle.roles = [

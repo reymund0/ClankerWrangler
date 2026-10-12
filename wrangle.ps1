@@ -20,6 +20,7 @@ $RoutingEditorSource = Join-Path $RepoRoot "routing-editor\scripts\routing_edito
 $ModelDiscoverySource = Join-Path $RepoRoot "routing-editor\scripts\model_discovery.py"
 $RoutingDataSource = Join-Path $SubagentsSource "routing"
 $RoutingEditorDistSource = Join-Path $RepoRoot "routing-editor\dist"
+$RetiredSpecialistNames = @("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
 
 function Copy-SafeFile {
     param(
@@ -152,7 +153,8 @@ function Assert-NoReparsePath {
     param(
         [Parameter(Mandatory)][string]$Path,
         [Parameter(Mandatory)][string]$Root,
-        [Parameter(Mandatory)][string]$Description
+        [Parameter(Mandatory)][string]$Description,
+        [switch]$AllowLinkedRoot
     )
 
     $fullPath = Assert-PathWithinRoot -Path $Path -Root $Root -Description $Description
@@ -160,7 +162,7 @@ function Assert-NoReparsePath {
     $relativePath = $fullPath.Substring($fullRoot.Length).TrimStart([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)
     $currentPath = $fullRoot
     $rootItem = Get-Item -LiteralPath $currentPath -Force -ErrorAction SilentlyContinue
-    if ($null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+    if (-not $AllowLinkedRoot -and $null -ne $rootItem -and ($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "Refusing to install through a linked $Description root: $currentPath"
     }
     foreach ($part in ($relativePath -split '[\\/]')) {
@@ -214,9 +216,58 @@ function Copy-RoutingDirectory {
     }
 }
 
+function Get-RetiredSpecialistEntries {
+    param([string]$AgentRoot, [string]$AgentSkillsRoot)
+
+    $references = Join-Path $AgentSkillsRoot "$OrchestrationSkillName\references"
+    # The owner-selected agent root may be linked; every descendant must be ordinary.
+    $null = Assert-NoReparsePath -Path $references -Root $AgentRoot -Description "specialist references" -AllowLinkedRoot
+    $entries = @()
+    foreach ($name in $RetiredSpecialistNames) {
+        foreach ($extension in @(".md", "")) {
+            $source = if ($extension) { Join-Path $references "$name$extension" } else { Join-Path $AgentSkillsRoot $name }
+            $source = Assert-NoReparsePath -Path $source -Root $AgentRoot -Description "retired specialist" -AllowLinkedRoot
+            $item = Get-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
+            if ($null -eq $item) { continue }
+            if (($extension -and $item.PSIsContainer) -or (-not $extension -and -not $item.PSIsContainer)) {
+                throw "Unexpected retired specialist entry type: $source"
+            }
+            $entries += [PSCustomObject]@{ Source = $source; Name = $name; Extension = $extension }
+        }
+    }
+    if ($entries.Count) {
+        foreach ($relative in @("backups", "backups\orchestration-nation")) {
+            $backup = Assert-NoReparsePath -Path (Join-Path $AgentRoot $relative) -Root $AgentRoot -Description "retirement backup" -AllowLinkedRoot
+            $item = Get-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+            if ($null -ne $item -and -not $item.PSIsContainer) { throw "Backup destination is not a directory: $backup" }
+        }
+    }
+    return $entries
+}
+
+function Move-RetiredSpecialistEntries {
+    param([string]$AgentRoot, [object[]]$Entries)
+
+    foreach ($entry in $Entries) {
+        $source = Assert-NoReparsePath -Path $entry.Source -Root $AgentRoot -Description "retired specialist" -AllowLinkedRoot
+        $backupRoot = Assert-NoReparsePath -Path (Join-Path $AgentRoot "backups\orchestration-nation") -Root $AgentRoot -Description "retirement backup" -AllowLinkedRoot
+        New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+        $destination = Join-Path $backupRoot "$($entry.Name)$($entry.Extension)"
+        $suffix = 2
+        while ($null -ne (Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue)) {
+            $destination = Join-Path $backupRoot "$($entry.Name)-$suffix$($entry.Extension)"
+            $suffix++
+        }
+        $destination = Assert-NoReparsePath -Path $destination -Root $AgentRoot -Description "retirement backup" -AllowLinkedRoot
+        Move-Item -LiteralPath $source -Destination $destination -ErrorAction Stop
+        Write-Host "Moved retired specialist to backup: $source -> $destination"
+    }
+}
+
 function Install-OrchestrationNationBundle {
     param(
         [Parameter(Mandatory)][string]$AgentName,
+        [Parameter(Mandatory)][string]$AgentRoot,
         [Parameter(Mandatory)][string]$AgentSkillsRoot,
         [Parameter(Mandatory)][System.IO.FileInfo[]]$SpecialistSourceFiles
     )
@@ -225,6 +276,7 @@ function Install-OrchestrationNationBundle {
     $referencesDirectory = Join-Path $bundleDirectory "references"
     $bundleSkill = Join-Path $bundleDirectory "SKILL.md"
     $null = Assert-NoReparsePath -Path $bundleDirectory -Root $AgentSkillsRoot -Description "orchestration bundle"
+    $retiredEntries = @(Get-RetiredSpecialistEntries -AgentRoot $AgentRoot -AgentSkillsRoot $AgentSkillsRoot)
 
     New-Item -ItemType Directory -Path $referencesDirectory -Force | Out-Null
     Copy-SafeFile -DestinationPath $bundleSkill -SourcePath $OrchestrationCoordinatorSource
@@ -264,6 +316,7 @@ function Install-OrchestrationNationBundle {
     if ($AgentName -eq "Codex") {
         New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
     }
+    Move-RetiredSpecialistEntries -AgentRoot $AgentRoot -Entries $retiredEntries
 }
 
 function Move-OrchestrationSpecialistDirectories {
@@ -326,6 +379,8 @@ function Install-AgentLinks {
 
     Write-Host "Configuring $AgentName at $AgentRoot"
 
+    $null = @(Get-RetiredSpecialistEntries -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot)
+
     New-Item -ItemType Directory -Path $AgentRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $agentSkillsRoot -Force | Out-Null
 
@@ -346,7 +401,7 @@ function Install-AgentLinks {
         }
     }
 
-    Install-OrchestrationNationBundle -AgentName $AgentName -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
+    Install-OrchestrationNationBundle -AgentName $AgentName -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
     Move-OrchestrationSpecialistDirectories -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
 
     Copy-SafeFile -DestinationPath $rulesLink -SourcePath $GlobalRulesSource

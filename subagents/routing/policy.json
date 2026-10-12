@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "policy_version": "5",
+  "policy_version": "6",
   "interactions": [
     {"id": "planning", "label": "Planning and design", "provider": "codex", "default_model": "gpt-5.6-sol"},
     {"id": "implementation", "label": "Implementation and testing", "provider": "codex", "default_model": "gpt-5.6-terra"},
@@ -14,14 +14,11 @@
     {"id": "clanker-code-review", "label": "Code and security reviewer"},
     {"id": "clanker-data-engineer", "label": "Data engineer"},
     {"id": "clanker-devops-engineer", "label": "DevOps engineer"},
-    {"id": "clanker-documentation-writer", "label": "Documentation writer"},
     {"id": "clanker-performance-engineer", "label": "Performance engineer"},
-    {"id": "clanker-product-engineer", "label": "Product engineer"},
     {"id": "clanker-qa-engineer", "label": "QA engineer"},
     {"id": "clanker-test-engineer", "label": "Test engineer"},
     {"id": "clanker-ui-developer", "label": "UI developer"},
-    {"id": "clanker-ui-ux-reviewer", "label": "UI and UX reviewer"},
-    {"id": "clanker-ux-designer", "label": "UX designer"}
+    {"id": "clanker-ui-ux-reviewer", "label": "UI and UX reviewer"}
   ],
   "models": [
     {"id": "gpt-6-astra", "label": "GPT-6 Astra", "provider": "codex", "efforts": ["low", "medium", "high", "xhigh", "max", "ultra"]},

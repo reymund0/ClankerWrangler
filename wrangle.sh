@@ -17,6 +17,7 @@ ROUTING_EDITOR_SOURCE="$REPO_ROOT/routing-editor/scripts/routing_editor.py"
 MODEL_DISCOVERY_SOURCE="$REPO_ROOT/routing-editor/scripts/model_discovery.py"
 ROUTING_DATA_SOURCE="$SUBAGENTS_SOURCE/routing"
 ROUTING_EDITOR_DIST_SOURCE="$REPO_ROOT/routing-editor/dist"
+RETIRED_SPECIALISTS=(clanker-ux-designer clanker-documentation-writer clanker-product-engineer)
 
 copy_safe_file() {
     local dest="$1"
@@ -192,6 +193,58 @@ remove_legacy_skills() {
     done < <(find "$LEGACY_SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 }
 
+preflight_retired_specialists() {
+    local agent_root="$1"
+    local references="$agent_root/skills/$ORCHESTRATION_NAME/references"
+    local name source backup have_entries=false
+    assert_safe_bundle_path "$agent_root" "$references" "specialist references" >/dev/null
+    for name in "${RETIRED_SPECIALISTS[@]}"; do
+        for source in "$references/$name.md" "$agent_root/skills/$name"; do
+            assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
+            [[ -e "$source" ]] || continue
+            if [[ "$source" == "$references/"* ]]; then
+                [[ -f "$source" ]] || { echo "Error: Unexpected retired specialist entry type: $source" >&2; exit 1; }
+            else
+                [[ -d "$source" ]] || { echo "Error: Unexpected retired specialist entry type: $source" >&2; exit 1; }
+            fi
+            have_entries=true
+        done
+    done
+    if "$have_entries"; then
+        for backup in "$agent_root/backups" "$agent_root/backups/orchestration-nation"; do
+            assert_safe_bundle_path "$agent_root" "$backup" "retirement backup" >/dev/null
+            [[ ! -e "$backup" || -d "$backup" ]] || { echo "Error: Backup destination is not a directory: $backup" >&2; exit 1; }
+        done
+    fi
+}
+
+retire_specialists() {
+    local agent_root="$1"
+    local references="$agent_root/skills/$ORCHESTRATION_NAME/references"
+    local backup_root="$agent_root/backups/orchestration-nation"
+    local name source destination extension suffix
+    for name in "${RETIRED_SPECIALISTS[@]}"; do
+        for source in "$references/$name.md" "$agent_root/skills/$name"; do
+            assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
+            [[ -e "$source" ]] || continue
+            assert_safe_bundle_path "$agent_root" "$backup_root" "retirement backup" >/dev/null
+            mkdir -p "$backup_root"
+            extension=""
+            [[ "$source" != "$references/"* ]] || extension=".md"
+            destination="$backup_root/$name$extension"
+            suffix=2
+            while [[ -e "$destination" || -L "$destination" ]]; do
+                destination="$backup_root/$name-$suffix$extension"
+                suffix=$((suffix + 1))
+            done
+            assert_safe_bundle_path "$agent_root" "$destination" "retirement backup" >/dev/null
+            mv -n "$source" "$destination"
+            [[ ! -e "$source" ]] || { echo "Error: Retirement move did not complete: $source -> $destination" >&2; exit 1; }
+            echo "Moved retired specialist to backup: $source -> $destination"
+        done
+    done
+}
+
 install_orchestration_bundle() {
     local agent_name="$1"
     local agent_root
@@ -200,6 +253,7 @@ install_orchestration_bundle() {
     local bundle_dir="$agent_skills_root/$ORCHESTRATION_NAME"
     local references_dir="$bundle_dir/references"
     assert_safe_bundle_path "$agent_root" "$bundle_dir" "orchestration bundle" >/dev/null
+    preflight_retired_specialists "$agent_root"
 
     copy_safe_file "$bundle_dir/SKILL.md" "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md"
     while IFS= read -r -d '' specialist; do
@@ -236,6 +290,7 @@ install_orchestration_bundle() {
     if [[ "$agent_name" == "Codex" ]]; then
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
+    retire_specialists "$agent_root"
 
     # Preserve old standalone entries outside skill discovery after the bundle is ready.
     local backup_base="$agent_root/backups"
@@ -280,6 +335,10 @@ install_agent_links() {
     echo "Configuring $agent_name at $agent_root"
 
     mkdir -p "$agent_root"
+    agent_root="$(cd "$agent_root" && pwd -P)"
+    agent_skills_root="$agent_root/skills"
+    rules_link="$agent_root/$rules_file_name"
+    preflight_retired_specialists "$agent_root"
     mkdir -p "$agent_skills_root"
 
     remove_legacy_skills "$agent_skills_root"

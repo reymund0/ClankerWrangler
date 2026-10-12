@@ -188,15 +188,15 @@ nor editor changes the target project's ignore file):
 Project routing preferences are no longer supported. Reinstall
 updates package defaults/helpers, never preference files. A build/helper version
 mismatch is an error; rebuild/reinstall. Removing overrides restores defaults.
-Only policy-version-5 snapshots are supported. Older or unknown snapshot versions
+Only policy-version-6 snapshots are supported. Older or unknown snapshot versions
 are rejected with instructions to start a new run. Reinstalling the bundle preserves
 global preferences. Preference/API schema remains 1.
 
-For the policy-5 cutover, pause routing and retain an owner-managed original preference
+For the policy-4 to policy-5/6 cutover, pause routing and retain an owner-managed original preference
 file if rollback is needed. Deploy the complete bundle and compatible editor assets,
 then hand-remove `default_ceiling` from every custom profile and `max_effort` from
-every route before starting a new run. Policy 4 requires profile ceilings and policy 5
-rejects them; custom-profile documents cannot satisfy both versions. Optional route
+every route before starting a new run. Policy 4 requires profile ceilings and policies 5 and 6
+reject them; custom-profile documents cannot satisfy both versions. Optional route
 `max_effort` alone can be removed early. Installers never edit global preferences or
 create ceiling-migration backups. Rollback restores the old bundle, matching assets,
 and the original matching preference file, then starts a new run.
@@ -211,3 +211,51 @@ before writing current profiles. A backup failure or revision conflict prevents 
 write; project files are untouched. To roll back, stop the editor and restore that
 backup to `orchestration-routing.json`, together with compatible helpers/assets.
 Backups contain the entire original document, including retired mechanical values.
+
+## Retired specialist profiles (policy 6)
+
+Policy 6 has ten native roles. `clanker-ux-designer`, `clanker-documentation-writer`,
+and `clanker-product-engineer` are retired and are rejected in requests and preferences.
+The parent owns product scope, acceptance criteria, and routine documentation. Supplied
+Claude Design handoffs guide UX implementation; the UI/UX reviewer still verifies
+rendered states and interactions.
+
+To preserve other customizations, hand-edit the global preference file outside the
+editor and remove all three IDs from `agents` and from each
+`interactions.<activity>.specialists` map. Validation reports the first invalid field;
+check both locations in one pass. Reload after editing, and use the latest revision
+before saving. Invalid saved preferences expose no usable document in the editor.
+Reset prepares a whole-document replacement draft; a separate Save replaces all
+overrides. It is not selective cleanup. Existing ceiling-field rejection still applies.
+
+Upgrade the complete helpers, policy data, and matching editor assets at a safe point,
+then start a new run: policy-5 snapshots are not replayed or rewritten. Update the
+tracked `routing-editor/public/compatibility.json` when developing the package;
+Vite copies it to `dist` rather than generating a new policy version.
+
+Both installers check retirement sources and ancestors, entry types, and backup
+parents before replacement-bundle writes. An explicitly chosen agent root may itself
+be a link; checks still reject linked components below that root. Retired references
+must be regular files; retired standalone skills must be ordinary directories.
+Descendant links/junctions, escaping
+paths, and unexpected types are refused. Retained-role standalone migration keeps
+its existing behavior. Unrelated references, custom notes, and preferences are preserved.
+
+After the new bundle is ready, retired entries move into
+`<agent-root>/backups/orchestration-nation/`. Reference backups use `<id>.md`, then
+`<id>-2.md`, `<id>-3.md`; standalone directory backups use `<id>`, then `<id>-2`,
+`<id>-3`. Existing backups are preserved. Repeating a successful install creates no
+additional retirement backups. The installer reports each source and destination.
+
+A preflight or move failure aborts with a nonzero exit. Later entries, steps, and
+agent roots are not processed. Completed writes and backups remain: a failed move
+can leave new helpers with unfinished retirement/rules copying, and later-root
+failure can leave mixed package versions. Fix the reported cause and rerun to finish
+remaining work without duplicating completed backups. There is no automatic rollback.
+For rollback, restore the previous complete bundle and matching assets; restore any
+owner-changed preferences and custom instructions from their retained backups, then
+start a run matching the restored helper version. Preserve backup history.
+
+Use explicit temporary agent destinations for installer tests. `--global-config-dir`
+isolates preferences only; do not activate Run Wrangler during rendered acceptance
+against real agent roots.

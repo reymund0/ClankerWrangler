@@ -69,7 +69,7 @@ class RoutingIntegrationTests(unittest.TestCase):
             command = [sys.executable, "-B", str(ROOT / "subagents/scripts/routing_policy.py")]
             created = subprocess.run(command + ["snapshot", "--global", str(store.target("global")[1]), "--output", str(snapshot_path)], capture_output=True, text=True)
             self.assertEqual(created.returncode, 0, created.stderr)
-            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "5")
+            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "6")
             self.assertEqual(ignored.read_bytes(), b"malformed ignored project preferences")
             def resolve():
                 result = subprocess.run(command + ["resolve", "--snapshot", str(snapshot_path)], input=json.dumps(request), capture_output=True, text=True)
@@ -131,7 +131,7 @@ class RoutingIntegrationTests(unittest.TestCase):
             command = [sys.executable, "-B", str(ROOT / "subagents/scripts/routing_policy.py")]
             created = subprocess.run(command + ["snapshot", "--global", str(store.target("global")[1]), "--output", str(snapshot_path)], capture_output=True, text=True)
             self.assertEqual(created.returncode, 0, created.stderr)
-            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "5")
+            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "6")
             self.assertEqual(ignored.read_bytes(), b"malformed ignored project preferences")
             resolved = subprocess.run(command + ["resolve", "--snapshot", str(snapshot_path)], input=json.dumps(request), capture_output=True, text=True)
             self.assertEqual(resolved.returncode, 0, resolved.stderr)

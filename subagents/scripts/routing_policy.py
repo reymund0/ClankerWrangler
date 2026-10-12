@@ -19,7 +19,13 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "5"
+POLICY_VERSION = "6"
+NATIVE_ROLES = frozenset((
+    "clanker-architect", "clanker-backend-developer", "clanker-code-review",
+    "clanker-data-engineer", "clanker-devops-engineer", "clanker-performance-engineer",
+    "clanker-qa-engineer", "clanker-test-engineer", "clanker-ui-developer",
+    "clanker-ui-ux-reviewer",
+))
 INTERACTIONS = ("planning", "implementation", "native-review", "visual-review", "claude-review")
 NATIVE_INTERACTIONS = frozenset(INTERACTIONS[:-1])
 TIERS = ("straightforward", "involved", "demanding")
@@ -179,8 +185,8 @@ def _validate_bundle_document(document: Any, field: str = "bundle") -> dict[str,
         if role_id in role_ids:
             raise _error(f"{field}.roles[{index}].id", "must be unique")
         role_ids.add(role_id)
-    if len(role_ids) != 13 or "clanker-code-review" not in role_ids:
-        raise _error(f"{field}.roles", "must contain the 13 native roles including clanker-code-review")
+    if role_ids != NATIVE_ROLES:
+        raise _error(f"{field}.roles", "must contain exactly the 10 active native roles")
     model_ids: set[str] = set()
     for index, item in enumerate(models):
         item = _require_object(item, f"{field}.models[{index}]")

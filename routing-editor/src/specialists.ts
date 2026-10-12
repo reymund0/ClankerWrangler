@@ -2,10 +2,10 @@ import type { ConfigResponse, Preferences } from './types'
 
 // These are editor suggestions, not restrictions on the resolver's supported roles.
 const scenarioRoles: Record<string, string[]> = {
-  planning: ['clanker-architect', 'clanker-backend-developer', 'clanker-data-engineer', 'clanker-devops-engineer', 'clanker-documentation-writer', 'clanker-performance-engineer', 'clanker-product-engineer', 'clanker-qa-engineer', 'clanker-ui-developer', 'clanker-ux-designer'],
-  implementation: ['clanker-backend-developer', 'clanker-data-engineer', 'clanker-devops-engineer', 'clanker-documentation-writer', 'clanker-performance-engineer', 'clanker-test-engineer', 'clanker-ui-developer'],
+  planning: ['clanker-architect', 'clanker-backend-developer', 'clanker-data-engineer', 'clanker-devops-engineer', 'clanker-performance-engineer', 'clanker-qa-engineer', 'clanker-ui-developer'],
+  implementation: ['clanker-backend-developer', 'clanker-data-engineer', 'clanker-devops-engineer', 'clanker-performance-engineer', 'clanker-test-engineer', 'clanker-ui-developer'],
   'native-review': ['clanker-architect', 'clanker-backend-developer', 'clanker-code-review', 'clanker-data-engineer', 'clanker-devops-engineer', 'clanker-performance-engineer', 'clanker-test-engineer', 'clanker-ui-developer'],
-  'visual-review': ['clanker-product-engineer', 'clanker-ui-developer', 'clanker-ui-ux-reviewer', 'clanker-ux-designer'],
+  'visual-review': ['clanker-ui-developer', 'clanker-ui-ux-reviewer'],
 }
 
 export function specialistChoices(config: ConfigResponse, document: Preferences, interaction: string) {

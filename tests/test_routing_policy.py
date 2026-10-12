@@ -31,6 +31,37 @@ def request(**overrides):
 
 
 class PreferenceTests(unittest.TestCase):
+    def test_active_catalog_and_retired_ids_are_strict(self):
+        retired = ("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
+        bundle = policy.load_bundle()
+        self.assertEqual({role["id"] for role in bundle["roles"]}, policy.NATIVE_ROLES)
+        self.assertEqual(len(bundle["roles"]), 10)
+        for role in retired:
+            with self.subTest(role=role):
+                for document, field in (
+                    ({"schema_version": 1, "agents": {role: {"model": "gpt-5.6-sol"}}}, "agents." + role),
+                    ({"schema_version": 1, "interactions": {"planning": {"specialists": {role: {"model": "gpt-5.6-sol"}}}}}, "specialists." + role),
+                ):
+                    original = copy.deepcopy(document)
+                    with self.assertRaisesRegex(policy.RoutingError, field):
+                        policy.snapshot_from_documents(document)
+                    self.assertEqual(document, original)
+                with self.assertRaisesRegex(policy.RoutingError, "request.role"):
+                    policy.resolve(policy.snapshot_from_documents(EMPTY), request(role=role))
+                altered = copy.deepcopy(bundle)
+                altered["roles"][0]["id"] = role
+                with self.assertRaisesRegex(policy.RoutingError, "10 active native roles"):
+                    policy._validate_bundle_document(altered)
+
+    def test_retained_roles_preserve_interaction_defaults(self):
+        snapshot = policy.snapshot_from_documents(EMPTY)
+        for interaction in policy.NATIVE_INTERACTIONS:
+            baseline = policy.resolve(snapshot, request(interaction=interaction))
+            for role in policy.NATIVE_ROLES:
+                resolved = policy.resolve(snapshot, request(interaction=interaction, role=role))
+                self.assertEqual((resolved["model"], resolved["effort"], resolved["provenance"]),
+                                 (baseline["model"], baseline["effort"], baseline["provenance"]))
+
     def test_empty_and_sparse_preferences_normalize_without_defaults(self):
         self.assertEqual(policy.validate_preferences(EMPTY), EMPTY)
         sparse = policy.validate_preferences({"schema_version": 1, "interactions": {"planning": {"model": "gpt-5.6-luna"}}})
@@ -127,7 +158,7 @@ class PreferenceTests(unittest.TestCase):
             snapshot = policy.create_snapshot(global_path)
             self.assertEqual(snapshot["documents"]["global"]["adaptive_profiles"]["codex:custom-global"]["tiers"], {"straightforward": "medium", "involved": "high", "demanding": "max"})
             self.assertEqual(snapshot["hashes"]["global"], policy._sha256(global_bytes))
-            self.assertEqual(snapshot["policy_version"], "5")
+            self.assertEqual(snapshot["policy_version"], "6")
             self.assertEqual(set(snapshot["documents"]), {"global"})
             self.assertEqual(set(snapshot["sources"]), {"global"})
             self.assertEqual(set(snapshot["hashes"]), {"bundle", "global"})
@@ -325,8 +356,27 @@ class ResolutionTests(unittest.TestCase):
         empty = policy.resolve(snapshot, request(session_override={}))
         self.assertEqual(normal, empty)
 class SnapshotAndCliTests(unittest.TestCase):
+    def test_policy_five_catalog_replay_preserves_the_snapshot(self):
+        snapshot = policy.snapshot_from_documents(EMPTY)
+        snapshot["policy_version"] = snapshot["bundle"]["policy_version"] = "5"
+        snapshot["bundle"]["roles"].extend([
+            {"id": "clanker-documentation-writer", "label": "Documentation writer"},
+            {"id": "clanker-product-engineer", "label": "Product engineer"},
+            {"id": "clanker-ux-designer", "label": "UX designer"},
+        ])
+        snapshot["bundle"]["roles"].sort(key=lambda role: role["id"])
+        snapshot["hashes"]["bundle"] = policy._sha256(policy._canonical_json(snapshot["bundle"]))
+        snapshot["fingerprint"] = policy._sha256(policy._canonical_json(policy._snapshot_payload(snapshot)))
+        original = copy.deepcopy(snapshot)
+        for operation in (policy.validate_snapshot, policy.effective_configuration,
+                          lambda value: policy.resolve(value, request())):
+            with self.subTest(operation=operation):
+                with self.assertRaisesRegex(policy.RoutingError, "Start a new run"):
+                    operation(snapshot)
+                self.assertEqual(snapshot, original)
+
     def test_old_and_unknown_snapshots_require_a_new_run(self):
-        for version in ("1", "2", "3", "4", "6", []):
+        for version in ("1", "2", "3", "4", "5", "7", []):
             snapshot = policy.snapshot_from_documents(EMPTY)
             snapshot["policy_version"] = version
             for operation in (policy.validate_snapshot, policy.effective_configuration,
@@ -346,7 +396,7 @@ class SnapshotAndCliTests(unittest.TestCase):
         snapshot["fingerprint"] = policy._sha256(policy._canonical_json(policy._snapshot_payload(snapshot)))
         with self.assertRaisesRegex(policy.RoutingError, "policy_version"):
             policy.validate_snapshot(snapshot)
-        for unsupported in ([], "6"):
+        for unsupported in ([], "7"):
             snapshot = policy.snapshot_from_documents(EMPTY)
             snapshot["policy_version"] = unsupported
             snapshot["bundle"]["policy_version"] = unsupported

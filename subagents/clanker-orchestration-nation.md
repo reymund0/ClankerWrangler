@@ -58,9 +58,7 @@ spawn until capacity changes, and never count the rejected assignment as running
 
 | Role | Instruction file | Use for |
 | --- | --- | --- |
-| Product | `clanker-product-engineer.md` | Outcomes, scope, acceptance, edge cases |
 | Architect | `clanker-architect.md` | Boundaries, interfaces, design tradeoffs |
-| UX/UI | `clanker-ux-designer.md` | Flows, states, accessibility, visual direction |
 | UI/UX reviewer | `clanker-ui-ux-reviewer.md` | Rendered visuals and interaction evidence |
 | Backend | `clanker-backend-developer.md` | APIs, services, integrations, domain logic |
 | Data | `clanker-data-engineer.md` | Contracts, queries, integrity, migrations |
@@ -68,9 +66,14 @@ spawn until capacity changes, and never count the rejected assignment as running
 | QA planning | `clanker-qa-engineer.md` | Acceptance scenarios and verification strategy |
 | Test engineer | `clanker-test-engineer.md` | Test implementation and execution |
 | Code/security reviewer | Shared `clanker-code-review` skill | Correctness, regressions, spec coverage |
-| Documentation | `clanker-documentation-writer.md` | Documentation of verified behavior |
 | DevOps | `clanker-devops-engineer.md` | Build, CI, delivery, recovery |
 | Performance | `clanker-performance-engineer.md` | Measured bottlenecks and improvements |
+
+The parent owns product outcomes, scope, acceptance criteria, and routine documentation.
+Use supplied Claude Design handoffs as UX design context for bounded UI implementation
+and independent UI/UX review. Resolve missing material design decisions with the user;
+do not automatically invoke Claude Design or assign retired product, documentation,
+or UX designer profiles. Retain the shared documentation-update and review skills.
 
 In the source checkout, specialist files sit beside this coordinator in `subagents/`;
 installed packages keep them in `references/`. Shared code review is

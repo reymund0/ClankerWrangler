@@ -21,6 +21,35 @@ LEGACY = {**LUNA, "adaptive_profiles": {"codex:gpt-5.6-luna": {"tiers": {"mechan
 
 
 class StoreTests(unittest.TestCase):
+    def test_retired_roles_require_explicit_repair_and_preserve_other_overrides(self):
+        retired = ("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
+        _, path = self.store.target("global")
+        path.parent.mkdir(exist_ok=True)
+        retained = {"clanker-backend-developer": {"model": "gpt-5.6-sol"}}
+        for role in retired:
+            for location in ("agents", "specialists"):
+                invalid = {"schema_version": 1, "agents": retained.copy()}
+                if location == "agents":
+                    invalid["agents"][role] = {"model": "gpt-5.6-sol"}
+                else:
+                    invalid["interactions"] = {"planning": {"specialists": {role: {"model": "gpt-5.6-sol"}}}}
+                original = json.dumps(invalid).encode()
+                path.write_bytes(original)
+                state = self.store.read("global")
+                self.assertIsNone(state["document"])
+                self.assertIn(role, state["error"])
+                for operation in (
+                    lambda: self.store.preview("global", invalid),
+                    lambda: self.store.preview("global", EMPTY, {"interaction": "planning", "role": role, "tier": "straightforward", "reason": "Retired role"}),
+                    lambda: self.store.save("global", invalid, state["revision"]),
+                ):
+                    with self.assertRaises(policy.RoutingError):
+                        operation()
+                    self.assertEqual(path.read_bytes(), original)
+                repaired = {"schema_version": 1, "agents": retained.copy()}
+                self.store.save("global", repaired, state["revision"])
+                self.assertEqual(self.store.read("global")["document"], repaired)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -336,7 +365,7 @@ class HTTPTests(unittest.TestCase):
         self.assets = self.root / "assets"
         self.assets.mkdir()
         (self.assets / "index.html").write_text("<!doctype html><title>Editor</title>")
-        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "5"}))
+        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "6"}))
         self.store = editor.PreferenceStore(global_config_dir=self.root / "prefs")
         self.catalog = {"providers": {provider: {"status": "unavailable", "source": provider + "-cli",
                         "cli_version": None, "updated_at": None, "error": "CLI unavailable", "models": []}
@@ -488,7 +517,7 @@ class HTTPTests(unittest.TestCase):
         (self.assets / "compatibility.json").write_text('{"schema_version":2,"policy_version":"1"}')
         with self.assertRaises(editor.EditorError):
             editor.asset_root(self.assets)
-        for version in ("2", "4"):
+        for version in ("2", "4", "5"):
             (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": version}))
             with self.subTest(version=version), self.assertRaisesRegex(editor.EditorError, "rebuild and reinstall"):
                 editor.asset_root(self.assets)
