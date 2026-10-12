@@ -88,7 +88,7 @@ Use one concise handoff containing:
 - Role/interaction, repository and instruction paths, and the requested model/effort.
 - Outcome, exact file ownership or advisory-only scope, dependencies, and exclusions.
 - Relevant user/repository constraints and OpenSpec artifacts, tasks, and scenarios.
-- Expected verification; return changed files, evidence, blockers, and the instruction
+- Expected verification and the compact reply contract below; return the instruction
   path actually read. Report effective settings only when the runtime supplies them.
 - Worker boundaries: no recursive delegation, shared-log writes, or OpenSpec updates.
 
@@ -110,6 +110,38 @@ unrelated project execution.
 
 Coordinate writes through assignment ownership and dependencies. Before integration,
 reconcile changed paths with assigned ownership and resolve any unowned or conflicting change.
+
+## Worker communication
+
+Supply a compact reply contract in each assignment. Target about 200 words for a
+routine completion; this is a soft target, not truncation or a reason to omit
+material findings, failed/unrun checks, coverage gaps, blockers, or required decisions.
+Retain the existing readiness statuses and the instruction path actually read.
+
+- Implementers: outcome, changed paths, exact checks/results, material gaps/concerns,
+  next action/owner, and evidence references.
+- Reviewers: scoped verdict, actionable findings with stable IDs and locations,
+  coverage gaps or failed/unrun checks, and evidence references.
+- Planners/advisors: recommendation, consequential tradeoff, unresolved decisions,
+  verification needs, and supporting references.
+
+When substantial detail is expected, assign a worker-owned evidence path separately
+from application-file ownership. Keep full matrices, reproduction details, logs, and
+captures there; return the real path and relevant section. Small complete inline
+results do not need a report file. If artifact storage is unavailable or outside
+ownership, preserve necessary evidence inline and report the limitation; do not
+invent a saved report or discard required detail to meet the target.
+
+Send interim messages to the parent only for blockers, ownership conflicts, required
+decisions, or consequential changes to an earlier result. Deliver completion once;
+do not send the same final handoff through both a message and the final response.
+On follow-up, report changed results and still-open finding IDs/blockers, referring
+to earlier evidence instead of repeating the original report.
+
+Prefer completion notifications or bounded waits for native workers. Inspect state
+when it informs a next action; do not repeatedly request progress or dump unchanged
+messages/logs. Read returned digests first, then retrieve the specific artifacts and
+evidence needed for acceptance. A short reply never replaces parent verification.
 
 ## Review and integrate
 

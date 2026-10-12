@@ -30,7 +30,7 @@ class InstallerTests(unittest.TestCase):
                 build = source_repo / "routing-editor/dist"
                 (build / "assets").mkdir(parents=True)
                 (build / "index.html").write_text("<!doctype html><title>Fixture editor</title>")
-                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"4"}')
+                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"5"}')
                 (build / "assets/app.js").write_text("// fixture build")
             claude, codex, windsurf = [root / name for name in ("claude", "codex", "windsurf")]
             sentinel = root / "unexpected-claude-call"

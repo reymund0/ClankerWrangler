@@ -14,7 +14,7 @@ const editorRoot = join(repositoryRoot, 'routing-editor')
 const helperPath = join(editorRoot, 'scripts', 'routing_editor.py')
 const assetRoot = join(editorRoot, 'dist')
 const startupTimeoutMs = 10_000
-const compatibility = { schema_version: 1, policy_version: '4' }
+const compatibility = { schema_version: 1, policy_version: '5' }
 
 const usage = `Usage: node routing-editor/scripts/editor.mjs <start|dev|build> [options]
 

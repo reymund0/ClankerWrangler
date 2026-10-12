@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emptyPreferences, resetAgentField, resetAgentRoute, resetRoute, updateAgentRoute, updateRoute } from './draft'
+import { emptyPreferences, reasoningFor, resetAgentField, resetAgentRoute, resetRoute, updateAgentRoute, updateRoute } from './draft'
 
 describe('sparse route drafts', () => {
   it('resets a project specialist override without flattening inherited fields', () => {
@@ -9,9 +9,14 @@ describe('sparse route drafts', () => {
   })
 
   it('keeps a route reasoning override when only its model is changed', () => {
-    const original = updateRoute(emptyPreferences(), 'implementation', undefined, { reasoning: { mode: 'adaptive', max_effort: 'high' } })
+    const original = updateRoute(emptyPreferences(), 'implementation', undefined, { reasoning: { mode: 'adaptive' } })
     const updated = updateRoute(original, 'implementation', undefined, { model: 'gpt-5.6-luna' })
-    expect(updated.interactions?.implementation).toEqual({ model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive', max_effort: 'high' } })
+    expect(updated.interactions?.implementation).toEqual({ model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive' } })
+  })
+
+  it('replaces fixed reasoning with the complete Adaptive mode', () => {
+    expect(reasoningFor('adaptive', { mode: 'fixed', effort: 'max' })).toEqual({ mode: 'adaptive' })
+    expect(reasoningFor('fixed', { mode: 'adaptive' }, 'high')).toEqual({ mode: 'fixed', effort: 'high' })
   })
 })
 

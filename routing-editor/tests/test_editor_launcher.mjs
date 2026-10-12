@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { fork, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { request } from 'node:http';
-import { mkdtemp, mkdir, readFile, rm, copyFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, copyFile, writeFile, cp, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,7 +95,7 @@ test('development startup without Node dependencies cleans its Python backend', 
       await copyFile(path.join(root, name), path.join(fixture, name));
     }
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
-    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '4' }));
+    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '5' }));
     const result = spawnSync(process.execPath, [path.join(fixture, 'routing-editor/scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
       encoding: 'utf8', timeout: 12000, windowsHide: true,
     });
@@ -132,7 +132,25 @@ for (const mode of ['start', 'dev']) {
     await mkdir(path.join(project, ".clanker"), { recursive: true });
     const ignored = path.join(project, ".clanker", "orchestration-routing.json");
     await writeFile(ignored, "malformed ignored project preferences");
-    const child = fork(launcher, [mode, '--global-config-dir', 'global prefs'], {
+    let fixtureLauncher = launcher;
+    if (mode === 'dev') {
+      // Keep a running source-checkout dev server and its dependency cache untouched.
+      const checkout = path.join(fixture, 'checkout');
+      for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/routing_policy.py', 'subagents/scripts/claude_cross_review.py', 'subagents/routing/policy.json', 'routing-editor/index.html', 'routing-editor/package.json']) {
+        await mkdir(path.dirname(path.join(checkout, name)), { recursive: true });
+        await copyFile(path.join(root, name), path.join(checkout, name));
+      }
+      for (const name of ['routing-editor/src', 'routing-editor/dist']) {
+        await cp(path.join(root, name), path.join(checkout, name), { recursive: true });
+      }
+      await symlink(path.join(root, 'routing-editor/node_modules'), path.join(checkout, 'routing-editor/node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+      const viteConfig = (await readFile(path.join(root, 'routing-editor/vite.config.ts'), 'utf8'))
+        .replace('port: 42069', 'port: 0')
+        .replace('export default defineConfig({', `export default defineConfig({ cacheDir: ${JSON.stringify(path.join(checkout, 'vite-cache'))},`);
+      await writeFile(path.join(checkout, 'routing-editor/vite.config.ts'), viteConfig);
+      fixtureLauncher = path.join(checkout, 'routing-editor/scripts/editor.mjs');
+    }
+    const child = fork(fixtureLauncher, [mode, '--global-config-dir', 'global prefs'], {
       cwd: fixture, silent: true, windowsHide: true, env: process.env,
     });
     let origin;
@@ -152,7 +170,7 @@ for (const mode of ['start', 'dev']) {
       assert.equal(page.headers['cache-control'], 'no-store');
       assert.equal((await fetch(origin, { headers: { Origin: 'https://example.com' } })).status, 403);
       if (mode === 'dev') {
-        assert.equal(url.port, '42069');
+        assert.ok(Number(url.port) > 0);
         const client = await fetch(`${origin}/@vite/client`);
         assert.equal(client.status, 200);
         assert.match(await client.text(), /WebSocket|HMR/);

@@ -81,5 +81,5 @@ export function resetAgentField(document: Preferences, role: string, field: 'mod
 
 export function reasoningFor(mode: 'fixed' | 'adaptive', current: Reasoning | undefined, effort?: string): Reasoning {
   if (mode === 'fixed') return { mode, effort: effort || (current?.mode === 'fixed' ? current.effort : '') }
-  return { mode, ...(effort ? { max_effort: effort } : {}) }
+  return { mode }
 }

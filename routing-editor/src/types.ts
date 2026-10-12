@@ -1,4 +1,4 @@
-export type Reasoning = { mode: 'fixed'; effort: string } | { mode: 'adaptive'; max_effort?: string }
+export type Reasoning = { mode: 'fixed'; effort: string } | { mode: 'adaptive' }
 
 export type Route = {
   model?: string
@@ -20,7 +20,6 @@ export type AgentRoute = {
 
 export type AdaptiveProfile = {
   tiers: Record<'straightforward' | 'involved' | 'demanding', string>
-  default_ceiling: string
 }
 
 export type Interaction = { id: string; label: string; provider: 'codex' | 'claude'; default_model: string }
@@ -61,8 +60,6 @@ export type Bundle = {
 export type EffectiveRoute = {
   route?: { model?: string; reasoning?: Reasoning }
   provenance?: { model?: string; reasoning?: string; profile?: string | null }
-  ceiling?: string | null
-  ceiling_source?: string | null
   specialists?: Record<string, EffectiveRoute>
 }
 
@@ -82,8 +79,6 @@ export type Decision = {
   reasoning: Reasoning
   effort: string
   proposed_effort: string
-  ceiling: string | null
-  ceiling_source: string | null
   interaction: string
   role?: string
   tier: string

@@ -112,14 +112,15 @@ function ModelPicker({ catalog, provider, value, onChange, describedBy, allowEmp
   </span>
 }
 
-function Segmented({ label, values, value, onChange, format = (item: string) => item }: {
+function Segmented({ label, values, value, onChange, describedBy, format = (item: string) => item }: {
   label: string
   values: readonly string[]
   value: string
   onChange: (value: string) => void
+  describedBy?: string
   format?: (value: string) => string
 }) {
-  return <div className="segmented" role="group" aria-label={label}>
+  return <div className="segmented" role="group" aria-label={label} aria-describedby={describedBy}>
     {values.map((item) => <button type="button" key={item} aria-pressed={value === item} onClick={() => onChange(item)}>{format(item)}</button>)}
   </div>
 }
@@ -145,7 +146,7 @@ function RouteEditor({ config, catalog, document, interaction, role, errors, onC
   const routeError = errors[path]
   const modelError = errorFor(errors, `${path}.model`)
   const reasoningError = errorFor(errors, `${path}.reasoning`)
-  const selectedEffort = valueReasoning.mode === 'fixed' ? valueReasoning.effort : valueReasoning.max_effort ?? ''
+  const selectedEffort = valueReasoning.mode === 'fixed' ? valueReasoning.effort : ''
   const effort = effortChoices(config, catalog, provider, valueModel, selectedEffort)
   const reset = (field: 'model' | 'reasoning') => onChange(resetField(document, interaction, role, field), [`${path}.${field}`])
   const described = (field: string) => `${path}-${field}-help ${path}-${field}-error${routeError ? ` ${path}-route-error` : ''}`
@@ -161,20 +162,19 @@ function RouteEditor({ config, catalog, document, interaction, role, errors, onC
     <div className="field-action"><button type="button" className="text-button" onClick={() => reset('model')} disabled={!own?.model}>Reset model</button></div>
     <div className="reasoning-field">
       <span className="field-label">Reasoning mode</span>
-      <Segmented label={`${interaction} reasoning mode`} values={['adaptive', 'fixed']} value={valueReasoning.mode} onChange={(mode) => onChange(updateRoute(document, interaction, role, { reasoning: reasoningFor(mode as 'fixed' | 'adaptive', valueReasoning) }), [`${path}.reasoning`])} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
+      <Segmented label={`${interaction} reasoning mode`} describedBy={described('reasoning')} values={['adaptive', 'fixed']} value={valueReasoning.mode} onChange={(mode) => onChange(updateRoute(document, interaction, role, { reasoning: reasoningFor(mode as 'fixed' | 'adaptive', valueReasoning) }), [`${path}.reasoning`])} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
       <span id={`${path}-reasoning-help`} className="field-help">{sourceLabel(own?.reasoning ? 'global preferences' : effective.provenance?.reasoning)}</span>
     </div>
     <div className="field-action"><button type="button" className="text-button" onClick={() => reset('reasoning')} disabled={!own?.reasoning}>Reset reasoning</button></div>
-    <label className="effort-field">{valueReasoning.mode === 'fixed' ? 'Effort' : 'Adaptive maximum'}
+    {valueReasoning.mode === 'fixed' && <label className="effort-field">Effort
       <select value={selectedEffort} aria-describedby={described('reasoning')}
         onChange={(event) => onChange(updateRoute(document, interaction, role, { reasoning: reasoningFor(valueReasoning.mode, valueReasoning, event.target.value) }), [`${path}.reasoning`])}>
-        {valueReasoning.mode === 'adaptive' ? <option value="">Model profile default</option> : <option value="" disabled>Choose effort</option>}
+        <option value="" disabled>Choose effort</option>
         {effort.options.map((item) => <option value={item.value} key={item.value} disabled={item.disabled}>{item.label}</option>)}
       </select>
       {effort.note && <span className="field-help">{effort.note}</span>}
-      {valueReasoning.mode === 'adaptive' && <span className="field-help">Adaptive ceiling: {effective.ceiling ?? 'Model profile default'} · {sourceLabel(effective.ceiling_source)}</span>}
-      <FieldError id={`${path}-reasoning-error`} error={reasoningError} />
-    </label>
+    </label>}
+    <FieldError id={`${path}-reasoning-error`} error={reasoningError} />
   </fieldset>
 }
 
@@ -191,7 +191,7 @@ function CatalogStatusPanel({ catalog, loading, error, onRefresh }: { catalog: M
 function RouteSummary({ route, fallback = 'Unresolved' }: { route?: Route; fallback?: string }) {
   const model = route?.model || fallback
   const reasoning = route?.reasoning
-  const summary = reasoning?.mode === 'fixed' ? `fixed · ${reasoning.effort}` : reasoning?.mode === 'adaptive' ? `adaptive ≤ ${reasoning.max_effort ?? 'profile default'}` : 'reasoning unresolved'
+  const summary = reasoning?.mode === 'fixed' ? `fixed · ${reasoning.effort}` : reasoning?.mode === 'adaptive' ? 'adaptive' : 'reasoning unresolved'
   return <><span className="route-model">{model}</span><span className="route-effort">{summary}</span></>
 }
 
@@ -212,7 +212,7 @@ function WorkerMatrix({ config, document, selectedRole, errors, onSelect }: {
         const specialistErrors = interactions.filter((activity) => errorFor(errors, `interactions.${activity.id}.specialists.${role.id}`))
         const rowError = Boolean(agentError || specialistErrors.length)
         const defaultModelLabel = state.modelMixed || state.reasoningMixed ? 'Varies by activity' : state.valueModel || 'Unresolved'
-        const defaultReasoningLabel = state.modelMixed || state.reasoningMixed ? 'Choose a default' : state.valueReasoning?.mode === 'fixed' ? `fixed · ${state.valueReasoning.effort}` : state.valueReasoning?.mode === 'adaptive' ? `adaptive ≤ ${state.valueReasoning.max_effort ?? 'profile default'}` : 'reasoning unresolved'
+        const defaultReasoningLabel = state.modelMixed || state.reasoningMixed ? 'Choose a default' : state.valueReasoning?.mode === 'fixed' ? `fixed · ${state.valueReasoning.effort}` : state.valueReasoning?.mode === 'adaptive' ? 'adaptive' : 'reasoning unresolved'
         const defaultStateLabel = state.modelMixed || state.reasoningMixed ? 'Varies' : state.own?.model || state.own?.reasoning ? 'Set globally' : 'Inherited'
         return <tr className={`matrix-row${selectedRole === role.id ? ' is-selected' : ''}${rowError ? ' has-error' : ''}`} key={role.id}>
           <th scope="row" className="matrix-specialist"><button type="button" className="specialist-select" onClick={() => onSelect(role.id)} aria-label={`Inspect ${role.label}${rowError ? ', has field errors' : ''}`} aria-pressed={selectedRole === role.id}><strong>{role.label}</strong><span className="mono">{role.id}</span>{rowError && <span className="row-error-label">Field error</span>}</button>{exceptionCount > 0 && <span className="exception-note">{exceptionCount} exception{exceptionCount === 1 ? '' : 's'}</span>}</th>
@@ -228,7 +228,7 @@ function WorkerMatrix({ config, document, selectedRole, errors, onSelect }: {
             const route = { ...actual, ...(ownException?.model ? { model: ownException.model } : {}), ...(ownException?.reasoning ? { reasoning: ownException.reasoning } : {}) }
             const exception = state.exceptionActivities.includes(interaction.id)
             const exceptionError = errorFor(errors, `interactions.${interaction.id}.specialists.${role.id}`)
-            return <td key={interaction.id}><button type="button" className={`route-cell ${exception ? 'state-exception' : 'state-inherited'}${exceptionError ? ' has-field-error' : ''}`} onClick={() => onSelect(role.id, interaction.id)} aria-label={`${role.label}, ${interaction.label}: ${route.model ?? 'Unresolved'}, ${route.reasoning?.mode === 'fixed' ? `fixed · ${route.reasoning.effort}` : route.reasoning?.mode === 'adaptive' ? `adaptive ≤ ${route.reasoning.max_effort ?? 'profile default'}` : 'reasoning unresolved'}, ${exception ? 'activity exception' : 'Inherited'}${exceptionError ? ', has field error' : ''}`}>
+            return <td key={interaction.id}><button type="button" className={`route-cell ${exception ? 'state-exception' : 'state-inherited'}${exceptionError ? ' has-field-error' : ''}`} onClick={() => onSelect(role.id, interaction.id)} aria-label={`${role.label}, ${interaction.label}: ${route.model ?? 'Unresolved'}, ${route.reasoning?.mode === 'fixed' ? `fixed · ${route.reasoning.effort}` : route.reasoning?.mode === 'adaptive' ? 'adaptive' : 'reasoning unresolved'}, ${exception ? 'activity exception' : 'Inherited'}${exceptionError ? ', has field error' : ''}`}>
               <RouteSummary route={route} /><span className="state-tag">{exceptionError ? 'Field error' : exception ? 'Activity exception' : 'Inherited'}</span>
             </button></td>
           })}
@@ -299,7 +299,7 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
   const reasoningError = errorFor(errors, `${path}.reasoning`)
   const model = state.valueModel
   const reasoning = state.valueReasoning
-  const selectedEffort = reasoning?.mode === 'fixed' ? reasoning.effort : reasoning?.mode === 'adaptive' ? reasoning.max_effort ?? '' : ''
+  const selectedEffort = reasoning?.mode === 'fixed' ? reasoning.effort : ''
   const effort = state.modelMixed && !own?.model ? mixedEffortChoices(config, catalog, 'codex', state.actualModels, selectedEffort) : effortChoices(config, catalog, 'codex', model, selectedEffort)
   const update = (change: Partial<AgentRoute>, field: 'model' | 'reasoning') => onChange(updateAgentRoute(document, role.id, change), [`${path}.${field}`])
   const availableToAdd = state.activities.filter((activity) => !state.exceptionActivities.includes(activity.id))
@@ -317,13 +317,12 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
       <button type="button" className="text-button" disabled={!own?.model} onClick={() => onChange(resetAgentField(document, role.id, 'model'), [`${path}.model`])}>Reset model</button>
       <div className="reasoning-field"><span className="field-label">Reasoning mode</span>
         {state.reasoningMixed && !own?.reasoning && <span className="field-help">Varies by activity. Choose a mode to set a sparse agent default.</span>}
-        <Segmented label={`${role.label} reasoning mode`} values={['adaptive', 'fixed']} value={reasoning?.mode ?? ''} onChange={(mode) => update({ reasoning: reasoningFor(mode as 'fixed' | 'adaptive', reasoning) }, 'reasoning')} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
+        <Segmented label={`${role.label} reasoning mode`} describedBy={pathHelp('reasoning')} values={['adaptive', 'fixed']} value={reasoning?.mode ?? ''} onChange={(mode) => update({ reasoning: reasoningFor(mode as 'fixed' | 'adaptive', reasoning) }, 'reasoning')} format={(mode) => mode === 'adaptive' ? 'Adaptive' : 'Fixed'} />
         <span id={`${path}-reasoning-help`} className="field-help">{state.reasoningMixed ? 'Varies by activity' : own?.reasoning ? sourceLabel('global preferences') : state.baseline?.route?.reasoning ? sourceLabel(state.baseline.provenance?.reasoning) : state.inheritedReasoning ? 'Derived from activity routes' : sourceLabel()}</span>
         <FieldError id={`${path}-reasoning-error`} error={reasoningError} />
       </div>
       <button type="button" className="text-button" disabled={!own?.reasoning} onClick={() => onChange(resetAgentField(document, role.id, 'reasoning'), [`${path}.reasoning`])}>Reset reasoning</button>
       {reasoning?.mode === 'fixed' && <label>Effort<select value={selectedEffort} aria-describedby={`${path}-reasoning-error`} onChange={(event) => update({ reasoning: reasoningFor('fixed', reasoning, event.target.value) }, 'reasoning')}><option value="" disabled>{effort.empty ? 'Choose a default model or activity-specific reasoning' : 'Choose effort'}</option>{effort.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select>{effort.note && <span className="field-help">{effort.note}</span>}{effort.empty && <span className="field-help">No common known effort is available. Choose a model or customize activity reasoning.</span>}</label>}
-      {reasoning?.mode === 'adaptive' && <label>Adaptive maximum<select value={selectedEffort} aria-describedby={`${path}-reasoning-error`} onChange={(event) => update({ reasoning: reasoningFor('adaptive', reasoning, event.target.value) }, 'reasoning')}><option value="">Model profile default</option>{effort.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select>{effort.note && <span className="field-help">{effort.note}</span>}</label>}
       <button type="button" className="text-button" disabled={!own} onClick={() => onChange(resetAgentRoute(document, role.id), [path])}>Reset agent default</button>
     </fieldset>
 
@@ -368,19 +367,13 @@ function ActivityDefaultCard({ config, catalog, document, interaction, errors, o
     <header><div><h2>{interaction.label}</h2><p className="mono">{interaction.id}</p></div><div className="card-tags"><span className={`badge ${hasOwnRoute ? 'badge-set' : ''}`}>{hasOwnRoute ? 'Set here' : 'Inherited'}</span><span className="badge">{interaction.provider}</span></div></header>
     <div className="used-by"><strong>Used by {users.length}:</strong>{users.length ? users.map((item) => <span className="user-chip" key={item.id}>{item.label}</span>) : <span className="field-help">No specialist suggestions for this activity.</span>}</div>
     <RouteEditor config={config} catalog={catalog} document={document} interaction={interaction.id} errors={errors} onChange={onChange} />
-    {effective.ceiling && <p className="field-help ceiling-note">Adaptive routes inherit a ceiling of <strong>{effective.ceiling}</strong> from {sourceLabel(effective.ceiling_source)}.</p>}
     <button type="button" className="text-button" disabled={!hasOwnRoute} onClick={resetOwnRoute}>Reset route to inherited</button>
   </article>
 }
 
-function profileEffort(config: ConfigResponse, provider: Provider, profile: AdaptiveProfile | undefined, tier: typeof tiers[number]) {
-  if (!profile) return { mapped: 'Unknown', requested: 'Unknown' }
-  const mapped = profile.tiers[tier]
-  const order = config.bundle.effort_orders[provider] ?? []
-  const mappedIndex = order.indexOf(mapped)
-  const ceilingIndex = order.indexOf(profile.default_ceiling)
-  const requested = mappedIndex < 0 || ceilingIndex < 0 ? mapped : order[Math.min(mappedIndex, ceilingIndex)]
-  return { mapped, requested }
+function profileEffort(profile: AdaptiveProfile | undefined, tier: typeof tiers[number]) {
+  const mapped = profile?.tiers[tier] ?? 'Unknown'
+  return { mapped, requested: mapped }
 }
 
 function profileFamily(key: string): string {
@@ -426,16 +419,15 @@ function ProfileTable({ config, catalog, document, errors, onChange }: {
     const profileModel = key.slice(separator + 1)
     if (!modelChoices(catalog, profileProvider).some((item) => item.id === profileModel)) return
     const inherited = bundledProfiles[key]
-    const fallback = inherited ?? config.effective?.profiles[key] ?? { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'xhigh' }
+    const fallback = inherited ?? config.effective?.profiles[key] ?? { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     setExpanded((current) => ({ ...current, [`global:${profileFamily(key)}`]: true }))
     onChange({ ...clone(document), adaptive_profiles: { ...ownProfiles, [key]: clone(fallback) } }, [`adaptive_profiles.${key}`])
     if (model === profileModel && provider === profileProvider) setModel('')
   }
   const customize = () => { if (model) customizeKey(`${provider}:${model}`) }
-  const modify = (key: string, field: keyof AdaptiveProfile | `tiers.${typeof tiers[number]}`, value: string) => {
+  const modify = (key: string, field: `tiers.${typeof tiers[number]}`, value: string) => {
     const profile = clone(ownProfiles[key])
-    if (field === 'default_ceiling') profile.default_ceiling = value
-    else profile.tiers[field.slice(6) as typeof tiers[number]] = value
+    profile.tiers[field.slice(6) as typeof tiers[number]] = value
     onChange({ ...clone(document), adaptive_profiles: { ...ownProfiles, [key]: profile } }, [`adaptive_profiles.${key}.${field}`])
   }
   const reset = (key: string) => {
@@ -457,14 +449,14 @@ function ProfileTable({ config, catalog, document, errors, onChange }: {
     {!availableModels.length && <p className="field-help">No models were reported by the local {provider} CLI.</p>}
     <section className="profile-tier-guide" aria-label="Adaptive tier definitions">{tiers.map((tier) => <div key={tier}><strong>{tierLabels[tier]}</strong><span>{tierDefinitions[tier]}</span></div>)}</section>
     {keys.length === 0 ? <p className="empty">No profile data was reported. Select a locally reported model to customize its profile.</p> : <div className="profile-table-scroll"><div className="profile-table" role="table" aria-label="Adaptive model profiles">
-      <div className="profile-row profile-heading" role="row"><span role="columnheader">Model</span>{tiers.map((tier) => <span role="columnheader" key={tier} aria-label={`${tierLabels[tier]}: ${tierDefinitions[tier]}`} title={tierDefinitions[tier]}><span>{tierLabels[tier]}</span><span id={`tier-definition-${tier}`} className="sr-only">{tierDefinitions[tier]}</span></span>)}<span role="columnheader">Default ceiling</span><span role="columnheader">Actions</span></div>
+      <div className="profile-row profile-heading" role="row"><span role="columnheader">Model</span>{tiers.map((tier) => <span role="columnheader" key={tier} aria-label={`${tierLabels[tier]}: ${tierDefinitions[tier]}`} title={tierDefinitions[tier]}><span>{tierLabels[tier]}</span><span id={`tier-definition-${tier}`} className="sr-only">{tierDefinitions[tier]}</span></span>)}<span role="columnheader">Actions</span></div>
       {families.map((family) => {
         const familyKeys = keys.filter((key) => profileFamily(key) === family)
         const customized = familyKeys.filter((key) => ownProfiles[key]).length
         const stateKey = `global:${family}`
         const isExpanded = expanded[stateKey] ?? (customized > 0 || errorFamilies.includes(family))
         return <div role="rowgroup" key={family}>
-          <div role="row" className="profile-family-heading"><div role="cell" aria-colspan={6}>
+          <div role="row" className="profile-family-heading"><div role="cell" aria-colspan={5}>
             <button type="button" aria-expanded={isExpanded} onClick={() => setExpanded((current) => ({ ...current, [stateKey]: !isExpanded }))}>
               <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span><strong>{family}</strong><span>{familyKeys.length} models</span>{customized > 0 && <span>· {customized} customized here</span>}
             </button>
@@ -479,7 +471,7 @@ function ProfileTable({ config, catalog, document, errors, onChange }: {
         if (!displayed) return null
         const path = `adaptive_profiles.${key}`
         const profileError = errorFor(errors, path)
-        const fields = [...tiers.map((tier) => ({ label: tierLabels[tier], field: `tiers.${tier}` as const, value: displayed.tiers[tier], inheritedValue: inherited?.tiers[tier] })), { label: 'Default ceiling', field: 'default_ceiling' as const, value: displayed.default_ceiling, inheritedValue: inherited?.default_ceiling }]
+        const fields = tiers.map((tier) => ({ label: tierLabels[tier], field: `tiers.${tier}` as const, value: displayed.tiers[tier], inheritedValue: inherited?.tiers[tier] }))
         const effortOrder = config.bundle.effort_orders[profileProvider] ?? []
         return <div role="row" key={key} className={`profile-row${own ? ' is-customized' : ''}`}>
           <div role="rowheader" className="profile-model"><span className="mono">{key}</span><FieldError id={`${path}-error`} error={profileError} />{own && <span className="state-tag">Customized here</span>}</div>
@@ -509,9 +501,8 @@ function ProfileTable({ config, catalog, document, errors, onChange }: {
     {config.scopes.global.migration_backup && !config.scopes.global.migration_pending && <p className="profile-migration profile-migration--saved" role="status"><strong>Profile conversion saved.</strong> Original preferences backup: <code>{config.scopes.global.migration_backup}</code></p>}
     {Object.entries(ownProfiles)[0] ? (() => {
       const [key, profile] = Object.entries(ownProfiles)[0]
-      const providerForKey = key.slice(0, key.indexOf(':')) as Provider
-      const example = profileEffort(config, providerForKey, profile, 'involved')
-      return <p className="profile-example"><strong>Example:</strong> An involved task on <span className="mono">{key.slice(key.indexOf(':') + 1)}</span> maps to <strong>{example.mapped}</strong>; the {profile.default_ceiling} ceiling yields requested effort <strong>{example.requested}</strong>.</p>
+      const example = profileEffort(profile, 'involved')
+      return <p className="profile-example"><strong>Example:</strong> An involved task on <span className="mono">{key.slice(key.indexOf(':') + 1)}</span> maps to <strong>{example.mapped}</strong> and requests effort <strong>{example.requested}</strong>.</p>
     })() : null}
     <p className="profile-footnote">Only efforts reported by the local CLI can be chosen. Profiles are routing policy, not a quality guarantee.</p>
   </>
@@ -549,7 +540,7 @@ function traceDecision(config: ConfigResponse, document: Preferences, interactio
   const decisionModelWinner = exactWinner(decision.provenance.model, 'model')
   const decisionReasoningWinner = exactWinner(decision.provenance.reasoning, 'reasoning')
   const modelTrusted = resolvedModel === decision.model && (decisionModelWinner === null || decisionModelWinner === modelWinner)
-  const sameReasoning = (left?: Reasoning, right?: Reasoning) => left?.mode === right?.mode && (left?.mode === 'fixed' ? left.effort === (right?.mode === 'fixed' ? right.effort : undefined) : left?.mode === 'adaptive' && left.max_effort === (right?.mode === 'adaptive' ? right.max_effort : undefined))
+  const sameReasoning = (left?: Reasoning, right?: Reasoning) => left?.mode === right?.mode && (left?.mode === 'fixed' ? left.effort === (right?.mode === 'fixed' ? right.effort : undefined) : left?.mode === 'adaptive')
   const reasoningTrusted = sameReasoning(resolvedReasoning, decision.reasoning) && (decisionReasoningWinner === null || decisionReasoningWinner === reasoningWinner)
 
   return { layers, modelWinner: decisionModelWinner, reasoningWinner: decisionReasoningWinner, modelTrusted, reasoningTrusted }
@@ -560,8 +551,7 @@ function effortExplanation(decision: Decision, selectedTier: string, selectedRis
   return <ol className="effort-explanation">
     <li><span>1</span><p>Tier: <strong>{decision.tier}</strong>{decision.tier !== selectedTier ? `, raised from ${selectedTier} by ${selectedRisks.join(', ') || 'risk policy'}` : ', matching the selected task tier'}.</p></li>
     <li><span>2</span><p>{decision.reasoning.mode === 'fixed' ? <>The route uses fixed reasoning at <strong>{decision.proposed_effort}</strong>.</> : <>The resolver’s Adaptive profile proposed <strong>{decision.proposed_effort}</strong> for this {decision.tier} task.</>} Profile source: <strong>{profileSource}</strong>.</p></li>
-    <li><span>3</span><p>Ceiling: <strong>{decision.ceiling ?? 'none'}</strong>{decision.ceiling_source ? ` (${sourceLabel(decision.ceiling_source)})` : ''}.</p></li>
-    <li><span>4</span><p>Requested effort: <strong>{decision.effort}</strong>{decision.proposed_effort !== decision.effort ? ` after the ceiling capped proposed ${decision.proposed_effort}` : ''}.</p></li>
+    <li><span>3</span><p>Requested effort: <strong>{decision.effort}</strong>.</p></li>
   </ol>
 }
 
@@ -579,7 +569,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
   const [reason, setReason] = useState('Preview a saved routing choice')
   const [selectedRisks, setSelectedRisks] = useState<string[]>([])
   const [sessionModel, setSessionModel] = useState('')
-  const [sessionMode, setSessionMode] = useState<'adaptive' | 'fixed'>('adaptive')
+  const [sessionMode, setSessionMode] = useState<'inherit' | 'adaptive' | 'fixed'>('inherit')
   const [sessionEffort, setSessionEffort] = useState('')
   const [decision, setDecision] = useState<Decision | null>(null)
   const [busy, setBusy] = useState(false)
@@ -594,11 +584,13 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
   const interactionModel = getOwnRoute(document, interaction)?.model
   const configuredModel = specialistModel ?? interactionModel ?? effectiveRoute(config, interaction, role).route?.model ?? selected?.default_model ?? ''
   const sessionEfforts = effortChoices(config, catalog, selectedProvider, sessionModel || configuredModel, sessionEffort)
+  const sessionReasoning = sessionMode === 'adaptive' ? reasoningFor('adaptive', undefined) : sessionMode === 'fixed' && sessionEffort ? reasoningFor('fixed', undefined, sessionEffort) : undefined
+  const sessionRoute: Route = { ...(sessionModel ? { model: sessionModel } : {}), ...(sessionReasoning ? { reasoning: sessionReasoning } : {}) }
   const runPreview = async (event: FormEvent) => {
     event.preventDefault()
     const version = ++requestVersion.current
     setBusy(true)
-    const session_override = sessionModel || sessionEffort ? { ...(sessionModel ? { model: sessionModel } : {}), ...(sessionEffort ? { reasoning: reasoningFor(sessionMode, undefined, sessionEffort) } : {}) } : undefined
+    const session_override = Object.keys(sessionRoute).length ? sessionRoute : undefined
     try {
       const response = await api.preview(document, { interaction, ...(role ? { role } : {}), tier, risk_flags: selectedRisks, reason, ...(session_override ? { session_override } : {}) })
       if (version === requestVersion.current) { setDecision(response.decision); onSuccess() }
@@ -607,7 +599,6 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
     } finally { if (version === requestVersion.current) setBusy(false) }
   }
   const toggleRisk = (risk: string) => setSelectedRisks((current) => current.includes(risk) ? current.filter((item) => item !== risk) : [...current, risk])
-  const sessionRoute: Route = { ...(sessionModel ? { model: sessionModel } : {}), ...(sessionEffort ? { reasoning: reasoningFor(sessionMode, undefined, sessionEffort) } : {}) }
   const trace = decision ? traceDecision(config, document, decision.interaction, decision.role ?? '', sessionRoute, decision) : null
 
   return <section className="preview-workspace" aria-labelledby="preview-title">
@@ -622,8 +613,8 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
       <details className="session-fieldset"><summary>Temporary session override</summary><p>Applies only to this preview and is never saved.</p>
         <label>Model<ModelPicker catalog={catalog} provider={selectedProvider} value={sessionModel} onChange={setSessionModel} allowEmpty /></label>
         {sessionModel && <button type="button" className="text-button" onClick={() => setSessionModel('')}>Reset session model</button>}
-        <div><span className="field-label">Mode</span><Segmented label="Session override mode" values={['adaptive', 'fixed']} value={sessionMode} onChange={(value) => setSessionMode(value as 'adaptive' | 'fixed')} format={(value) => value === 'adaptive' ? 'Adaptive' : 'Fixed'} /></div>
-        <label>{sessionMode === 'fixed' ? 'Effort' : 'Maximum'}<select value={sessionEffort} onChange={(event) => setSessionEffort(event.target.value)}><option value="">No override</option>{sessionEfforts.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select>{sessionEfforts.note && <span className="field-help">{sessionEfforts.note}</span>}</label>
+        <div><span className="field-label">Mode</span><Segmented label="Session override mode" values={['inherit', 'adaptive', 'fixed']} value={sessionMode} onChange={(value) => setSessionMode(value as 'inherit' | 'adaptive' | 'fixed')} format={(value) => value === 'inherit' ? 'Inherited' : value === 'adaptive' ? 'Adaptive' : 'Fixed'} /></div>
+        {sessionMode === 'fixed' && <label>Effort<select value={sessionEffort} onChange={(event) => setSessionEffort(event.target.value)}><option value="">No override</option>{sessionEfforts.options.map((item) => <option key={item.value} value={item.value} disabled={item.disabled}>{item.label}</option>)}</select>{sessionEfforts.note && <span className="field-help">{sessionEfforts.note}</span>}</label>}
       </details>
       <button className="primary preview-submit" disabled={busy}>{busy ? 'Previewing…' : 'Preview route'}</button>
     </form>
@@ -632,7 +623,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
       {decision && <>
         <section className="decision-hero" aria-live="polite"><p className="eyebrow">Predicted route · {config.bundle.interactions.find((item) => item.id === decision.interaction)?.label}{decision.role ? ` · ${config.bundle.roles.find((item) => item.id === decision.role)?.label ?? decision.role}` : ''}</p>
           <div className="decision-lead"><strong className="mono">{decision.model}</strong><strong>{decision.effort}</strong></div>
-          <dl><div><dt>Proposed</dt><dd>{decision.proposed_effort}</dd></div><div><dt>Ceiling</dt><dd>{decision.ceiling ?? 'None'}</dd></div><div><dt>Capability</dt><dd>{decision.capability_status}</dd></div></dl><p>{decision.reason}</p>
+          <dl><div><dt>Proposed</dt><dd>{decision.proposed_effort}</dd></div><div><dt>Capability</dt><dd>{decision.capability_status}</dd></div></dl><p>{decision.reason}</p>
         </section>
         <section className="trace-section"><h2>How it resolved</h2><p className="field-help">Global values are shown at their precedence layer; the resolver identifies the winning source for each field.</p>
           <div className="trace-scroll"><div role="table" className="trace-table" aria-label="Five routing precedence layers">
@@ -646,7 +637,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
               const reasoningOverridden = trace.reasoningWinner !== null && trace.reasoningWinner !== index
               return <div role="row" className="trace-row" key={layer.source}><span role="rowheader" className="trace-layer"><span>{index + 1}</span>{layer.label}</span>
                 <span role="cell">{modelKnown ? <span className={`trace-value mono${modelWins ? ' is-winner' : modelOverridden ? ' is-overridden' : ''}`}>{modelKnown}{modelWins && <b>WINS</b>}</span> : '—'}</span>
-                <span role="cell">{reasoningKnown ? <span className={`trace-value${reasoningWins ? ' is-winner' : reasoningOverridden ? ' is-overridden' : ''}`}>{reasoningKnown.mode === 'fixed' ? `Fixed · ${reasoningKnown.effort}` : `Adaptive${reasoningKnown.max_effort ? ` ≤ ${reasoningKnown.max_effort}` : ''}`}{reasoningWins && <b>WINS</b>}</span> : '—'}</span>
+                <span role="cell">{reasoningKnown ? <span className={`trace-value${reasoningWins ? ' is-winner' : reasoningOverridden ? ' is-overridden' : ''}`}>{reasoningKnown.mode === 'fixed' ? `Fixed · ${reasoningKnown.effort}` : 'Adaptive'}{reasoningWins && <b>WINS</b>}</span> : '—'}</span>
               </div>})}
           </div></div>
           {(!trace?.modelTrusted || !trace?.reasoningTrusted || trace?.modelWinner === null || trace?.reasoningWinner === null) && <p className="field-help">Resolver source: model {decision.provenance.model}; reasoning {decision.provenance.reasoning}.{(!trace?.modelTrusted || !trace?.reasoningTrusted) ? ' Some local layer values were hidden because the saved documents did not reproduce the returned decision.' : ''}</p>}
@@ -868,7 +859,7 @@ export function RoutingWorkspace() {
         <div className="interaction-grid activity-grid">{displayConfig.bundle.interactions.filter((item) => item.provider === 'codex').map((interaction) => <ActivityDefaultCard key={interaction.id} config={displayConfig} catalog={catalog} document={draft} interaction={interaction} errors={errors} onChange={updateDraft} />)}</div>
       </section>
       <section id="panel-profiles" className="tab-panel" role="tabpanel" aria-labelledby="tab-profiles" hidden={screen !== 'profiles'}>
-        <div className="screen-title"><div><p className="eyebrow">Adaptive reasoning policy</p><h1>Adaptive profiles</h1><p>Task tiers map to model effort levels, then the route ceiling caps the requested effort.</p></div></div>
+        <div className="screen-title"><div><p className="eyebrow">Adaptive reasoning policy</p><h1>Adaptive profiles</h1><p>Task tiers map directly to the requested model effort levels.</p></div></div>
         <ProfileTable config={displayConfig} catalog={catalog} document={draft} errors={errors} onChange={updateDraft} />
       </section>
       <section id="panel-preview" className="tab-panel preview-panel-wrap" role="tabpanel" aria-labelledby="tab-preview" hidden={screen !== 'preview'}>

@@ -19,7 +19,7 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "4"
+POLICY_VERSION = "5"
 INTERACTIONS = ("planning", "implementation", "native-review", "visual-review", "claude-review")
 NATIVE_INTERACTIONS = frozenset(INTERACTIONS[:-1])
 TIERS = ("straightforward", "involved", "demanding")
@@ -236,14 +236,8 @@ def _validate_reasoning(reasoning: Any, provider: str, path: str, bundle: Mappin
             raise _error(f"{path}.effort", f"is not supported by {provider}")
         return {"mode": "fixed", "effort": effort}
     if mode == "adaptive":
-        _reject_unknown(value, {"mode", "max_effort"}, path)
-        result: dict[str, Any] = {"mode": "adaptive"}
-        if "max_effort" in value:
-            effort = _require_string(value["max_effort"], f"{path}.max_effort")
-            if effort not in bundle["effort_orders"][provider]:
-                raise _error(f"{path}.max_effort", f"is not supported by {provider}")
-            result["max_effort"] = effort
-        return result
+        _reject_unknown(value, {"mode"}, path)
+        return {"mode": "adaptive"}
     raise _error(f"{path}.mode", "must be fixed or adaptive")
 
 
@@ -286,7 +280,7 @@ def _validate_agent_route(value: Any, path: str, bundle: Mapping[str, Any]) -> d
 
 def _validate_profile(value: Any, provider: str, path: str, bundle: Mapping[str, Any]) -> dict[str, Any]:
     profile = _require_object(value, path)
-    _reject_unknown(profile, {"tiers", "default_ceiling"}, path)
+    _reject_unknown(profile, {"tiers"}, path)
     tiers = _require_object(profile.get("tiers"), f"{path}.tiers")
     accepted_tiers = TIERS
     legacy_shape = set(tiers) == set(LEGACY_TIERS)
@@ -307,10 +301,7 @@ def _validate_profile(value: Any, provider: str, path: str, bundle: Mapping[str,
         if effort not in bundle["effort_orders"][provider]:
             raise _error(f"{path}.tiers.{source_tier}", f"is not supported by {provider}")
         normalized_tiers[tier] = effort
-    ceiling = _require_string(profile.get("default_ceiling"), f"{path}.default_ceiling")
-    if ceiling not in bundle["effort_orders"][provider]:
-        raise _error(f"{path}.default_ceiling", f"is not supported by {provider}")
-    return {"tiers": normalized_tiers, "default_ceiling": ceiling}
+    return {"tiers": normalized_tiers}
 
 
 def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = None, field: str = "preferences") -> dict[str, Any]:
@@ -621,20 +612,10 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
         if profile is None:
             raise _error("resolved.reasoning", f"Adaptive routing for {provider}:{model} requires a complete profile")
         proposed_effort = profile["tiers"][tier]
-        if "max_effort" in reasoning:
-            ceiling = reasoning["max_effort"]
-            ceiling_source = provenance["reasoning"] + ".max_effort"
-        else:
-            ceiling = profile["default_ceiling"]
-            ceiling_source = profile_source + ".default_ceiling" if profile_source else "bundle.defaults"
-        effort = proposed_effort if _effort_index(bundle, provider, proposed_effort) <= _effort_index(bundle, provider, ceiling) else ceiling
-        if effort != proposed_effort:
-            limitations.append(f"Adaptive {tier} effort {proposed_effort} is capped at {ceiling}")
+        effort = proposed_effort
     else:
         effort = reasoning["effort"]
         proposed_effort = effort
-        ceiling = None
-        ceiling_source = None
         if profile is not None:
             recommended = profile["tiers"][tier]
             if _effort_index(bundle, provider, effort) < _effort_index(bundle, provider, recommended):
@@ -645,8 +626,6 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
         "reasoning": copy.deepcopy(reasoning),
         "effort": effort,
         "proposed_effort": proposed_effort,
-        "ceiling": ceiling,
-        "ceiling_source": ceiling_source,
         "interaction": interaction,
         "role": role,
         "tier": tier,
@@ -674,25 +653,19 @@ def effective_configuration(snapshot: Any) -> dict[str, Any]:
         provider = _provider_for_interaction(interaction)
         profile, profile_source = _profile_for(frozen, provider, route["model"])
         display_reasoning = copy.deepcopy(route["reasoning"])
-        ceiling = ceiling_source = None
         if display_reasoning["mode"] == "adaptive":
             if profile is None:
                 raise _error(f"effective.interactions.{interaction}", f"Adaptive routing for {provider}:{route['model']} requires a complete profile")
-            ceiling = display_reasoning.get("max_effort", profile["default_ceiling"])
-            ceiling_source = provenance["reasoning"] + ".max_effort" if "max_effort" in display_reasoning else profile_source + ".default_ceiling"
-        entry = {"ceiling": ceiling, "ceiling_source": ceiling_source, "route": {"model": route["model"], "reasoning": display_reasoning}, "provenance": {"model": provenance["model"], "reasoning": provenance["reasoning"], "profile": profile_source}, "specialists": {}}
+        entry = {"route": {"model": route["model"], "reasoning": display_reasoning}, "provenance": {"model": provenance["model"], "reasoning": provenance["reasoning"], "profile": profile_source}, "specialists": {}}
         if interaction in NATIVE_INTERACTIONS:
             for role in role_ids:
                 special_route, special_provenance = _route_for(frozen, interaction, role)
                 special_profile, special_profile_source = _profile_for(frozen, provider, special_route["model"])
                 special_reasoning = copy.deepcopy(special_route["reasoning"])
-                special_ceiling = special_ceiling_source = None
                 if special_reasoning["mode"] == "adaptive":
                     if special_profile is None:
                         raise _error(f"effective.interactions.{interaction}.specialists.{role}", "Adaptive route requires a complete profile")
-                    special_ceiling = special_reasoning.get("max_effort", special_profile["default_ceiling"])
-                    special_ceiling_source = special_provenance["reasoning"] + ".max_effort" if "max_effort" in special_reasoning else special_profile_source + ".default_ceiling"
-                entry["specialists"][role] = {"ceiling": special_ceiling, "ceiling_source": special_ceiling_source, "route": {"model": special_route["model"], "reasoning": special_reasoning}, "provenance": {"model": special_provenance["model"], "reasoning": special_provenance["reasoning"], "profile": special_profile_source}}
+                entry["specialists"][role] = {"route": {"model": special_route["model"], "reasoning": special_reasoning}, "provenance": {"model": special_provenance["model"], "reasoning": special_provenance["reasoning"], "profile": special_profile_source}}
         interactions[interaction] = entry
     profiles: dict[str, Any] = {}
     for key, profile in bundle["defaults"].get("adaptive_profiles", {}).items():

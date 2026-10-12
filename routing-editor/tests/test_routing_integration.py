@@ -20,6 +20,31 @@ spec.loader.exec_module(review)
 
 
 class RoutingIntegrationTests(unittest.TestCase):
+    def test_saved_adaptive_mapping_matches_cli_and_preview(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = editor.PreferenceStore(global_config_dir=root / "global")
+            document = {"schema_version": 1, "interactions": {"implementation": {"model": "gpt-5.6-luna"}}}
+            store.save("global", document, "missing")
+            request = {"interaction": "implementation", "tier": "demanding", "reason": "Direct mapped request",
+                       "capabilities": {"provider": "codex", "source": "fixture", "models": {"gpt-5.6-luna": ["xhigh"]}}}
+            preview = store.preview("global", document, request)["decision"]
+            snapshot = root / "snapshot.json"
+            command = [sys.executable, "-B", str(ROOT / "subagents/scripts/routing_policy.py")]
+            created = subprocess.run(command + ["snapshot", "--global", str(store.target("global")[1]), "--output", str(snapshot)], capture_output=True, text=True)
+            self.assertEqual(created.returncode, 0, created.stderr)
+            resolved = subprocess.run(command + ["resolve", "--snapshot", str(snapshot)], input=json.dumps(request), capture_output=True, text=True)
+            self.assertEqual(resolved.returncode, 0, resolved.stderr)
+            # CLI snapshots hash the saved bytes; compare routing behavior, not that fingerprint.
+            cli_decision = json.loads(resolved.stdout)
+            for key in ("model", "reasoning", "effort", "proposed_effort", "tier", "reason", "limitations", "provenance", "capability_status", "dispatch_allowed", "policy_version"):
+                self.assertEqual(cli_decision[key], preview[key], key)
+            self.assertEqual((preview["effort"], preview["proposed_effort"]), ("max", "max"))
+            self.assertFalse(preview["dispatch_allowed"])
+            self.assertEqual(preview["capability_status"], "unsupported")
+            self.assertNotIn("ceiling", preview)
+            self.assertNotIn("ceiling_source", preview)
+
     def test_editor_rejects_removed_project_option_before_startup(self):
         command = [sys.executable, "-B", str(ROOT / "routing-editor/scripts/routing_editor.py")]
         result = subprocess.run(command + ["--project", "unused"], capture_output=True, text=True, timeout=10)
@@ -44,7 +69,7 @@ class RoutingIntegrationTests(unittest.TestCase):
             command = [sys.executable, "-B", str(ROOT / "subagents/scripts/routing_policy.py")]
             created = subprocess.run(command + ["snapshot", "--global", str(store.target("global")[1]), "--output", str(snapshot_path)], capture_output=True, text=True)
             self.assertEqual(created.returncode, 0, created.stderr)
-            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "4")
+            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "5")
             self.assertEqual(ignored.read_bytes(), b"malformed ignored project preferences")
             def resolve():
                 result = subprocess.run(command + ["resolve", "--snapshot", str(snapshot_path)], input=json.dumps(request), capture_output=True, text=True)
@@ -70,9 +95,9 @@ class RoutingIntegrationTests(unittest.TestCase):
             process = mock.Mock(returncode=0)
             process.communicate.return_value = (json.dumps({"is_error": False, "subtype": "success", "structured_output": payload}), "")
             argv = ["review", "--manifest", str(manifest), "--output-dir", str(root / "reports"), "--model", decision["model"], "--effort", decision["effort"]]
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort: {"requested_model": model}) as preflight, mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(review.main(), 0)
-            self.assertEqual(preflight.call_args.args[1:], (decision["model"], decision["effort"]))
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", side_effect=lambda executable, model, effort, repository: {"requested_model": model}) as preflight, mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "start_review_process", return_value=process) as launch, mock.patch.object(review, "close_review_job"), contextlib.redirect_stdout(io.StringIO()) as review_output:
+                self.assertEqual(review.main(), 0, review_output.getvalue())
+            self.assertEqual(preflight.call_args.args[1:3], (decision["model"], decision["effort"]))
             actual = launch.call_args.args[0]
             self.assertEqual(actual[actual.index("--model") + 1], decision["model"])
             self.assertEqual(actual[actual.index("--effort") + 1], decision["effort"])
@@ -106,7 +131,7 @@ class RoutingIntegrationTests(unittest.TestCase):
             command = [sys.executable, "-B", str(ROOT / "subagents/scripts/routing_policy.py")]
             created = subprocess.run(command + ["snapshot", "--global", str(store.target("global")[1]), "--output", str(snapshot_path)], capture_output=True, text=True)
             self.assertEqual(created.returncode, 0, created.stderr)
-            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "4")
+            self.assertEqual(json.loads(snapshot_path.read_text())["policy_version"], "5")
             self.assertEqual(ignored.read_bytes(), b"malformed ignored project preferences")
             resolved = subprocess.run(command + ["resolve", "--snapshot", str(snapshot_path)], input=json.dumps(request), capture_output=True, text=True)
             self.assertEqual(resolved.returncode, 0, resolved.stderr)

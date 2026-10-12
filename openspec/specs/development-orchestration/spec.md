@@ -37,11 +37,19 @@ The skill SHALL define product engineering, architecture, UX/UI design, UI/UX vi
 - **THEN** the orchestrator considers DevOps and performance specialists, with Sol planning/review and Terra implementation as applicable
 
 ### Requirement: Bounded parallel ownership
-Every delegated assignment SHALL include scope, context, file ownership, dependencies, and expected verification. The orchestrator SHALL retain ownership of the shared log and OpenSpec task state, serialize overlapping edits, and respect the runtime's concurrency limit. Workers MUST return blockers and MUST NOT recursively delegate unless separately authorized.
+Every delegated assignment SHALL include scope, context, file ownership, dependencies, and expected verification. The orchestrator SHALL retain ownership of the shared log and OpenSpec task state, serialize overlapping edits, and respect the runtime's concurrency limit. Workers MUST return blockers and MUST NOT recursively delegate unless separately authorized. Artifact consumers SHALL wait for successful producer completion. Changed-file inventories SHALL be reconciled with ownership; new captured reviews SHALL NOT impose full-run input reservations or mandatory reservation prechecks.
 
 #### Scenario: Shared-file dependency
 - **WHEN** two assignments need to modify the same file or an unsettled shared interface
 - **THEN** they are combined or sequenced rather than dispatched as conflicting parallel writers
+
+#### Scenario: Verification consumes build output
+- **WHEN** verification needs build or staging output
+- **THEN** the parent waits for successful producer completion and records the consumed artifact identity
+
+#### Scenario: Changed file absent from checked paths
+- **WHEN** a legacy worker reports a changed file absent from its declared write checks
+- **THEN** the parent records the legacy deviation and verifies actual ownership without reintroducing mandatory reservation checks for new captured reviews
 
 ### Requirement: OpenSpec continuity and scope
 For meaningful changes the skill SHALL use OpenSpec as the requirements and acceptance source, resolve the selected change and its actual artifact paths, and respect planning versus implementation authorization. Tiny fixes MAY use a recorded lightweight path when no applicable change requires the full workflow. A routing log MUST NOT replace specs or authorize scope changes.
@@ -146,11 +154,19 @@ The coordinator SHALL disclose the Python routing prerequisite and the global pr
 - **THEN** routing is blocked with an actionable prerequisite message, and no worker dispatch is claimed
 
 ### Requirement: Coherent review scopes
-The parent SHALL assign static code review, browser acceptance, and executable verification to their appropriate owners. Before external dispatch it SHALL inspect local packet readiness and confirm authorization for that exact source/destination scope. Large packets SHALL be split into coherent scopes where needed; aggregate acceptance and unresolved checks SHALL remain parent-owned.
+The parent SHALL assign code review, browser acceptance and executable verification to their appropriate owners. Cross-review SHALL receive the parent's authorized read scope and explicitly selected evidence without a second export policy or redundant approval. Required changes/requirements SHALL be distinguished from optional context. The packet SHALL seed investigation and preserve versions without preventing dependency discovery or reserving originals throughout review. The parent SHALL retain aggregate acceptance and reconcile later relevant changes before integrating findings.
 
 #### Scenario: Bounded recheck
-- **WHEN** a review covers a small fix within a larger change
-- **THEN** its static requirements and evidence match that scope, and unrelated acceptance remains explicitly tracked by the parent
+- **WHEN** review covers a bounded correction within a larger change
+- **THEN** its required evidence matches the correction, relevant supporting context remains available, and broader acceptance remains parent-owned
+
+#### Scenario: Already authorized cross-review
+- **WHEN** the user's request already authorizes review of the task and its relevant files
+- **THEN** the parent supplies that scope without asking again merely because the same files go to Claude
+
+#### Scenario: Writers continue after capture
+- **WHEN** a reviewer is running against captured change evidence
+- **THEN** original-source writes are coordinated by actual ownership/dependencies and are not blocked solely by that review's existence
 
 ### Requirement: Capacity-aware dispatch
 The parent SHALL inspect available worker state before spawning and prefer suitable idle-worker reuse or sequencing when capacity is exhausted. Reuse SHALL preserve the resolved model/effort, role guidance, and ownership contract. Failed dispatch SHALL NOT count as a running assignment.
@@ -160,8 +176,19 @@ The parent SHALL inspect available worker state before spawning and prefer suita
 - **THEN** the parent sequences the work or handles authorized work directly instead of repeatedly spawning or silently changing settings
 
 ### Requirement: Explicit worker readiness
-Worker handoffs SHALL distinguish draft, locally checked, and ready for integration. Executable changes SHALL receive the smallest relevant authorized compile or contract check before a readiness claim. Every handoff SHALL state changed files, exact checks/results, and remaining blockers; parent integration verification remains required.
+Worker handoffs SHALL distinguish draft, locally checked, and ready for integration. Executable changes SHALL receive the smallest relevant authorized compile or contract check before a readiness claim. Every handoff SHALL state changed files, exact checks/results, and remaining blockers; parent integration verification remains required. Test assignments SHALL verify current fixture/API contracts against an analogous working test. When worker execution is unavailable, the parent SHALL assign an integration check owner before combined acceptance execution.
 
 #### Scenario: Worker cannot run verification
 - **WHEN** execution is unavailable or outside a worker's assignment
 - **THEN** the worker returns a draft with the unrun check and reason, rather than claiming readiness
+
+#### Scenario: New fixture setup families
+- **WHEN** an assignment introduces materially different fixture setup
+- **THEN** current API signatures and an analogous test are checked, and an owner performs the smallest authorized compile/representative setup checks before the combined acceptance selection
+
+### Requirement: Prompt advisory evidence handback
+An advisory worker SHALL promptly identify inaccessible required evidence, continue accessible inspection where useful, and return its evidence limits. The parent SHALL resolve access or retain a draft without requiring unnecessary project execution or concealing missing coverage.
+
+#### Scenario: Required planning file inaccessible
+- **WHEN** a read-only reviewer cannot access a required OpenSpec artifact
+- **THEN** it reports the exact missing evidence to the parent, continues useful authorized inspection, and does not claim complete coverage while waiting for access

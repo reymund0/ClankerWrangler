@@ -14,6 +14,13 @@ Do not rewrite code unless the user asks for a fix.
 For delegated reviews, the caller's explicit scope and report schema take precedence
 over the standalone procedure and output template below. Preserve the evidence,
 coverage, and issue criteria; report any scope or access limits.
+Without a supplied report schema, return a scoped verdict, actionable findings
+with stable IDs and locations, failed/unrun checks and coverage gaps, and evidence
+references. Target about 200 words for routine replies; expand for material
+findings or decisions. Keep full coverage and finding details in an assigned
+artifact when useful; preserve necessary evidence inline if storage is unavailable.
+On recheck, return per-ID dispositions, still-open blockers and new issues instead
+of repeating the original report. Direct invocation retains the standalone format.
 
 ## Step 1 — Establish the diff under review
 

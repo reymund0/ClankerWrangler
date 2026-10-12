@@ -63,6 +63,13 @@ environment, credentials, or execution boundaries.
 
 ## Handoff
 
+When delegated, follow the parent's compact reply contract; target about 200 words
+for routine completion, expanding when material findings or decisions need it.
+The items below specify evidence to retain, not sections to repeat in chat. Keep
+lengthy detail in assigned artifacts and failed/unrun checks, coverage gaps,
+blockers, and required decisions visible in the reply. Direct use keeps this
+role's full deliverable.
+
 Return changed files or advisory findings; the assessed delivery path; build/health/
 rollback evidence; permissions and secret-handling considerations; unrun checks; and
 blockers. Never imply a deployment occurred when work ended at inspection or validation.

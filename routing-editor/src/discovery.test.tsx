@@ -5,8 +5,8 @@ import { App } from './App'
 import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
 
 const fixture: ConfigResponse = {
-  schema_version: 1, policy_version: '4', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
-  bundle: { schema_version: 1, policy_version: '4', roles: [], defaults: { schema_version: 1 },
+  schema_version: 1, policy_version: '5', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
+  bundle: { schema_version: 1, policy_version: '5', roles: [], defaults: { schema_version: 1 },
     interactions: [{ id: 'planning', label: 'Planning', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'implementation', label: 'Implementation', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5' }],
     models: [{ id: 'gpt-5.6-sol', label: 'Sol', provider: 'codex', efforts: ['low', 'high'] }, { id: 'claude-opus-5', label: 'Opus', provider: 'claude', efforts: ['low', 'high'] }],
     effort_orders: { codex: ['low', 'medium', 'high', 'xhigh'], claude: ['low', 'medium', 'high', 'max'] } },
@@ -89,7 +89,7 @@ describe('local discovery controls', () => {
   })
   it('groups profile rows into sorted, accessible version family accordions', async () => {
     const configured = structuredClone(fixture)
-    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     configured.effective!.profiles = {
       'codex:gpt-5.6-sol': profile,
       'codex:gpt-6-mini': profile,
@@ -132,7 +132,7 @@ describe('local discovery controls', () => {
   })
   it('shows exactly three described adaptive tiers and links descriptions to editable controls', async () => {
     const configured = structuredClone(fixture)
-    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } }
     configured.effective!.profiles = { 'codex:cli-model': profile }
     await render({ config: configured })
@@ -141,7 +141,7 @@ describe('local discovery controls', () => {
     expect(activePanel().querySelector('[aria-label="Adaptive tier definitions"]')?.textContent).toContain('Established approach, limited remaining decisions, and direct acceptance checks.')
     expect(activePanel().querySelector('[aria-label="Adaptive tier definitions"]')?.textContent).toContain('difficult correctness arguments.')
     const headers = [...table.querySelectorAll<HTMLElement>('.profile-heading [role="columnheader"]')]
-    expect(headers.map((item) => item.querySelector('span:not(.sr-only)')?.textContent ?? item.textContent?.trim())).toEqual(['Model', 'Straightforward', 'Involved', 'Demanding', 'Default ceiling', 'Actions'])
+    expect(headers.map((item) => item.querySelector('span:not(.sr-only)')?.textContent ?? item.textContent?.trim())).toEqual(['Model', 'Straightforward', 'Involved', 'Demanding', 'Actions'])
     expect(headers.slice(1, 4).map((item) => item.getAttribute('aria-label'))).toEqual([
       'Straightforward: Established approach, limited remaining decisions, and direct acceptance checks.',
       'Involved: Meaningful decisions or bounded uncertainty involving related behavior.',
@@ -149,13 +149,13 @@ describe('local discovery controls', () => {
     ])
     const row = [...table.querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
     const fields = [...row.querySelectorAll<HTMLSelectElement>('select')]
-    expect(fields).toHaveLength(4)
+    expect(fields).toHaveLength(3)
     for (const [index, tier] of ['straightforward', 'involved', 'demanding'].entries()) {
       const descriptionId = `tier-definition-${tier}`
       expect(fields[index].getAttribute('aria-describedby')).toContain(descriptionId)
       expect(document.getElementById(descriptionId)?.textContent).toBe(headers[index + 1].getAttribute('aria-label')?.split(': ').slice(1).join(': '))
     }
-    expect(table.querySelector('.profile-family-heading [aria-colspan="6"]')).toBeTruthy()
+    expect(table.querySelector('.profile-family-heading [aria-colspan="5"]')).toBeTruthy()
     expect(activePanel().textContent).toContain('An involved task on cli-model maps to high')
   })
   it('defaults route preview to Straightforward while retaining exactly three task tier choices', async () => {
@@ -168,7 +168,7 @@ describe('local discovery controls', () => {
   })
   it('keeps a pending conversion read-only on open and preview until explicit save', async () => {
     const configured = structuredClone(fixture)
-    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     configured.scopes.global = { ...configured.scopes.global!, revision: 'raw-legacy-source-hash', migration_pending: true, document: { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } } }
     configured.effective!.profiles = { 'codex:cli-model': profile }
     const fetchMock = await render({ config: configured })
@@ -189,7 +189,7 @@ describe('local discovery controls', () => {
   })
   it.each([409, 500])('retains edited draft and pending conversion after save failure (%i)', async (status) => {
     const configured = structuredClone(fixture)
-    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const profile = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     configured.scopes.global = { ...configured.scopes.global!, migration_pending: true, document: { schema_version: 1, adaptive_profiles: { 'codex:cli-model': profile } } }
     configured.effective!.profiles = { 'codex:cli-model': profile }
     await render({ config: configured, saveResponse: () => response({ error: status === 409 ? 'Preferences changed since loading.' : 'Save rejected for this test.' }, status) })
@@ -223,7 +223,7 @@ describe('local discovery controls', () => {
   })
   it('keeps accordion state local to the UI and excludes it from saved preferences', async () => {
     const configured = structuredClone(fixture)
-    const inherited = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const inherited = { tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' } }
     configured.effective!.profiles = { 'codex:gpt-5.6-sol': inherited }
     const discovered = structuredClone(catalog)
     discovered.providers.codex.models.push({ id: 'gpt-5.6-sol', label: '5.6 Sol', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh'], default_effort: 'high' })
@@ -277,9 +277,9 @@ describe('local discovery controls', () => {
     const configured = structuredClone(fixture)
     configured.bundle.effort_orders.codex = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra']
     configured.effective!.profiles = {
-      'codex:meter-short': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' }, default_ceiling: 'high' },
-      'codex:meter-many': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' }, default_ceiling: 'ultra' },
-      'codex:saved-away': { tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' }, default_ceiling: 'high' },
+      'codex:meter-short': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' } },
+      'codex:meter-many': { tiers: { straightforward: 'low', involved: 'high', demanding: 'high' } },
+      'codex:saved-away': { tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' } },
     }
     const discovered = structuredClone(catalog)
     discovered.providers.codex.models.push(
@@ -288,12 +288,12 @@ describe('local discovery controls', () => {
       { id: 'saved-away', label: 'Saved effort', provider: 'codex', efforts: ['high', 'low', 'future'], default_effort: 'high' },
     )
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:saved-away': {
-      tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'xhigh', demanding: 'high' },
     } } }
     await render({ config: configured, initial: response(discovered) })
     await openTab('Adaptive profiles')
     const row = (key: string) => [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes(key))!
-    // The model is followed by three tier cells, the ceiling, and actions.
+    // The model is followed by three tier cells and actions.
     const shortCells = row('codex:meter-short').querySelectorAll<HTMLElement>('[role="cell"]')
     const short = shortCells[2].querySelectorAll<HTMLElement>('.effort-meter i')
     expect([...short].map((bar) => bar.dataset.effort)).toEqual(['low', 'high'])
@@ -314,7 +314,7 @@ describe('local discovery controls', () => {
     expect(row('codex:meter-short').querySelector('.effort-meter')?.getAttribute('aria-hidden')).toBe('true')
     expect(row('codex:saved-away').querySelector('select option[value="xhigh"]')?.textContent).toContain('saved; unavailable for new selection')
   })
-  it('uses each profile model CLI efforts for all tiers and the default ceiling', async () => {
+  it('uses each profile model CLI efforts for all three tiers', async () => {
     await render()
     await openTab('Adaptive profiles')
     const model = profileSelect()
@@ -322,7 +322,7 @@ describe('local discovery controls', () => {
     await act(async () => { actionButton('Customize profile', activePanel()).click() })
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:cli-model'))!
     const controls = [...row.querySelectorAll('select')] as HTMLSelectElement[]
-    expect(controls).toHaveLength(4)
+    expect(controls).toHaveLength(3)
     for (const control of controls) {
       expect([...control.options].filter((option) => !option.disabled && ['low', 'high'].includes(option.value)).map((option) => option.value)).toEqual(['low', 'high'])
       expect([...control.options].find((option) => option.value === 'future')?.disabled).toBe(true)
@@ -343,6 +343,7 @@ describe('local discovery controls', () => {
   })
   it('shows policy effort choices as unverified when metadata is unknown', async () => {
     await render(); await select(modelSelect(), 'unknown-efforts')
+    await act(async () => { actionButton('Fixed', route()).click() })
     const effort = route().querySelector<HTMLSelectElement>('.effort-field select')!
     expect(values(effort)).toEqual(expect.arrayContaining(['low', 'medium', 'high', 'xhigh']))
     expect(route().textContent).toContain('unverified')
@@ -416,6 +417,7 @@ describe('local discovery controls', () => {
     await openTab('Preview a route')
     const activity = activePanel().querySelector('.preview-form-panel label select') as HTMLSelectElement
     await select(activity, 'planning')
+    await act(async () => { actionButton('Fixed', activePanel().querySelector('.session-fieldset')!).click() })
     const effort = () => activePanel().querySelector('.session-fieldset label:last-of-type select') as HTMLSelectElement
     expect(values(effort())).toContain('high'); expect(values(effort())).not.toContain('xhigh')
     await select(activePanel().querySelectorAll('.preview-form-panel label select')[1] as HTMLSelectElement, 'clanker-architect')
@@ -445,13 +447,13 @@ describe('local discovery controls', () => {
   it('shows unknown CLI profile effort metadata beside every editable profile value', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:unknown-efforts': {
-      tiers: { straightforward: 'high', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high',
+      tiers: { straightforward: 'high', involved: 'high', demanding: 'xhigh' },
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')
     const row = [...activePanel().querySelectorAll<HTMLElement>('.profile-row')].find((item) => item.textContent?.includes('codex:unknown-efforts'))!
     const fields = [...row.querySelectorAll<HTMLSelectElement>('select')]
-    expect(fields).toHaveLength(4)
+    expect(fields).toHaveLength(3)
     for (const field of fields) {
       expect(field.getAttribute('aria-describedby')).toContain('-help')
       const helpId = field.getAttribute('aria-describedby')!.split(' ').find((id) => id.endsWith('-help'))!
@@ -462,7 +464,7 @@ describe('local discovery controls', () => {
 
   it('compares customized profile values with inherited values and restores them on reset', async () => {
     const configured = structuredClone(fixture)
-    const inherited = { tiers: { straightforward: 'medium', involved: 'medium', demanding: 'xhigh' }, default_ceiling: 'high' }
+    const inherited = { tiers: { straightforward: 'medium', involved: 'medium', demanding: 'xhigh' } }
     configured.bundle.defaults.adaptive_profiles = { 'codex:cli-model': inherited }
     configured.effective!.profiles = { 'codex:cli-model': inherited }
     await render({ config: configured })
@@ -484,7 +486,7 @@ describe('local discovery controls', () => {
   it('disables profile creation for an already owned model while keeping its row editable', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:cli-model': {
-      tiers: { straightforward: 'medium', involved: 'high', demanding: 'high' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'high', demanding: 'high' },
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')
@@ -502,7 +504,7 @@ describe('local discovery controls', () => {
   it('keeps a saved profile visible and resettable when its model is no longer reported', async () => {
     const configured = structuredClone(fixture)
     configured.scopes.global.document = { schema_version: 1, adaptive_profiles: { 'codex:retired-model': {
-      tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' }, default_ceiling: 'high',
+      tiers: { straightforward: 'medium', involved: 'high', demanding: 'xhigh' },
     } } }
     await render({ config: configured })
     await openTab('Adaptive profiles')

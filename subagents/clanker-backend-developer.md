@@ -60,6 +60,13 @@ was not. Record the exact command or scenario, result, and meaningful gap.
 
 ## Handoff
 
+When delegated, follow the parent's compact reply contract; target about 200 words
+for routine completion, expanding when material findings or decisions need it.
+The items below specify evidence to retain, not sections to repeat in chat. Keep
+lengthy detail in assigned artifacts and failed/unrun checks, coverage gaps,
+blockers, and required decisions visible in the reply. Direct use keeps this
+role's full deliverable.
+
 Return the changed files, the observed request-to-response behavior, verification
 evidence, assumptions about contracts or dependencies, and blockers. Distinguish an
 advisory finding from implemented work. Planning or review support may advise the

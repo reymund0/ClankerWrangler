@@ -17,7 +17,7 @@ import routing_policy as policy
 EMPTY = {"schema_version": 1}
 LUNA = {"schema_version": 1, "interactions": {"implementation": {"model": "gpt-5.6-luna"}}}
 LEGACY = {**LUNA, "adaptive_profiles": {"codex:gpt-5.6-luna": {"tiers": {"mechanical": "low", "routine": "medium",
-          "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"}}}
+          "complex": "high", "exceptional": "xhigh"}}}}
 
 
 class StoreTests(unittest.TestCase):
@@ -42,7 +42,7 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(state["migration_pending"])
         self.assertEqual(state["revision"], editor.revision(original))
         self.assertEqual(state["document"]["adaptive_profiles"]["codex:gpt-5.6-luna"], {
-            "tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "xhigh"})
+            "tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}})
         request = {"interaction": "implementation", "tier": "involved", "reason": "Coordinate bounded decisions"}
         preview = self.store.preview("global", state["document"], request)["decision"]
         self.assertEqual(preview["effort"], "high")
@@ -278,9 +278,35 @@ class StoreTests(unittest.TestCase):
         result = self.store.preview("global", LUNA, request)["decision"]
         snap = self.store.snapshot("global", LUNA)
         self.assertEqual(result, policy.resolve(snap, request))
-        self.assertEqual(result["effort"], "xhigh")
+        self.assertEqual(result["effort"], "max")
         self.assertEqual(result["proposed_effort"], "max")
         self.assertFalse(self.store.target("global")[1].exists())
+
+    def test_retired_fields_preserve_saved_bytes_until_explicit_replacement(self):
+        documents = [
+            {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive", "max_effort": "high"}}}},
+            {"schema_version": 1, "adaptive_profiles": {"codex:gpt-5.6-luna": {"tiers": {"straightforward": "high", "involved": "xhigh", "demanding": "max"}, "default_ceiling": "xhigh"}}},
+        ]
+        path = self.store.target("global")[1]
+        path.parent.mkdir(exist_ok=True)
+        for document in documents:
+            with self.subTest(document=document):
+                original = json.dumps(document).encode()
+                path.write_bytes(original)
+                state = self.store.read("global")
+                self.assertIsNone(state["document"])
+                self.assertIn("is not supported", state["error"])
+                self.assertTrue("max_effort" in state["error"] or "default_ceiling" in state["error"])
+                with self.assertRaises(policy.RoutingError):
+                    self.store.preview("global", document)
+                with self.assertRaises(policy.RoutingError):
+                    self.store.save("global", document, state["revision"])
+                self.assertEqual(path.read_bytes(), original)
+                self.assertEqual(list(path.parent.glob("*.bak")), [])
+                with self.assertRaises(editor.EditorError):
+                    self.store.save("global", EMPTY, "stale")
+                self.store.save("global", EMPTY, state["revision"])
+                self.assertEqual(json.loads(path.read_bytes()), EMPTY)
 
     def test_disabled_project_and_path_escape(self):
         store = editor.PreferenceStore(global_config_dir=self.root / "elsewhere")
@@ -310,7 +336,7 @@ class HTTPTests(unittest.TestCase):
         self.assets = self.root / "assets"
         self.assets.mkdir()
         (self.assets / "index.html").write_text("<!doctype html><title>Editor</title>")
-        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "4"}))
+        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "5"}))
         self.store = editor.PreferenceStore(global_config_dir=self.root / "prefs")
         self.catalog = {"providers": {provider: {"status": "unavailable", "source": provider + "-cli",
                         "cli_version": None, "updated_at": None, "error": "CLI unavailable", "models": []}
@@ -462,9 +488,10 @@ class HTTPTests(unittest.TestCase):
         (self.assets / "compatibility.json").write_text('{"schema_version":2,"policy_version":"1"}')
         with self.assertRaises(editor.EditorError):
             editor.asset_root(self.assets)
-        (self.assets / "compatibility.json").write_text('{"schema_version":1,"policy_version":"2"}')
-        with self.assertRaisesRegex(editor.EditorError, "rebuild and reinstall"):
-            editor.asset_root(self.assets)
+        for version in ("2", "4"):
+            (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": version}))
+            with self.subTest(version=version), self.assertRaisesRegex(editor.EditorError, "rebuild and reinstall"):
+                editor.asset_root(self.assets)
 
 
 if __name__ == "__main__":

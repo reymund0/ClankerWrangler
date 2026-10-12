@@ -161,10 +161,14 @@ files directly instead of extracting escaped diff strings from JSON.
 
 Launch each review once and retain its process/session handle. Prefer completion
 notifications where the host supports them; otherwise use bounded waits rather than
-rapid status polling. Do independent work while the review runs. Collect the compact
-final report once, then inspect findings as needed. Do not repeatedly dump unchanged
-logs, restart a healthy review, or spawn a native agent solely to wait. Read
-`report.json` and `summary.md` from the returned attempt path.
+rapid status polling. Do independent work while the review runs. Collect the launcher
+receipt once for execution status and the saved report path. Inspect `report.json`
+selectively for verdict, findings, required coverage, parent-check/source-change
+state, and the evidence needed for reconciliation. `summary.md` is an alternative
+human-readable view, not a mandatory second full read. Keep both complete files on
+disk; do not dump duplicate representations, restart a healthy review, or spawn a
+native agent solely to wait. Preserve material findings and coverage gaps in the
+parent's digest; receipt size does not change review or acceptance requirements.
 
 If execution fails or is interrupted, inspect that attempt's diagnostics and the
 launcher's help/source before retrying. Report unresolved failures and preserve the

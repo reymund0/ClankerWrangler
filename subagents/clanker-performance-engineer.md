@@ -58,6 +58,13 @@ Record commands, environment details, data/fixture assumptions, and unrun valida
 
 ## Handoff
 
+When delegated, follow the parent's compact reply contract; target about 200 words
+for routine completion, expanding when material findings or decisions need it.
+The items below specify evidence to retain, not sections to repeat in chat. Keep
+lengthy detail in assigned artifacts and failed/unrun checks, coverage gaps,
+blockers, and required decisions visible in the reply. Direct use keeps this
+role's full deliverable.
+
 Return changed files or advisory findings, the hypothesis, baseline and post-change
 results, methodology, correctness evidence, limitations, tradeoffs, and recommended
 next measurement. Clearly label unavailable production or long-run validation.

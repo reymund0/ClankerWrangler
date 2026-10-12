@@ -6,10 +6,10 @@ import { specialistChoices } from './specialists'
 import type { ConfigResponse } from './types'
 
 const config: ConfigResponse = {
-  schema_version: 1, policy_version: '4',
+  schema_version: 1, policy_version: '5',
   scopes: { global: { path: '/home/test/.clanker/orchestration-routing.json', revision: 'abc', document: { schema_version: 1 } } },
   bundle: {
-    schema_version: 1, policy_version: '4',
+    schema_version: 1, policy_version: '5',
     interactions: [
       { id: 'planning', label: 'Planning and design', provider: 'codex', default_model: 'gpt-5.6-sol' },
       { id: 'implementation', label: 'Implementation and testing', provider: 'codex', default_model: 'gpt-5.6-terra' },
@@ -22,11 +22,11 @@ const config: ConfigResponse = {
     effort_orders: { codex: ['low', 'medium', 'high', 'xhigh', 'max'], claude: ['low', 'medium', 'high'] }, defaults: { schema_version: 1 },
   },
   effective: { interactions: {
-    planning: { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, ceiling: 'xhigh', ceiling_source: 'bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling', specialists: {} },
-    implementation: { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, ceiling: 'xhigh', ceiling_source: 'bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling', specialists: { 'clanker-ui-developer': { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, ceiling: 'xhigh', ceiling_source: 'bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling' } } },
-    'native-review': { ceiling: 'xhigh', ceiling_source: 'bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling', route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
-    'visual-review': { ceiling: 'xhigh', ceiling_source: 'bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling', route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
-    'claude-review': { ceiling: 'high', ceiling_source: 'bundle.defaults.adaptive_profiles.claude:claude-opus-5.default_ceiling', route: { model: 'claude-opus-5', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
+    planning: { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
+    implementation: { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: { 'clanker-ui-developer': { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' } } } },
+    'native-review': { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
+    'visual-review': { route: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
+    'claude-review': { route: { model: 'claude-opus-5', reasoning: { mode: 'adaptive' } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} },
   }, profiles: {} },
 }
 
@@ -193,10 +193,10 @@ describe('routing editor', () => {
     expect((implementation.querySelector('.model-picker select') as HTMLInputElement).value).toBe('gpt-5.6-terra')
   })
 
-  it('renders an API-returned Luna ceiling preview as unverified', async () => {
+  it('renders an API-returned Luna direct mapping preview as unverified', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response(config))
-      .mockResolvedValueOnce(response({ effective: config.effective, decision: { model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive' }, effort: 'xhigh', proposed_effort: 'max', ceiling: 'xhigh', ceiling_source: 'global', interaction: 'implementation', tier: 'demanding', reason: 'Hard integration', limitations: ['Adaptive demanding effort max is capped at xhigh'], provenance: { model: 'global', reasoning: 'global', profile: 'global' }, capability_status: 'unverified', dispatch_allowed: false } }))
+      .mockResolvedValueOnce(response({ effective: config.effective, decision: { model: 'gpt-5.6-luna', reasoning: { mode: 'adaptive' }, effort: 'max', proposed_effort: 'max', interaction: 'implementation', tier: 'demanding', reason: 'Hard integration', limitations: [], provenance: { model: 'global', reasoning: 'global', profile: 'global' }, capability_status: 'unverified', dispatch_allowed: false } }))
     await render(fetchMock)
     await openTab('Preview a route')
     const form = previewForm()
@@ -208,7 +208,8 @@ describe('routing editor', () => {
     await act(async () => { previewButton.click(); await Promise.resolve() })
     expect(document.body.textContent).toContain('gpt-5.6-luna')
     expect(document.body.textContent).toContain('unverified')
-    expect(document.body.textContent).toContain('max is capped at xhigh')
+    expect(document.body.textContent).toContain('Requested effort: max')
+    expect(document.body.textContent).not.toContain('Ceiling:')
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).document).toEqual({ schema_version: 1 })
   })
 
@@ -223,17 +224,51 @@ describe('routing editor', () => {
     expect(model.value).toBe('gpt-5.6-luna')
   })
 
-  it('shows resolver-provided Adaptive ceilings and lets users select the first fixed effort', async () => {
+  it('sends an explicit Adaptive session override without retaining Fixed effort', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValue(response({ effective: config.effective, decision: null }))
+    await render(fetchMock)
+    await openTab('Preview a route')
+    const session = previewForm().querySelector('.session-fieldset')!
+    const modes = session.querySelector('[aria-label="Session override mode"]')!
+    await act(async () => { actionButton('Fixed', modes).click() })
+    await setInput([...session.querySelectorAll<HTMLSelectElement>('select')].at(-1)!, 'high')
+    await act(async () => { actionButton('Adaptive', modes).click() })
+    expect(session.textContent).not.toContain('Maximum')
+    await act(async () => { actionButton('Preview route', previewForm()).click(); await Promise.resolve() })
+    const payload = () => JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
+    expect(payload().request.session_override).toEqual({ reasoning: { mode: 'adaptive' } })
+    await act(async () => { actionButton('Inherited', modes).click() })
+    await act(async () => { actionButton('Preview route', previewForm()).click(); await Promise.resolve() })
+    expect(payload().request.session_override).toBeUndefined()
+  })
+
+  it('keeps invalid saved preferences untouched until Reset is explicitly saved', async () => {
+    vi.useFakeTimers()
+    const loaded = structuredClone(config)
+    loaded.scopes.global.document = null
+    loaded.effective = null
+    loaded.error = 'global.adaptive_profiles.codex:gpt-5.6-luna.default_ceiling: is not supported'
+    const fetchMock = vi.fn().mockResolvedValueOnce(response(loaded)).mockResolvedValueOnce(response(config))
+    await render(fetchMock)
+    expect(document.body.textContent).toContain('default_ceiling: is not supported')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { actionButton('Reset global preferences').click() })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
+    expect(fetchMock.mock.calls[1][0]).toBe('/api/save')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scope: 'global', revision: 'abc', document: { schema_version: 1 } })
+  })
+
+  it('hides Adaptive effort controls and lets users select the first fixed effort', async () => {
     vi.useFakeTimers()
     const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValueOnce(response({ effective: config.effective, decision: null })).mockResolvedValueOnce(response(config))
     await render(fetchMock)
     await act(async () => { await vi.advanceTimersByTimeAsync(180) })
-    expect(document.body.textContent).toContain('Adaptive ceiling: xhigh')
-    expect(document.body.textContent).toContain('Adaptive routes inherit a ceiling of xhigh')
+    expect(document.body.textContent).not.toContain('Adaptive ceiling')
+    expect(document.body.textContent).not.toContain('Adaptive maximum')
     const planning = activityCard('Planning and design')
-    const adaptiveMaximum = planning.querySelector<HTMLSelectElement>('.effort-field select')!
-    await setInput(adaptiveMaximum, 'high')
-    expect(adaptiveMaximum.options[0].textContent).toBe('Model profile default')
+    expect(planning.querySelector('.effort-field select')).toBeNull()
     const mode = planning.querySelector('[role="group"][aria-label="planning reasoning mode"]')!
     await act(async () => { actionButton('Fixed', mode).click() })
     const effort = planning.querySelector<HTMLSelectElement>('.effort-field select')!
@@ -323,13 +358,14 @@ describe('routing editor', () => {
     await act(async () => { actionButton('+ Add activity exception', worker).click() })
     await act(async () => { actionButton('Planning and design', worker).click() })
     const planning = [...worker.querySelectorAll<HTMLElement>('.activity-route')].find((item) => item.textContent?.includes('Planning and design'))!
-    const specialistMaximum = planning.querySelector<HTMLSelectElement>('.effort-field select')!
-    await setInput(specialistMaximum, 'high')
+    await act(async () => { actionButton('Fixed', planning.querySelector('[aria-label="planning reasoning mode"]')!).click() })
+    const specialistEffort = planning.querySelector<HTMLSelectElement>('.effort-field select')!
+    await setInput(specialistEffort, 'high')
     const save = [...document.querySelectorAll('button')].find((button) => button.textContent === 'Save global preferences')!
     await act(async () => { save.click(); await Promise.resolve() })
     expect(document.body.textContent).toContain('is not supported by codex')
-    const reopenedMaximum = planning.querySelector<HTMLSelectElement>('.effort-field select')!
-    expect(reopenedMaximum.getAttribute('aria-describedby')).toContain('interactions.planning.specialists.clanker-ui-developer-reasoning-error')
+    const reopenedEffort = planning.querySelector<HTMLSelectElement>('.effort-field select')!
+    expect(reopenedEffort.getAttribute('aria-describedby')).toContain('interactions.planning.specialists.clanker-ui-developer-reasoning-error')
     await act(async () => { actionButton('Reset activity exception', planning).click() })
     expect(document.body.textContent).not.toContain('is not supported by codex')
   })
@@ -384,7 +420,7 @@ describe('routing editor', () => {
   })
 
   it('clears only the generic preview error after a successful explicit preview', async () => {
-    const decision = { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'straightforward', reason: 'Resolved', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false }
+    const decision = { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', interaction: 'implementation', tier: 'straightforward', reason: 'Resolved', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false }
     const fetchMock = vi.fn().mockResolvedValueOnce(response(config)).mockResolvedValueOnce(response({ error: 'Preview temporarily failed' }, 400)).mockResolvedValueOnce(response({ effective: config.effective, decision }))
     await render(fetchMock)
     await openTab('Preview a route')
@@ -427,7 +463,7 @@ describe('routing editor', () => {
     const preview = actionButton('Preview route', previewForm())
     await act(async () => { preview.click() })
     await setInput(previewForm().querySelector('input[required]') as HTMLInputElement, 'Changed after preview started')
-    pending.resolve(response({ effective: config.effective, decision: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle.defaults', interaction: 'implementation', tier: 'straightforward', reason: 'Stale result', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false } }))
+    pending.resolve(response({ effective: config.effective, decision: { model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' }, effort: 'high', proposed_effort: 'high', interaction: 'implementation', tier: 'straightforward', reason: 'Stale result', limitations: [], provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: 'bundle.defaults' }, capability_status: 'unverified', dispatch_allowed: false } }))
     await act(async () => { await Promise.resolve() })
     expect(document.body.textContent).not.toContain('Predicted route')
   })
@@ -483,7 +519,7 @@ describe('routing editor', () => {
     expect(JSON.parse(fetchMock.mock.calls[2][1].body).revision).toBe('abc')
     expect(document.body.textContent).toContain('Save conflict: your draft is still available.')
   })
-  it('reveals an adaptive control when an agent reasoning error is returned', async () => {
+  it('shows an Adaptive reasoning error without a maximum control', async () => {
     vi.useFakeTimers()
     const loaded = structuredClone(config)
     loaded.bundle.roles = [{ id: 'clanker-ui-developer', label: 'UI developer' }]
@@ -498,9 +534,9 @@ describe('routing editor', () => {
     await setInput(card.querySelector('.model-picker select') as HTMLSelectElement, 'gpt-5.6-luna')
     await act(async () => { await vi.advanceTimersByTimeAsync(180) })
     expect(document.getElementById('agents.clanker-ui-developer-reasoning-error')?.textContent).toContain('not supported')
-    expect([...card.querySelectorAll('label')].some((label) => label.textContent?.includes('Adaptive maximum'))).toBe(true)
-    const adaptiveMaximum = [...card.querySelectorAll('label')].find((label) => label.textContent?.startsWith('Adaptive maximum'))?.querySelector('select')
-    expect(adaptiveMaximum?.getAttribute('aria-describedby')).toContain('agents.clanker-ui-developer-reasoning-error')
+    expect(card.textContent).not.toContain('Adaptive maximum')
+    expect(card.querySelector('[aria-label="UI developer reasoning mode"]')).toBeTruthy()
+    expect(card.querySelector('[aria-label="UI developer reasoning mode"]')?.getAttribute('aria-describedby')).toContain('agents.clanker-ui-developer-reasoning-error')
   })
 
   it('keeps the global inherited agent route visible while its preview refreshes', async () => {
@@ -655,8 +691,7 @@ describe('agent-first cards', () => {
     await render(fetchMock)
     await act(async () => { await vi.advanceTimersByTimeAsync(180) })
     await inspectWorker('UI developer')
-    const maximum = [...inspector().querySelectorAll('label')].find((label) => label.textContent?.startsWith('Adaptive maximum'))!.querySelector('select')!
-    await setInput(maximum, 'high')
+    await setInput(inspector().querySelector('.model-picker select') as HTMLSelectElement, 'gpt-5.6-luna')
     await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
     await inspectWorker('Backend developer')
 
@@ -679,8 +714,7 @@ describe('agent-first cards', () => {
     }
     const decision = {
       model: 'gpt-5.6-sol', reasoning: { mode: 'fixed', effort: 'high' } as const,
-      effort: 'high', proposed_effort: 'max', ceiling: 'high', ceiling_source: 'global profile',
-      interaction: 'implementation', role: role.id, tier: 'demanding', reason: 'Risk raised the tier', limitations: [],
+      effort: 'high', proposed_effort: 'high', interaction: 'implementation', role: role.id, tier: 'demanding', reason: 'Risk raised the tier', limitations: [],
       provenance: { model: 'global.agents.clanker-ui-developer.model', reasoning: 'session_override.reasoning', profile: null },
       capability_status: 'available', dispatch_allowed: false,
     }
@@ -796,8 +830,7 @@ describe('agent-first cards', () => {
     const profileSource = 'global.adaptive_profiles.codex:gpt-5.6-terra'
     const decision = {
       model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } as const,
-      effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle profile',
-      interaction: 'implementation', tier: 'involved', reason: 'Matched saved routing', limitations: [],
+      effort: 'high', proposed_effort: 'high', interaction: 'implementation', tier: 'involved', reason: 'Matched saved routing', limitations: [],
       provenance: { model: 'resolver-v2:model', reasoning: 'resolver-v2:reasoning', profile: profileSource },
       capability_status: 'available', dispatch_allowed: false,
     }
@@ -908,8 +941,7 @@ describe('agent-first cards', () => {
     const loaded = structuredClone(config)
     const decision = {
       model: 'gpt-5.6-terra', reasoning: { mode: 'adaptive' } as const,
-      effort: 'high', proposed_effort: 'high', ceiling: 'xhigh', ceiling_source: 'bundle profile',
-      interaction: 'implementation', tier: 'involved', reason: 'No profile source returned', limitations: [],
+      effort: 'high', proposed_effort: 'high', interaction: 'implementation', tier: 'involved', reason: 'No profile source returned', limitations: [],
       provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults', profile: null },
       capability_status: 'available', dispatch_allowed: false,
     }

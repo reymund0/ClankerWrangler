@@ -78,7 +78,7 @@ route. Keep request text free of secrets and private payloads.
 
 ### Interpret the result and dispatch
 
-The resolver handles precedence, defaults, fixed/Adaptive effort, profiles, ceilings,
+The resolver handles precedence, defaults, fixed/Adaptive effort, profiles,
 and capability validation. Its JSON includes the selected `model`/`effort`, limitations,
 provenance, versions, and snapshot fingerprint. Do not recompute those decisions.
 
@@ -89,8 +89,8 @@ provenance, versions, and snapshot fingerprint. Do not recompute those decisions
 - Errors or blocked results: report the concrete limitation and continue independent
   work. Do not substitute models, raise effort, or bypass invalid configuration silently.
 
-Disclose consequential limitations, including ceiling
-constraints or low fixed effort. Profiles express policy, not quality guarantees.
+Disclose consequential limitations, including unsupported requests or low fixed
+effort. Profiles express policy, not quality guarantees.
 A successful resolver exit or preview is not proof of dispatch or model execution.
 
 ### Capture routing evidence without rewriting it
@@ -103,7 +103,7 @@ Record the snapshot path and configuration source paths once per snapshot. Along
 each decision, record explicit `session_override` values (absent from the decision
 JSON), assignment ID/ownership, and instruction path. The generated decision preserves
 schema/policy versions, fingerprint, tier/reason, mode, proposed/requested effort,
-ceiling effects, provenance, and capability status. Summarize only meaningful limitations.
+provenance and capability status. Summarize only meaningful limitations.
 
 Record dispatch success/failure separately, with observed model/effort only when the
 runtime reports them; otherwise use unknown. Preserve earlier attempts and snapshot
@@ -127,7 +127,7 @@ the global configuration.
   "agents": {
     "clanker-backend-developer": {
       "model": "gpt-5.6-luna",
-      "reasoning": {"mode": "adaptive", "max_effort": "max"}
+      "reasoning": {"mode": "adaptive"}
     }
   }
 }
@@ -137,12 +137,16 @@ This sets a shared backend-agent default, retaining any activity exceptions. Edi
 an agent field never deletes its activity exceptions; removing that field restores
 inheritance. Requests without a native role ignore agent defaults.
 
-This permits, but does not force, max for Luna. A straightforward assignment uses high under
-the provisional bundled mapping. Demanding work maps to max only when its cap
-permits it. All mappings are editable policy, not measured quality guarantees.
+Adaptive requests the assessed tier's mapping directly. A straightforward Luna
+assignment uses high under the provisional bundled mapping; demanding work requests
+max. Each tier retains its configured value. All mappings are editable policy, not
+measured quality guarantees, and runtime capability checks still apply.
 A new exact model ID works with fixed effort when runtime evidence supports it;
 Adaptive needs a complete profile keyed `codex:<model>` or `claude:<model>` with
-`tiers` for straightforward/involved/demanding and `default_ceiling`.
+only `tiers` for straightforward/involved/demanding. Adaptive reasoning contains
+only `mode: adaptive`. Retired `max_effort` and `default_ceiling` fields fail existing
+strict validation; they are not ignored, stripped, or migrated. Decisions and effective
+routes omit `ceiling` and `ceiling_source`; `proposed_effort` equals requested effort.
 
 ## Editor and persistence
 
@@ -160,9 +164,11 @@ For isolated checks pass `--global-config-dir <temporary-global-directory>`; thi
 startup-only choice is visible in provenance and cannot be changed by the browser.
 
 The editor saves only its fixed global destination,
-validates first, and preserves drafts on failed/conflicting saves. Reset saves an
-empty versioned override document. Invalid saved JSON is never silently replaced;
-explicitly repair/reset it in the editor. Linked paths below the pinned roots are
+validates first, and preserves drafts on failed/conflicting saves. Reset prepares an
+empty versioned override draft; a separate explicit Save replaces all overrides.
+Invalid saved JSON reports its field-path error and is never silently replaced.
+Hand-edit retired keys to preserve customizations, or explicitly save a valid
+replacement document. Linked paths below the pinned roots are
 rejected. Saves use an owner-attributed exclusive lock, final revision check and
 atomic replacement. Two editor instances cannot silently overwrite each other;
 an unrelated editor can still race after the final check. A leftover `.lock` reports
@@ -182,13 +188,22 @@ nor editor changes the target project's ignore file):
 Project routing preferences are no longer supported. Reinstall
 updates package defaults/helpers, never preference files. A build/helper version
 mismatch is an error; rebuild/reinstall. Removing overrides restores defaults.
-Only policy-version-4 snapshots are supported. Older or unknown snapshot versions
+Only policy-version-5 snapshots are supported. Older or unknown snapshot versions
 are rejected with instructions to start a new run. Reinstalling the bundle preserves
 global preferences. Preference/API schema remains 1.
 
-Complete legacy profiles normalize in memory: routine becomes straightforward,
-complex becomes involved, exceptional becomes demanding, and default_ceiling stays
-unchanged. Mechanical is retired; its old assignments can receive a different effort.
+For the policy-5 cutover, pause routing and retain an owner-managed original preference
+file if rollback is needed. Deploy the complete bundle and compatible editor assets,
+then hand-remove `default_ceiling` from every custom profile and `max_effort` from
+every route before starting a new run. Policy 4 requires profile ceilings and policy 5
+rejects them; custom-profile documents cannot satisfy both versions. Optional route
+`max_effort` alone can be removed early. Installers never edit global preferences or
+create ceiling-migration backups. Rollback restores the old bundle, matching assets,
+and the original matching preference file, then starts a new run.
+
+Complete legacy profiles without retired ceiling fields normalize in memory: routine
+becomes straightforward, complex becomes involved, and exceptional becomes demanding.
+Mechanical is retired; its old assignments can receive a different effort.
 Opening, previewing, and reinstalling never rewrite preferences. The editor marks
 pending conversion and allows Save without further edits. Save backs up exact original
 bytes next to the global file as `orchestration-routing.json.pre-three-tier.<sha256>.bak`

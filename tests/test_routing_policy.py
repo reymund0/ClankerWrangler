@@ -68,18 +68,18 @@ class PreferenceTests(unittest.TestCase):
                 policy.validate_preferences(invalid)
 
     def test_profiles_are_complete_and_provider_scoped(self):
-        current = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "high"}}}
+        current = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}}}}
         self.assertEqual(policy.validate_preferences(current), current)
-        incomplete = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"straightforward": "medium", "involved": "high"}, "default_ceiling": "high"}}}
+        incomplete = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"straightforward": "medium", "involved": "high"}}}}
         with self.assertRaisesRegex(policy.RoutingError, "straightforward, involved, demanding"):
             policy.validate_preferences(incomplete)
-        mixed = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"routine": "medium", "involved": "high", "demanding": "xhigh"}, "default_ceiling": "high"}}}
+        mixed = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"routine": "medium", "involved": "high", "demanding": "xhigh"}}}}
         with self.assertRaisesRegex(policy.RoutingError, "tiers"):
             policy.validate_preferences(mixed)
-        invalid_retired_effort = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"mechanical": None, "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "high"}}}
+        invalid_retired_effort = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": {"mechanical": None, "routine": "medium", "complex": "high", "exceptional": "xhigh"}}}}
         with self.assertRaisesRegex(policy.RoutingError, "tiers.mechanical"):
             policy.validate_preferences(invalid_retired_effort)
-        mismatch = {"schema_version": 1, "adaptive_profiles": {"codex:claude-opus-5": {"tiers": {tier: "high" for tier in policy.TIERS}, "default_ceiling": "high"}}}
+        mismatch = {"schema_version": 1, "adaptive_profiles": {"codex:claude-opus-5": {"tiers": {tier: "high" for tier in policy.TIERS}}}}
         with self.assertRaisesRegex(policy.RoutingError, "belongs to claude"):
             policy.validate_preferences(mismatch)
 
@@ -97,8 +97,8 @@ class PreferenceTests(unittest.TestCase):
             "interactions": {"implementation": {"reasoning": {"mode": "fixed", "effort": "medium"}}},
             "agents": {"clanker-backend-developer": {"model": "custom-codex-v9"}},
             "adaptive_profiles": {
-                "codex:custom-codex-v9": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "max", "exceptional": "ultra"}, "default_ceiling": "ultra"},
-                "claude:custom-claude-v9": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "max"}, "default_ceiling": "max"},
+                "codex:custom-codex-v9": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "max", "exceptional": "ultra"}},
+                "claude:custom-claude-v9": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "max"}},
             },
         }
         original = copy.deepcopy(legacy)
@@ -108,18 +108,18 @@ class PreferenceTests(unittest.TestCase):
         self.assertEqual(normalized["interactions"], original["interactions"])
         self.assertEqual(normalized["agents"], original["agents"])
         self.assertEqual(normalized["adaptive_profiles"], {
-            "codex:custom-codex-v9": {"tiers": {"straightforward": "medium", "involved": "max", "demanding": "ultra"}, "default_ceiling": "ultra"},
-            "claude:custom-claude-v9": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "max"}, "default_ceiling": "max"},
+            "codex:custom-codex-v9": {"tiers": {"straightforward": "medium", "involved": "max", "demanding": "ultra"}},
+            "claude:custom-claude-v9": {"tiers": {"straightforward": "medium", "involved": "high", "demanding": "max"}},
         })
         self.assertFalse(policy.needs_profile_migration(normalized))
         with self.assertRaisesRegex(policy.RoutingError, "tiers"):
-            policy.needs_profile_migration({"schema_version": 1, "adaptive_profiles": {"codex:broken": {"tiers": {"routine": "medium", "involved": "high"}, "default_ceiling": "high"}}})
+            policy.needs_profile_migration({"schema_version": 1, "adaptive_profiles": {"codex:broken": {"tiers": {"routine": "medium", "involved": "high"}}}})
 
     def test_snapshot_normalizes_global_profiles_and_ignores_malformed_project_file(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             global_path, project_path = root / "global.json", root / "project.json"
-            global_document = {"schema_version": 1, "adaptive_profiles": {"codex:custom-global": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "max"}, "default_ceiling": "max"}}}
+            global_document = {"schema_version": 1, "adaptive_profiles": {"codex:custom-global": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "max"}}}}
             global_bytes = json.dumps(global_document).encode()
             global_path.write_bytes(global_bytes)
             project_path.write_text("not-json", encoding="utf-8")
@@ -127,7 +127,7 @@ class PreferenceTests(unittest.TestCase):
             snapshot = policy.create_snapshot(global_path)
             self.assertEqual(snapshot["documents"]["global"]["adaptive_profiles"]["codex:custom-global"]["tiers"], {"straightforward": "medium", "involved": "high", "demanding": "max"})
             self.assertEqual(snapshot["hashes"]["global"], policy._sha256(global_bytes))
-            self.assertEqual(snapshot["policy_version"], "4")
+            self.assertEqual(snapshot["policy_version"], "5")
             self.assertEqual(set(snapshot["documents"]), {"global"})
             self.assertEqual(set(snapshot["sources"]), {"global"})
             self.assertEqual(set(snapshot["hashes"]), {"bundle", "global"})
@@ -136,20 +136,21 @@ class PreferenceTests(unittest.TestCase):
 
 
 class ResolutionTests(unittest.TestCase):
-    def test_effective_display_distinguishes_profile_default_from_explicit_cap(self):
-        snapshot = policy.snapshot_from_documents({"schema_version": 1})
-        default = policy.effective_configuration(snapshot)["interactions"]["implementation"]
-        self.assertEqual(default["route"]["reasoning"], {"mode": "adaptive"})
-        self.assertEqual(default["ceiling"], "xhigh")
-        self.assertEqual(default["ceiling_source"], "bundle.defaults.adaptive_profiles.codex:gpt-5.6-terra.default_ceiling")
-        prefs = {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive", "max_effort": "high"}}}}
-        capped = policy.effective_configuration(policy.snapshot_from_documents(prefs))["interactions"]["implementation"]
-        self.assertEqual(capped["route"]["reasoning"]["max_effort"], "high")
-        self.assertEqual(capped["ceiling_source"], "global.interactions.implementation.reasoning.max_effort")
-        specialist = capped["specialists"]["clanker-backend-developer"]
-        self.assertEqual(specialist["ceiling"], "high")
-        self.assertEqual(specialist["ceiling_source"], capped["ceiling_source"])
-
+    def test_effective_display_has_no_ceiling_fields(self):
+        for mode in ("adaptive", "fixed"):
+            reasoning = {"mode": mode, **({"effort": "high"} if mode == "fixed" else {})}
+            prefs = {"schema_version": 1, "interactions": {"implementation": {"reasoning": reasoning}}}
+            snapshot = policy.snapshot_from_documents(prefs)
+            effective = policy.effective_configuration(snapshot)
+            route = effective["interactions"]["implementation"]
+            self.assertEqual(route["route"]["reasoning"], reasoning)
+            for entry in [route, *route["specialists"].values()]:
+                self.assertNotIn("ceiling", entry)
+                self.assertNotIn("ceiling_source", entry)
+            decision = policy.resolve(snapshot, request())
+            self.assertEqual(decision["effort"], decision["proposed_effort"])
+            self.assertNotIn("ceiling", decision)
+            self.assertNotIn("ceiling_source", decision)
 
     def snapshot(self, global_document=None):
         return policy.snapshot_from_documents(global_document or EMPTY, sources={"global": "global.json"})
@@ -159,16 +160,12 @@ class ResolutionTests(unittest.TestCase):
         snapshot = self.snapshot(prefs)
         effective = policy.effective_configuration(snapshot)["interactions"]["planning"]
         self.assertEqual(effective["route"]["model"], "gpt-6-astra")
-        self.assertEqual(effective["ceiling"], "xhigh")
         for tier, effort in {"straightforward": "medium", "involved": "high", "demanding": "xhigh"}.items():
             with self.subTest(tier=tier):
                 result = policy.resolve(snapshot, request(interaction="planning", tier=tier))
                 self.assertEqual(result["effort"], effort)
                 self.assertEqual(result["provenance"]["profile"], "bundle.defaults.adaptive_profiles.codex:gpt-6-astra")
                 self.assertFalse(result["dispatch_allowed"])
-        capped = {"schema_version": 1, "interactions": {"planning": {"reasoning": {"mode": "adaptive", "max_effort": "high"}}}}
-        result = policy.resolve(self.snapshot({"schema_version": 1, "interactions": {"planning": {"model": "gpt-6-astra", "reasoning": {"mode": "adaptive", "max_effort": "high"}}}}), request(interaction="planning", tier="demanding"))
-        self.assertEqual(result["effort"], "high")
 
     def test_claude_cli_ids_have_review_profiles_without_rewriting_aliases(self):
         for model in ("default", "opus[1m]", "claude-fable-5-1[1m]", "sonnet"):
@@ -238,25 +235,46 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(specialist["route"], {"model": "gpt-5.6-terra", "reasoning": {"mode": "fixed", "effort": "high"}})
 
     def test_agent_model_only_override_retains_interaction_reasoning(self):
-        global_document = {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive", "max_effort": "high"}}}}
+        global_document = {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive"}}}}
         global_document["agents"] = {"clanker-backend-developer": {"model": "gpt-5.6-luna"}}
         decision = policy.resolve(self.snapshot(global_document), request(role="clanker-backend-developer", tier="demanding", capabilities=NATIVE_CAPABILITIES))
-        self.assertEqual((decision["model"], decision["effort"], decision["ceiling"]), ("gpt-5.6-luna", "high", "high"))
+        self.assertEqual((decision["model"], decision["effort"]), ("gpt-5.6-luna", "max"))
         self.assertEqual(decision["provenance"]["reasoning"], "global.interactions.implementation.reasoning")
 
-    def test_atomic_reasoning_and_inherited_cap_survive_model_only_override(self):
-        global_document = {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive", "max_effort": "high"}}}}
-        global_document["agents"] = {"clanker-backend-developer": {"model": "gpt-5.6-luna"}}
-        decision = policy.resolve(self.snapshot(global_document), request(role="clanker-backend-developer", tier="demanding", capabilities=NATIVE_CAPABILITIES))
-        self.assertEqual((decision["proposed_effort"], decision["effort"], decision["ceiling"]), ("max", "high", "high"))
-        self.assertEqual(decision["ceiling_source"], "global.interactions.implementation.reasoning.max_effort")
-        reset_document = {"schema_version": 1, "interactions": {"implementation": {"reasoning": {"mode": "adaptive"}}}, "agents": {"clanker-backend-developer": {"model": "gpt-5.6-luna"}}}
-        reset = policy.resolve(self.snapshot(reset_document), request(role="clanker-backend-developer", tier="demanding", capabilities=NATIVE_CAPABILITIES))
-        self.assertEqual((reset["effort"], reset["ceiling"]), ("xhigh", "xhigh"))
+    def test_retired_fields_are_rejected_at_every_input_location(self):
+        bad = {"mode": "adaptive", "max_effort": "high"}
+        documents = [
+            {"schema_version": 1, "interactions": {"implementation": {"reasoning": bad}}},
+            {"schema_version": 1, "agents": {"clanker-backend-developer": {"reasoning": bad}}},
+            {"schema_version": 1, "interactions": {"implementation": {"specialists": {"clanker-backend-developer": {"reasoning": bad}}}}},
+        ]
+        for document in documents:
+            with self.subTest(document=document), self.assertRaisesRegex(policy.RoutingError, "max_effort: is not supported"):
+                self.snapshot(document)
+        with self.assertRaisesRegex(policy.RoutingError, "request.session_override.reasoning.max_effort"):
+            policy.resolve(self.snapshot(), request(session_override={"reasoning": bad}))
+        for tiers in ({"straightforward": "medium", "involved": "high", "demanding": "max"},
+                      {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "max"}):
+            document = {"schema_version": 1, "adaptive_profiles": {"codex:custom": {"tiers": tiers, "default_ceiling": "high"}}}
+            with self.subTest(tiers=tiers), self.assertRaisesRegex(policy.RoutingError, "default_ceiling: is not supported"):
+                self.snapshot(document)
+
+    def test_custom_tiers_are_requested_exactly_without_an_implicit_cap(self):
+        tiers = {"straightforward": "max", "involved": "medium", "demanding": "high"}
+        document = {"schema_version": 1, "interactions": {"implementation": {"model": "custom-model"}},
+                    "adaptive_profiles": {"codex:custom-model": {"tiers": tiers}}}
+        snapshot = self.snapshot(document)
+        for tier, effort in tiers.items():
+            capabilities = {"provider": "codex", "source": "fixture", "models": {"custom-model": [effort]}}
+            decision = policy.resolve(snapshot, request(tier=tier, capabilities=capabilities))
+            self.assertEqual((decision["effort"], decision["proposed_effort"]), (effort, effort))
+            self.assertTrue(decision["dispatch_allowed"])
+        unsupported = policy.resolve(snapshot, request(tier="straightforward", capabilities={"provider": "codex", "source": "fixture", "models": {"custom-model": ["high"]}}))
+        self.assertEqual((unsupported["effort"], unsupported["capability_status"], unsupported["dispatch_allowed"]), ("max", "unsupported", False))
 
     def test_adaptive_tier_maps_risks_and_fixed_limitations(self):
         luna = {"schema_version": 1, "interactions": {"implementation": {"model": "gpt-5.6-luna"}}}
-        for tier, expected in (("straightforward", "high"), ("involved", "xhigh"), ("demanding", "xhigh")):
+        for tier, expected in (("straightforward", "high"), ("involved", "xhigh"), ("demanding", "max")):
             with self.subTest(tier=tier):
                 decision = policy.resolve(self.snapshot(luna), request(tier=tier, capabilities=NATIVE_CAPABILITIES))
                 self.assertEqual(decision["effort"], expected)
@@ -308,7 +326,7 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(normal, empty)
 class SnapshotAndCliTests(unittest.TestCase):
     def test_old_and_unknown_snapshots_require_a_new_run(self):
-        for version in ("1", "2", "3", "5", []):
+        for version in ("1", "2", "3", "4", "6", []):
             snapshot = policy.snapshot_from_documents(EMPTY)
             snapshot["policy_version"] = version
             for operation in (policy.validate_snapshot, policy.effective_configuration,
@@ -328,7 +346,7 @@ class SnapshotAndCliTests(unittest.TestCase):
         snapshot["fingerprint"] = policy._sha256(policy._canonical_json(policy._snapshot_payload(snapshot)))
         with self.assertRaisesRegex(policy.RoutingError, "policy_version"):
             policy.validate_snapshot(snapshot)
-        for unsupported in ([], "5"):
+        for unsupported in ([], "6"):
             snapshot = policy.snapshot_from_documents(EMPTY)
             snapshot["policy_version"] = unsupported
             snapshot["bundle"]["policy_version"] = unsupported
@@ -345,7 +363,7 @@ class SnapshotAndCliTests(unittest.TestCase):
 
         snapshot = policy.snapshot_from_documents(EMPTY)
         snapshot["documents"]["global"]["adaptive_profiles"] = {
-            "codex:custom": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}, "default_ceiling": "xhigh"}
+            "codex:custom": {"tiers": {"mechanical": "low", "routine": "medium", "complex": "high", "exceptional": "xhigh"}}
         }
         snapshot["hashes"]["global"] = policy._hash_document(snapshot["documents"]["global"])
         snapshot["fingerprint"] = policy._sha256(policy._canonical_json(policy._snapshot_payload(snapshot)))

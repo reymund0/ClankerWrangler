@@ -43,6 +43,13 @@ during a planning/review assignment. Route test implementation to the test engin
 
 ## Deliverable
 
+When delegated, follow the parent's compact reply contract; target about 200 words
+for routine completion, expanding when material findings or decisions need it.
+The items below specify evidence to retain, not sections to repeat in chat. Keep
+lengthy detail in assigned artifacts and failed/unrun checks, coverage gaps,
+blockers, and required decisions visible in the reply. Direct use keeps this
+role's full deliverable.
+
 Return a QA handoff containing:
 
 - testable scope, assumptions, data/setup needs, and excluded behavior;

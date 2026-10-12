@@ -30,7 +30,7 @@ from model_discovery import DiscoveryClosed, DiscoveryManager
 
 MAX_DOCUMENT_BYTES = 262144
 API_VERSION = 1
-POLICY_VERSION = "4"
+POLICY_VERSION = "5"
 
 
 class EditorError(Exception):

@@ -58,6 +58,13 @@ the provider, command, fixture assumptions, and unverified rollout risk.
 
 ## Handoff
 
+When delegated, follow the parent's compact reply contract; target about 200 words
+for routine completion, expanding when material findings or decisions need it.
+The items below specify evidence to retain, not sections to repeat in chat. Keep
+lengthy detail in assigned artifacts and failed/unrun checks, coverage gaps,
+blockers, and required decisions visible in the reply. Direct use keeps this
+role's full deliverable.
+
 Report changed files; data contract and compatibility decision; migration ordering;
 integrity/concurrency considerations; exact validation evidence; and blockers. For an
 advisory phase, provide actionable findings without modifying owned application files.

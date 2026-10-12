@@ -25,7 +25,7 @@ The editor SHALL load catalogs separately from preference loading and offer expl
 - **THEN** the previous choices remain available as stale with an explanatory status and the saved model remains unchanged
 
 ### Requirement: Full model and effort selectors
-All route and temporary-session model controls SHALL offer all CLI-reported provider choices without filtering them down to the prefilled value. Manual model entry and static bundled alternatives SHALL NOT be offered. Current saved or inherited choices absent from the CLI catalog SHALL remain visible as labeled disabled options without preference mutation. Adaptive profile creation SHALL choose from the provider's CLI catalog, while existing profiles remain editable and resettable. Known discovered effort levels SHALL guide model-specific controls, including dropdowns for all four Adaptive profile tiers and the default ceiling; existing unsupported effort values SHALL stay visible rather than being silently replaced. Unknown effort metadata SHALL remain distinguishable from reported support.
+All route and temporary-session model controls SHALL offer all CLI-reported provider choices without filtering them down to the prefilled value. Manual model entry and static bundled alternatives SHALL NOT be offered. Current saved or inherited choices absent from the CLI catalog SHALL remain visible as labeled disabled options without preference mutation. Adaptive profile creation SHALL choose from the provider's CLI catalog, while existing profiles remain editable and resettable. Known discovered effort levels SHALL guide model-specific controls, including dropdowns for the three Adaptive profile tiers and Fixed reasoning; no Adaptive ceiling selector SHALL be offered; existing unsupported effort values SHALL stay visible rather than being silently replaced. Unknown effort metadata SHALL remain distinguishable from reported support.
 
 #### Scenario: Existing selection and newly discovered choices
 - **WHEN** the selected model differs from newly discovered local models
@@ -34,6 +34,10 @@ All route and temporary-session model controls SHALL offer all CLI-reported prov
 #### Scenario: CLI-only profile creation
 - **WHEN** a user chooses a model to customize its Adaptive profile
 - **THEN** only models from that provider's CLI catalog are offered, no manual ID input exists, and existing profiles remain editable even when absent from discovery
+
+#### Scenario: Model-specific three-tier effort controls
+- **WHEN** a model's CLI catalog reports supported effort levels and its Adaptive profile is displayed
+- **THEN** Straightforward, Involved, and Demanding offer the model-specific policy-supported choices, saved-unavailable efforts remain visible, and no default-ceiling selector appears
 
 ### Requirement: Discovery is not dispatch authorization
 The editor SHALL treat CLI discovery only as catalog evidence. It SHALL NOT modify native session capability checks, Claude launcher preflight, parent settings, Adaptive tier mappings, immutable run snapshots or fixed routing overrides. Provider-level Adaptive thinking support SHALL NOT be treated as a task-to-effort mapping.

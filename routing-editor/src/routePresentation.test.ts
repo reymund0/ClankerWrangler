@@ -15,13 +15,13 @@ function configFixture(): ConfigResponse {
   const emptyRoute = { route: {}, provenance: {} }
   return {
     schema_version: 1,
-    policy_version: '1',
+    policy_version: '5',
     scopes: {
       global: { path: '/global.json', revision: 'global', document: { schema_version: 1 } },
     },
     bundle: {
       schema_version: 1,
-      policy_version: '1',
+      policy_version: '5',
       interactions,
       roles: [role],
       models: [
