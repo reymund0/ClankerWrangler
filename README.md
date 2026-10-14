@@ -34,6 +34,8 @@ npm run build
 npm run dev
 ```
 
+The launcher selects the newest runnable Python 3.10+ from unversioned and versioned executables on `PATH`, plus `/opt/homebrew/bin` and `/usr/local/bin` on macOS. To pin an installation, run `CLANKER_PYTHON=/absolute/path/to/python3 npm run dev`. An invalid override fails without falling back.
+
 ## Step 4
 
 💰 PROFIT. 💰

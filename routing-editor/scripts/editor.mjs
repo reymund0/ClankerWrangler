@@ -2,9 +2,9 @@
 
 import { spawn } from 'node:child_process'
 import { request as createHttpRequest } from 'node:http'
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import { constants as fsConstants } from 'node:fs'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { delimiter, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { timingSafeEqual } from 'node:crypto'
 
@@ -127,12 +127,13 @@ function run(command, args, options = {}) {
   })
 }
 
-function inspectPython(command, prefix) {
+function inspectPython(command, prefix, environment) {
   return new Promise((resolvePython) => {
-    const child = spawn(command, [...prefix, '-c', 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}|{sys.executable}")'], {
+    const child = spawn(command, [...prefix, '-c', 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}.{sys.version_info[2]}|{sys.executable}")'], {
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: environment,
     })
     let output = ''
     let settled = false
@@ -149,29 +150,55 @@ function inspectPython(command, prefix) {
     child.stdout.on('data', (chunk) => { output += chunk })
     child.once('error', () => settle(null))
     child.once('exit', (code) => {
-      const match = output.trim().match(/^(\d+)\.(\d+)\|(.+)$/)
+      const match = output.trim().match(/^(\d+)\.(\d+)\.(\d+)\|(.+)$/)
       if (code !== 0 || !match) return settle(null)
       const major = Number(match[1])
       const minor = Number(match[2])
-      settle(major === 3 && minor >= 10 ? { command: match[3], prefix: [] } : null)
+      settle(major === 3 && minor >= 10 ? { command: match[4], prefix: [], version: [major, minor, Number(match[3])] } : null)
     })
   })
 }
 
 export async function discoverPython(environment = process.env, platform = process.platform) {
   if (environment.CLANKER_PYTHON) {
-    const selected = await inspectPython(environment.CLANKER_PYTHON, [])
-    if (selected) return selected
+    const selected = await inspectPython(environment.CLANKER_PYTHON, [], environment)
+    if (selected) return { command: selected.command, prefix: selected.prefix }
     throw new Error('CLANKER_PYTHON must name a runnable Python 3.10+ executable.')
   }
 
   const candidates = platform === 'win32'
     ? [{ command: 'py', prefix: ['-3'] }, { command: 'python3', prefix: [] }, { command: 'python', prefix: [] }]
     : [{ command: 'python3', prefix: [] }, { command: 'python', prefix: [] }]
-  for (const candidate of candidates) {
-    const selected = await inspectPython(candidate.command, candidate.prefix)
-    if (selected) return selected
+  const directories = new Set((environment.PATH ?? '').split(delimiter).filter(Boolean))
+  if (platform === 'darwin') {
+    directories.add('/opt/homebrew/bin')
+    directories.add('/usr/local/bin')
   }
+  for (const directory of directories) {
+    let names
+    try {
+      names = await readdir(directory)
+    } catch {
+      continue
+    }
+    for (const name of names.sort()) {
+      if (/^python(?:3(?:\.\d+)?)?(?:\.exe)?$/.test(name)) {
+        candidates.push({ command: resolve(directory, name), prefix: [] })
+      }
+    }
+  }
+  let newest = null
+  const seen = new Set()
+  for (const candidate of candidates) {
+    if (seen.has(candidate.command)) continue
+    seen.add(candidate.command)
+    const selected = await inspectPython(candidate.command, candidate.prefix, environment)
+    if (selected && (!newest || selected.version.some((value, index) =>
+      value > newest.version[index] && selected.version.slice(0, index).every((part, preceding) => part === newest.version[preceding])))) {
+      newest = selected
+    }
+  }
+  if (newest) return { command: newest.command, prefix: newest.prefix }
   throw new Error('Python 3.10+ is required. Install it or set CLANKER_PYTHON to its executable path.')
 }
 

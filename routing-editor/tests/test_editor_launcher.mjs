@@ -2,14 +2,34 @@ import assert from 'node:assert/strict';
 import { fork, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { request } from 'node:http';
-import { mkdtemp, mkdir, readFile, rm, copyFile, writeFile, cp, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, copyFile, writeFile, cp, symlink, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { discoverPython } from '../scripts/editor.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const launcher = path.join(root, 'routing-editor', 'scripts', 'editor.mjs');
+
+test('Python discovery compares actual versions across multiple installs and honors overrides', { skip: process.platform === 'win32' }, async () => {
+  const fixture = await mkdtemp(path.join(tmpdir(), 'clanker python installs '));
+  try {
+    const versions = { python3: '3.9.6', 'python3.9': '3.9.6', 'python3.10': '3.10.14', 'python3.14': '3.14.2', 'python3.11': '3.14.10' };
+    for (const [name, version] of Object.entries(versions)) {
+      const executable = path.join(fixture, name);
+      await writeFile(executable, `#!${process.execPath}\nconsole.log(${JSON.stringify(`${version}|${executable}`)});\n`);
+      await chmod(executable, 0o755);
+    }
+    await writeFile(path.join(fixture, 'python3.99'), 'broken executable');
+    const environment = { PATH: fixture };
+    assert.equal((await discoverPython(environment, 'linux')).command, path.join(fixture, 'python3.11'));
+    assert.equal((await discoverPython({ ...environment, CLANKER_PYTHON: path.join(fixture, 'python3.10') }, 'linux')).command, path.join(fixture, 'python3.10'));
+    await assert.rejects(discoverPython({ ...environment, CLANKER_PYTHON: path.join(fixture, 'python3.9') }, 'linux'), /CLANKER_PYTHON/);
+  } finally {
+    await rm(fixture, { recursive: true, force: true });
+  }
+});
 
 // Consume every response, including rejected requests, before testing server shutdown.
 function fetch(url, options = {}) {
