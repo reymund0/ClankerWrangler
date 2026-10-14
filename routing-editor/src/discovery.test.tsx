@@ -5,9 +5,9 @@ import { App } from './App'
 import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
 
 const fixture: ConfigResponse = {
-  schema_version: 1, policy_version: '6', scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
-  bundle: { schema_version: 1, policy_version: '6', roles: [], defaults: { schema_version: 1 },
-    interactions: [{ id: 'planning', label: 'Planning', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'implementation', label: 'Implementation', provider: 'codex', default_model: 'gpt-5.6-sol' }, { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5' }],
+  schema_version: 1, policy_version: '7', host: 'codex' as const, scopes: { global: { path: '/fixture/global.json', revision: 'one', document: { schema_version: 1 } } },
+  bundle: { schema_version: 1, policy_version: '7', host: 'codex' as const, roles: [], defaults: { schema_version: 1 },
+    interactions: [{ id: 'planning', label: 'Planning', provider: 'codex', default_model: 'gpt-5.6-sol', execution: 'native' }, { id: 'implementation', label: 'Implementation', provider: 'codex', default_model: 'gpt-5.6-sol', execution: 'native' }, { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5', execution: 'external' }],
     models: [{ id: 'gpt-5.6-sol', label: 'Sol', provider: 'codex', efforts: ['low', 'high'] }, { id: 'claude-opus-5', label: 'Opus', provider: 'claude', efforts: ['low', 'high'] }],
     effort_orders: { codex: ['low', 'medium', 'high', 'xhigh'], claude: ['low', 'medium', 'high', 'max'] } },
   effective: { profiles: {}, interactions: {
@@ -30,10 +30,10 @@ function deferred<T>() { let resolve!: (value: T) => void; const promise = new P
 let root: Root | undefined
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; vi.unstubAllGlobals(); vi.useRealTimers() })
-async function render(options: { config?: ConfigResponse; initial?: Promise<Response> | Response | (() => Promise<Response> | Response); strict?: boolean; settleInherited?: boolean; previewError?: string; refresh?: () => Promise<Response> | Response; saveResponse?: (body: { scope?: string; revision?: string; document?: Preferences }) => Response | Promise<Response> } = {}) {
+async function render(options: { config?: ConfigResponse; claudeConfig?: ConfigResponse; initial?: Promise<Response> | Response | (() => Promise<Response> | Response); strict?: boolean; settleInherited?: boolean; previewError?: string; refresh?: () => Promise<Response> | Response; saveResponse?: (body: { scope?: string; revision?: string; document?: Preferences }) => Response | Promise<Response> } = {}) {
   const config = options.config ?? fixture
   const fetchMock = vi.fn((path: string, init?: RequestInit) => {
-    if (path === '/api/config') return Promise.resolve(response(config))
+    if (path.startsWith('/api/config')) return Promise.resolve(response(path.endsWith('host=claude') && options.claudeConfig ? options.claudeConfig : config))
     if (path === '/api/models') return typeof options.initial === 'function' ? options.initial() : options.initial ?? Promise.resolve(response(catalog))
     if (path === '/api/models/refresh') return options.refresh?.() ?? Promise.resolve(response(catalog))
     if (path === '/api/save') {
@@ -61,6 +61,44 @@ async function select(element: HTMLSelectElement, value: string) { await act(asy
 const values = (element: HTMLSelectElement) => [...element.options].map((item) => item.value)
 const profileSelect = () => activePanel().querySelector<HTMLSelectElement>('.profile-addbar select[aria-label="Profile model"]')!
 const profileFamilyButton = (family: string) => [...activePanel().querySelectorAll<HTMLButtonElement>('[role="table"] button[aria-expanded]')].find((item) => item.querySelector('strong')?.textContent?.includes(family))!
+
+describe('host-aware model choices', () => {
+  it('offers Claude models for Claude-host native routes and Codex models for its external review', async () => {
+    const claudeConfig = structuredClone(fixture)
+    claudeConfig.host = 'claude'
+    claudeConfig.bundle.host = 'claude'
+    claudeConfig.bundle.roles = [{ id: 'clanker-backend-developer', label: 'Backend developer' }]
+    claudeConfig.bundle.interactions = [
+      { id: 'planning', label: 'Planning', provider: 'claude', default_model: 'sonnet', execution: 'native' },
+      { id: 'implementation', label: 'Implementation', provider: 'claude', default_model: 'haiku', execution: 'native' },
+      { id: 'codex-review', label: 'Codex cross-review', provider: 'codex', default_model: 'gpt-6.1-sol', execution: 'external' },
+    ]
+    claudeConfig.effective = { profiles: {}, interactions: {
+      planning: { route: { model: 'sonnet', reasoning: { mode: 'adaptive' } } },
+      implementation: { route: { model: 'haiku', reasoning: { mode: 'adaptive' } } },
+      'codex-review': { route: { model: 'gpt-6.1-sol', reasoning: { mode: 'adaptive' } } },
+    } }
+    await render({ claudeConfig })
+    expect(values(modelSelect())).toContain('cli-model')
+    await act(async () => { [...document.querySelectorAll<HTMLButtonElement>('.host-switch button')].find((item) => item.textContent?.startsWith('Claude host'))!.click() })
+    await act(async () => vi.advanceTimersByTimeAsync(180))
+    await openTab('Activity defaults')
+    const cards = [...activePanel().querySelectorAll<HTMLElement>('.activity-default-card')]
+    expect(cards.map((card) => card.querySelector('h2')?.textContent)).toEqual(['Planning', 'Implementation'])
+    for (const card of cards) {
+      const choices = values(card.querySelector<HTMLSelectElement>('.model-picker select')!)
+      expect(choices).toContain('opus[1m]')
+      expect(choices).not.toContain('cli-model')
+      expect(choices).not.toContain('unknown-efforts')
+    }
+    await openTab('Worker routes')
+    await act(async () => { [...activePanel().querySelectorAll<HTMLButtonElement>('.specialist-select')].find((item) => item.textContent?.includes('Codex cross-review'))!.click() })
+    const external = values(activePanel().querySelector<HTMLSelectElement>('.inspector .model-picker select')!)
+    expect(external).toEqual(expect.arrayContaining(['cli-model', 'unknown-efforts']))
+    expect(external).not.toContain('opus[1m]')
+    expect(activePanel().querySelector('.inspector .alias-note')).toBeNull()
+  })
+})
 
 describe('local discovery controls', () => {
   it('offers all provider models and aliases without changing the inherited selection', async () => {

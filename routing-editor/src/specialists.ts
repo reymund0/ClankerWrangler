@@ -1,4 +1,7 @@
-import type { ConfigResponse, Preferences } from './types'
+import type { ConfigResponse, Interaction, Preferences } from './types'
+
+// Native routes run through the host's own subagent mechanism; only they take specialist routes.
+export const isNative = (interaction?: Interaction): boolean => interaction?.execution === 'native'
 
 // These are editor suggestions, not restrictions on the resolver's supported roles.
 const scenarioRoles: Record<string, string[]> = {
@@ -9,7 +12,7 @@ const scenarioRoles: Record<string, string[]> = {
 }
 
 export function specialistChoices(config: ConfigResponse, document: Preferences, interaction: string) {
-  if (config.bundle.interactions.find((item) => item.id === interaction)?.provider !== 'codex') return []
+  if (!isNative(config.bundle.interactions.find((item) => item.id === interaction))) return []
   const applicable = scenarioRoles[interaction]
   const documents = [config.bundle.defaults, document]
   const configured = new Set(documents.flatMap((item) => Object.keys(item?.interactions?.[interaction]?.specialists ?? {})))

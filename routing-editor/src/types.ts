@@ -22,7 +22,8 @@ export type AdaptiveProfile = {
   tiers: Record<'straightforward' | 'involved' | 'demanding', string>
 }
 
-export type Interaction = { id: string; label: string; provider: 'codex' | 'claude'; default_model: string }
+export type Host = 'codex' | 'claude'
+export type Interaction = { id: string; label: string; provider: 'codex' | 'claude'; default_model: string; execution: 'native' | 'external' }
 export type Role = { id: string; label: string }
 export type Model = { id: string; label: string; provider: 'codex' | 'claude'; efforts: string[] }
 
@@ -50,6 +51,7 @@ export type ModelCatalogResponse = {
 export type Bundle = {
   schema_version: 1
   policy_version: string
+  host: Host
   interactions: Interaction[]
   roles: Role[]
   models: Model[]
@@ -68,6 +70,7 @@ export type ConfigResponse = {
   wrangler?: { available: boolean; running: boolean; reason?: string }
   schema_version: 1
   policy_version: string
+  host: Host
   scopes: { global: ConfigScope }
   bundle: Bundle
   effective: { agents?: Record<string, EffectiveRoute>; interactions: Record<string, EffectiveRoute>; profiles: Record<string, AdaptiveProfile> } | null

@@ -1,4 +1,4 @@
-import type { ConfigResponse, ModelCatalogResponse, Preferences } from './types'
+import type { ConfigResponse, Host, ModelCatalogResponse, Preferences } from './types'
 
 export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message) }
@@ -26,13 +26,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   wranglerStatus: () => request<{ available: boolean; running: boolean; reason?: string }>('/api/wrangler'),
   runWrangler: () => request<{ success: boolean; message: string; output: string; truncated: boolean }>('/api/wrangler', { method: 'POST', body: '{}' }),
-  config: () => request<ConfigResponse>('/api/config'),
+  config: (host: Host) => request<ConfigResponse>(`/api/config?host=${host}`),
   models: () => request<ModelCatalogResponse>('/api/models'),
   refreshModels: () => request<ModelCatalogResponse>('/api/models/refresh', { method: 'POST', body: '{}' }),
-  preview: (document: Preferences, requestBody?: Record<string, unknown>) =>
+  preview: (host: Host, document: Preferences, requestBody?: Record<string, unknown>) =>
     request<{ effective: ConfigResponse['effective']; decision: import('./types').Decision | null }>('/api/preview', {
-      method: 'POST', body: JSON.stringify({ scope: 'global', document, ...(requestBody ? { request: requestBody } : {}) }),
+      method: 'POST', body: JSON.stringify({ scope: 'global', host, document, ...(requestBody ? { request: requestBody } : {}) }),
     }),
-  save: (document: Preferences, revision: string) =>
-    request<ConfigResponse>('/api/save', { method: 'POST', body: JSON.stringify({ scope: 'global', document, revision }) }),
+  save: (host: Host, document: Preferences, revision: string) =>
+    request<ConfigResponse>('/api/save', { method: 'POST', body: JSON.stringify({ scope: 'global', host, document, revision }) }),
 }

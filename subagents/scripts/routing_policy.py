@@ -19,20 +19,29 @@ from typing import Any, Mapping
 
 
 SCHEMA_VERSION = 1
-POLICY_VERSION = "6"
+POLICY_VERSION = "7"
 NATIVE_ROLES = frozenset((
     "clanker-architect", "clanker-backend-developer", "clanker-code-review",
     "clanker-data-engineer", "clanker-devops-engineer", "clanker-performance-engineer",
     "clanker-qa-engineer", "clanker-test-engineer", "clanker-ui-developer",
     "clanker-ui-ux-reviewer",
 ))
-INTERACTIONS = ("planning", "implementation", "native-review", "visual-review", "claude-review")
-NATIVE_INTERACTIONS = frozenset(INTERACTIONS[:-1])
+HOSTS = ("codex", "claude")
+NATIVE_INTERACTION_ORDER = ("planning", "implementation", "native-review", "visual-review")
+NATIVE_INTERACTIONS = frozenset(NATIVE_INTERACTION_ORDER)
+EXTERNAL_INTERACTIONS = {"codex": "claude-review", "claude": "codex-review"}
+HOST_INTERACTIONS = {host: NATIVE_INTERACTION_ORDER + (EXTERNAL_INTERACTIONS[host],) for host in HOSTS}
+HOST_PREFERENCE_FILES = {"codex": "orchestration-routing.json", "claude": "orchestration-routing-claude.json"}
+# The external reviewer is the other provider's launcher.
+HOST_LAUNCHERS = {"codex": "scripts/claude_cross_review.py", "claude": "scripts/codex_cross_review.py"}
+DEFAULT_HOST = "codex"
+HOST_CONFIG_SCHEMA_VERSION = 1
 TIERS = ("straightforward", "involved", "demanding")
 LEGACY_TIERS = ("mechanical", "routine", "complex", "exceptional")
 RISK_FLAGS = frozenset(("security", "data-integrity", "recovery", "cross-layer", "uncertainty", "performance"))
 CONSEQUENTIAL_FLAGS = frozenset(("security", "data-integrity", "recovery"))
 MAX_JSON_BYTES = 1_048_576
+MAX_OVERRIDE_CHARS = 200
 
 
 class RoutingError(ValueError):
@@ -53,6 +62,11 @@ def _sha256(value: bytes) -> str:
 
 def _policy_path() -> Path:
     return Path(__file__).resolve().parent.parent / "routing" / "policy.json"
+
+
+def _host_config_path() -> Path:
+    """Installed bundles carry routing/host.json beside the policy; source checkouts do not."""
+    return _policy_path().parent / "host.json"
 
 
 def _reject_constant(value: str) -> None:
@@ -149,31 +163,38 @@ def _require_version(value: Any, path: str) -> None:
         raise _error(path, f"must be integer {SCHEMA_VERSION}")
 
 
+def _validate_host_interactions(host: str, interactions: Any, field: str) -> None:
+    if not isinstance(interactions, list):
+        raise _error(field, "must be an array")
+    interaction_ids: list[str] = []
+    for index, item in enumerate(interactions):
+        item = _require_object(item, f"{field}[{index}]")
+        _reject_unknown(item, {"id", "label", "execution", "default_model"}, f"{field}[{index}]")
+        if set(item) != {"id", "label", "execution", "default_model"}:
+            raise _error(f"{field}[{index}]", "is missing required fields")
+        for key in ("id", "label", "execution", "default_model"):
+            _require_string(item[key], f"{field}[{index}].{key}")
+        expected = "external" if item["id"] == EXTERNAL_INTERACTIONS[host] else "native"
+        if item["execution"] != expected:
+            raise _error(f"{field}[{index}].execution", f"must be {expected} for {item['id']}")
+        interaction_ids.append(item["id"])
+    if tuple(interaction_ids) != HOST_INTERACTIONS[host]:
+        raise _error(field, f"must contain the five stable {host}-host interactions in policy order")
+
+
 def _validate_bundle_document(document: Any, field: str = "bundle") -> dict[str, Any]:
     """Validate a bundled policy already held in memory."""
     bundle = _require_object(document, field)
-    _reject_unknown(bundle, {"schema_version", "policy_version", "interactions", "roles", "models", "effort_orders", "defaults"}, field)
-    if set(bundle) != {"schema_version", "policy_version", "interactions", "roles", "models", "effort_orders", "defaults"}:
+    required_fields = {"schema_version", "policy_version", "roles", "models", "effort_orders", "hosts"}
+    _reject_unknown(bundle, required_fields, field)
+    if set(bundle) != required_fields:
         raise _error(field, "is missing required fields")
     _require_version(bundle.get("schema_version"), f"{field}.schema_version")
     if bundle.get("policy_version") != POLICY_VERSION:
         raise _error(f"{field}.policy_version", f"must be {POLICY_VERSION!r}")
-    interactions, roles, models = bundle["interactions"], bundle["roles"], bundle["models"]
-    if not isinstance(interactions, list) or not isinstance(roles, list) or not isinstance(models, list):
-        raise _error(field, "interactions, roles, and models must be arrays")
-    interaction_ids: list[str] = []
-    for index, item in enumerate(interactions):
-        item = _require_object(item, f"{field}.interactions[{index}]")
-        _reject_unknown(item, {"id", "label", "provider", "default_model"}, f"{field}.interactions[{index}]")
-        if set(item) != {"id", "label", "provider", "default_model"}:
-            raise _error(f"{field}.interactions[{index}]", "is missing required fields")
-        for key in ("id", "label", "provider", "default_model"):
-            _require_string(item[key], f"{field}.interactions[{index}].{key}")
-        if item["provider"] not in {"codex", "claude"}:
-            raise _error(f"{field}.interactions[{index}].provider", "must be codex or claude")
-        interaction_ids.append(item["id"])
-    if tuple(interaction_ids) != INTERACTIONS:
-        raise _error(f"{field}.interactions", "must contain the five stable interactions in policy order")
+    roles, models = bundle["roles"], bundle["models"]
+    if not isinstance(roles, list) or not isinstance(models, list):
+        raise _error(field, "roles and models must be arrays")
     role_ids: set[str] = set()
     for index, item in enumerate(roles):
         item = _require_object(item, f"{field}.roles[{index}]")
@@ -209,11 +230,26 @@ def _validate_bundle_document(document: Any, field: str = "bundle") -> dict[str,
     for provider, values in orders.items():
         if not isinstance(values, list) or not values or not all(isinstance(item, str) and item for item in values) or len(set(values)) != len(values):
             raise _error(f"{field}.effort_orders.{provider}", "must be a unique non-empty string array")
-    defaults = _require_object(bundle["defaults"], f"{field}.defaults")
-    _require_version(defaults.get("schema_version"), f"{field}.defaults.schema_version")
-    normalized_defaults = validate_preferences(defaults, bundle=bundle, field=f"{field}.defaults")
-    if normalized_defaults != defaults:
-        raise _error(f"{field}.defaults.adaptive_profiles", "must use the current tier vocabulary")
+    hosts = _require_object(bundle["hosts"], f"{field}.hosts")
+    if set(hosts) != set(HOSTS):
+        raise _error(f"{field}.hosts", "must define exactly the codex and claude hosts")
+    for host in HOSTS:
+        entry = _require_object(hosts[host], f"{field}.hosts.{host}")
+        _reject_unknown(entry, {"interactions", "defaults"}, f"{field}.hosts.{host}")
+        if set(entry) != {"interactions", "defaults"}:
+            raise _error(f"{field}.hosts.{host}", "is missing required fields")
+        _validate_host_interactions(host, entry["interactions"], f"{field}.hosts.{host}.interactions")
+        defaults = _require_object(entry["defaults"], f"{field}.hosts.{host}.defaults")
+        _require_version(defaults.get("schema_version"), f"{field}.hosts.{host}.defaults.schema_version")
+        normalized_defaults = validate_preferences(defaults, bundle=bundle, field=f"{field}.hosts.{host}.defaults", host=host)
+        if normalized_defaults != defaults:
+            raise _error(f"{field}.hosts.{host}.defaults.adaptive_profiles", "must use the current tier vocabulary")
+        for index, item in enumerate(entry["interactions"]):
+            default_model = defaults.get("interactions", {}).get(item["id"], {}).get("model")
+            if default_model is None:
+                raise _error(f"{field}.hosts.{host}.defaults.interactions.{item['id']}", "must define a default model")
+            if item["default_model"] != default_model:
+                raise _error(f"{field}.hosts.{host}.interactions[{index}].default_model", f"must equal the host default model {default_model!r}")
     return copy.deepcopy(bundle)
 
 
@@ -228,8 +264,21 @@ def _catalog(bundle: Mapping[str, Any]) -> tuple[dict[str, str], set[str]]:
     return providers, roles
 
 
-def _provider_for_interaction(interaction: str) -> str:
-    return "claude" if interaction == "claude-review" else "codex"
+def _require_host(host: Any, field: str = "host") -> str:
+    if not isinstance(host, str) or host not in HOSTS:
+        raise _error(field, "must be codex or claude")
+    return host
+
+
+def _execution_for_interaction(host: str, interaction: str) -> str:
+    return "external" if interaction == EXTERNAL_INTERACTIONS[host] else "native"
+
+
+def _provider_for_interaction(host: str, interaction: str) -> str:
+    """Native routes use the host's provider; the external review uses the other provider."""
+    if _execution_for_interaction(host, interaction) == "native":
+        return host
+    return "claude" if host == "codex" else "codex"
 
 
 def _validate_reasoning(reasoning: Any, provider: str, path: str, bundle: Mapping[str, Any]) -> dict[str, Any]:
@@ -247,7 +296,7 @@ def _validate_reasoning(reasoning: Any, provider: str, path: str, bundle: Mappin
     raise _error(f"{path}.mode", "must be fixed or adaptive")
 
 
-def _validate_route(value: Any, interaction: str, path: str, bundle: Mapping[str, Any], allow_specialists: bool) -> dict[str, Any]:
+def _validate_route(value: Any, interaction: str, path: str, bundle: Mapping[str, Any], allow_specialists: bool, host: str = DEFAULT_HOST) -> dict[str, Any]:
     route = _require_object(value, path)
     allowed = {"model", "reasoning"}
     if allow_specialists:
@@ -255,7 +304,7 @@ def _validate_route(value: Any, interaction: str, path: str, bundle: Mapping[str
     _reject_unknown(route, allowed, path)
     if not route:
         raise _error(path, "must contain at least one override")
-    provider = _provider_for_interaction(interaction)
+    provider = _provider_for_interaction(host, interaction)
     model_providers, roles = _catalog(bundle)
     normalized: dict[str, Any] = {}
     if "model" in route:
@@ -269,19 +318,19 @@ def _validate_route(value: Any, interaction: str, path: str, bundle: Mapping[str
     if "specialists" in route:
         specialists = _require_object(route["specialists"], f"{path}.specialists")
         if interaction not in NATIVE_INTERACTIONS:
-            raise _error(f"{path}.specialists", "is not allowed for claude-review")
+            raise _error(f"{path}.specialists", f"is not allowed for {interaction}")
         normalized_specialists: dict[str, Any] = {}
         for role, specialist in specialists.items():
             if role not in roles:
                 raise _error(f"{path}.specialists.{role}", "is not a known native role")
-            normalized_specialists[role] = _validate_route(specialist, interaction, f"{path}.specialists.{role}", bundle, False)
+            normalized_specialists[role] = _validate_route(specialist, interaction, f"{path}.specialists.{role}", bundle, False, host)
         normalized["specialists"] = normalized_specialists
     return normalized
 
 
-def _validate_agent_route(value: Any, path: str, bundle: Mapping[str, Any]) -> dict[str, Any]:
+def _validate_agent_route(value: Any, path: str, bundle: Mapping[str, Any], host: str = DEFAULT_HOST) -> dict[str, Any]:
     """Validate a sparse native-agent default with no nested activity exceptions."""
-    return _validate_route(value, "planning", path, bundle, False)
+    return _validate_route(value, "planning", path, bundle, False, host)
 
 
 def _validate_profile(value: Any, provider: str, path: str, bundle: Mapping[str, Any]) -> dict[str, Any]:
@@ -310,8 +359,9 @@ def _validate_profile(value: Any, provider: str, path: str, bundle: Mapping[str,
     return {"tiers": normalized_tiers}
 
 
-def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = None, field: str = "preferences") -> dict[str, Any]:
+def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = None, field: str = "preferences", host: str = DEFAULT_HOST) -> dict[str, Any]:
     """Return a normalized sparse preference document or raise a field-specific error."""
+    _require_host(host)
     active_bundle = load_bundle() if bundle is None else bundle
     prefs = _require_object(document, field)
     policy_version = active_bundle.get("policy_version")
@@ -325,9 +375,11 @@ def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = No
         interactions = _require_object(prefs["interactions"], f"{field}.interactions")
         normalized_interactions: dict[str, Any] = {}
         for interaction, route in interactions.items():
-            if interaction not in INTERACTIONS:
+            if interaction not in HOST_INTERACTIONS[host]:
+                if interaction in {item for interactions in HOST_INTERACTIONS.values() for item in interactions}:
+                    raise _error(f"{field}.interactions.{interaction}", f"is not supported by the {host} host; its external review is {EXTERNAL_INTERACTIONS[host]}")
                 raise _error(f"{field}.interactions.{interaction}", "is not a known interaction")
-            normalized_interactions[interaction] = _validate_route(route, interaction, f"{field}.interactions.{interaction}", active_bundle, True)
+            normalized_interactions[interaction] = _validate_route(route, interaction, f"{field}.interactions.{interaction}", active_bundle, True, host)
         normalized["interactions"] = normalized_interactions
     if "agents" in prefs:
         agents = _require_object(prefs["agents"], f"{field}.agents")
@@ -336,7 +388,7 @@ def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = No
         for role, route in agents.items():
             if role not in role_ids:
                 raise _error(f"{field}.agents.{role}", "is not a known native role")
-            normalized_agents[role] = _validate_agent_route(route, f"{field}.agents.{role}", active_bundle)
+            normalized_agents[role] = _validate_agent_route(route, f"{field}.agents.{role}", active_bundle, host)
         normalized["agents"] = normalized_agents
     if "adaptive_profiles" in prefs:
         profiles = _require_object(prefs["adaptive_profiles"], f"{field}.adaptive_profiles")
@@ -355,9 +407,9 @@ def validate_preferences(document: Any, *, bundle: Mapping[str, Any] | None = No
     return normalized
 
 
-def needs_profile_migration(document: Any) -> bool:
+def needs_profile_migration(document: Any, *, host: str = DEFAULT_HOST) -> bool:
     """Validate current preferences and report whether a complete legacy profile needs conversion."""
-    validate_preferences(document)
+    validate_preferences(document, host=host)
     profiles = document.get("adaptive_profiles", {})
     return any(set(profile["tiers"]) == set(LEGACY_TIERS) for profile in profiles.values())
 
@@ -374,10 +426,47 @@ def _snapshot_payload(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     return {key: copy.deepcopy(value) for key, value in snapshot.items() if key != "fingerprint"}
 
 
-def snapshot_from_documents(global_document: Any = None, *, sources: Mapping[str, str] | None = None) -> dict[str, Any]:
+def load_host_config(path: str | os.PathLike[str] | None = None, bundle: Mapping[str, Any] | None = None) -> dict[str, Any] | None:
+    """Strictly validate an installed host configuration; None means the bundle has none."""
+    candidate = Path(path) if path is not None else _host_config_path()
+    try:
+        document = _read_json(candidate, "host_config")
+    except FileNotFoundError:
+        return None
+    config = _require_object(document, "host_config")
+    allowed = {"schema_version", "host", "preferences_file", "external_review"}
+    _reject_unknown(config, allowed, "host_config")
+    if set(config) != allowed:
+        raise _error("host_config", "is missing required fields")
+    if type(config["schema_version"]) is not int or config["schema_version"] != HOST_CONFIG_SCHEMA_VERSION:
+        raise _error("host_config.schema_version", f"must be integer {HOST_CONFIG_SCHEMA_VERSION}")
+    host = _require_host(config["host"], "host_config.host")
+    active_bundle = load_bundle() if bundle is None else bundle
+    if host not in active_bundle["hosts"]:
+        raise _error("host_config.host", "is not defined by the bundled policy")
+    preferences_file = _require_string(config["preferences_file"], "host_config.preferences_file")
+    if preferences_file != HOST_PREFERENCE_FILES[host]:
+        raise _error("host_config.preferences_file", f"must be {HOST_PREFERENCE_FILES[host]} for the {host} host")
+    review = _require_object(config["external_review"], "host_config.external_review")
+    _reject_unknown(review, {"interaction", "launcher"}, "host_config.external_review")
+    if set(review) != {"interaction", "launcher"}:
+        raise _error("host_config.external_review", "is missing required fields")
+    if review["interaction"] != EXTERNAL_INTERACTIONS[host]:
+        raise _error("host_config.external_review.interaction", f"must be {EXTERNAL_INTERACTIONS[host]} for the {host} host")
+    launcher = _require_string(review["launcher"], "host_config.external_review.launcher")
+    launcher_parts = launcher.split("/")
+    if launcher.startswith("/") or "\\" in launcher or ":" in launcher or any(part in ("", ".", "..") for part in launcher_parts) or not launcher.endswith(".py"):
+        raise _error("host_config.external_review.launcher", "must be a relative path to a Python launcher inside the bundle")
+    if launcher != HOST_LAUNCHERS[host]:
+        raise _error("host_config.external_review.launcher", f"must be {HOST_LAUNCHERS[host]} for the {host} host")
+    return copy.deepcopy(config)
+
+
+def snapshot_from_documents(global_document: Any = None, *, sources: Mapping[str, str] | None = None, host: str = DEFAULT_HOST) -> dict[str, Any]:
     """Freeze already-read documents and the bundled policy for a reproducible run."""
+    _require_host(host)
     bundle = load_bundle()
-    global_prefs = None if global_document is None else validate_preferences(global_document, bundle=bundle, field="global")
+    global_prefs = None if global_document is None else validate_preferences(global_document, bundle=bundle, field="global", host=host)
     source_values = dict(sources or {})
     _reject_unknown(source_values, {"global"}, "sources")
     normalized_sources = {"global": source_values.get("global")}
@@ -387,6 +476,7 @@ def snapshot_from_documents(global_document: Any = None, *, sources: Mapping[str
     snapshot: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "policy_version": POLICY_VERSION,
+        "host": host,
         "bundle": bundle,
         "documents": {"global": global_prefs},
         "sources": normalized_sources,
@@ -424,15 +514,34 @@ def _read_preference_path(path: str | os.PathLike[str] | None, name: str, bypass
     return document, display, _sha256(raw), False
 
 
-def create_snapshot(global_path: str | os.PathLike[str], *, bypass: list[str] | tuple[str, ...] | set[str] | None = None) -> dict[str, Any]:
+def _snapshot_host(requested: str | None, global_path: Path) -> str:
+    """Pick the snapshot host from the installed host configuration, else the request, else Codex."""
+    config = load_host_config()
+    if config is None:
+        selected = DEFAULT_HOST if requested is None else _require_host(requested)
+        # Arbitrary file names stay accepted, but never freeze the other host's own file as this host's preferences.
+        other = next(name for name in HOSTS if name != selected)
+        if global_path.name == HOST_PREFERENCE_FILES[other]:
+            raise _error("global", f"{HOST_PREFERENCE_FILES[other]} is the {other} host's preference file, not the {selected} host's; "
+                                   f"name the host with --host {other} or use {HOST_PREFERENCE_FILES[selected]}")
+        return selected
+    if requested is not None and requested != config["host"]:
+        raise _error("host", f"{requested!r} contradicts the installed host configuration, which names {config['host']!r}")
+    if global_path.name != config["preferences_file"]:
+        raise _error("global", f"must name the installed host's preference file {config['preferences_file']}")
+    return config["host"]
+
+
+def create_snapshot(global_path: str | os.PathLike[str], *, bypass: list[str] | tuple[str, ...] | set[str] | None = None, host: str | None = None) -> dict[str, Any]:
     """Read only explicitly named config files and create a deterministic snapshot."""
     if global_path is None:
         raise _error("global", "an explicit global configuration path is required")
     if bypass is not None and (not isinstance(bypass, (list, tuple, set)) or not all(isinstance(item, str) and item for item in bypass)):
         raise _error("bypass", "must name exact source paths")
+    selected_host = _snapshot_host(host, Path(global_path))
     bypassed = set(bypass or ())
     global_doc, global_source, global_hash, global_bypassed = _read_preference_path(global_path, "global", bypassed)
-    snapshot = snapshot_from_documents(global_doc, sources={"global": global_source})
+    snapshot = snapshot_from_documents(global_doc, sources={"global": global_source}, host=selected_host)
     snapshot["hashes"]["global"] = global_hash
     snapshot["bypassed_sources"] = [global_source] if global_bypassed and global_source is not None else []
     snapshot["fingerprint"] = _sha256(_canonical_json(_snapshot_payload(snapshot)))
@@ -442,14 +551,16 @@ def create_snapshot(global_path: str | os.PathLike[str], *, bypass: list[str] | 
 def validate_snapshot(snapshot: Any) -> dict[str, Any]:
     """Validate an immutable snapshot without ever consulting live preference files."""
     value = _require_object(snapshot, "snapshot")
-    required = {"schema_version", "policy_version", "bundle", "documents", "sources", "hashes", "bypassed_sources", "fingerprint"}
+    # Check the version first: older snapshots also lack the host field and must get new-run guidance.
+    policy_version = value.get("policy_version")
+    if policy_version != POLICY_VERSION:
+        raise _error("snapshot.policy_version", f"only policy {POLICY_VERSION} is supported. Start a new run to create a current snapshot.")
+    required = {"schema_version", "policy_version", "host", "bundle", "documents", "sources", "hashes", "bypassed_sources", "fingerprint"}
     _reject_unknown(value, required, "snapshot")
     if set(value) != required:
         raise _error("snapshot", "is missing required fields")
     _require_version(value["schema_version"], "snapshot.schema_version")
-    policy_version = value["policy_version"]
-    if policy_version != POLICY_VERSION:
-        raise _error("snapshot.policy_version", f"only policy {POLICY_VERSION} is supported. Start a new run to create a current snapshot.")
+    host = _require_host(value["host"], "snapshot.host")
     bundle = _validate_bundle_document(value["bundle"], "snapshot.bundle")
     documents = _require_object(value["documents"], "snapshot.documents")
     sources = _require_object(value["sources"], "snapshot.sources")
@@ -461,7 +572,7 @@ def validate_snapshot(snapshot: Any) -> dict[str, Any]:
     # The snapshot bundle was generated by load_bundle; validate preference data against it.
     for name in expected_names:
         if documents[name] is not None:
-            normalized = validate_preferences(documents[name], bundle=bundle, field=f"snapshot.documents.{name}")
+            normalized = validate_preferences(documents[name], bundle=bundle, field=f"snapshot.documents.{name}", host=host)
             if normalized != documents[name]:
                 raise _error(f"snapshot.documents.{name}", "must already use the tier vocabulary for its frozen policy version")
         if sources[name] is not None and not isinstance(sources[name], str):
@@ -482,7 +593,8 @@ def validate_snapshot(snapshot: Any) -> dict[str, Any]:
 
 def _route_for(snapshot: Mapping[str, Any], interaction: str, role: str | None, session_override: Any = None) -> tuple[dict[str, Any], dict[str, str]]:
     bundle = snapshot["bundle"]
-    defaults = bundle["defaults"]
+    host = snapshot["host"]
+    defaults = bundle["hosts"][host]["defaults"]
     global_prefs = snapshot["documents"]["global"] or _empty_preferences()
     route = copy.deepcopy(defaults["interactions"][interaction])
     provenance = {"model": "bundle.defaults", "reasoning": "bundle.defaults"}
@@ -502,14 +614,14 @@ def _route_for(snapshot: Mapping[str, Any], interaction: str, role: str | None, 
         if interaction_route:
             apply(interaction_route.get("specialists", {}).get(role), f"global.interactions.{interaction}.specialists.{role}")
     if session_override not in (None, {}):
-        normalized = _validate_route(session_override, interaction, "request.session_override", bundle, False)
+        normalized = _validate_route(session_override, interaction, "request.session_override", bundle, False, host)
         apply(normalized, "session_override")
     return route, provenance
 
 
 def _profile_for(snapshot: Mapping[str, Any], provider: str, model: str) -> tuple[dict[str, Any] | None, str | None]:
     key = f"{provider}:{model}"
-    profile = snapshot["bundle"]["defaults"].get("adaptive_profiles", {}).get(key)
+    profile = snapshot["bundle"]["hosts"][snapshot["host"]]["defaults"].get("adaptive_profiles", {}).get(key)
     source = "bundle.defaults.adaptive_profiles." + key if profile is not None else None
     document = snapshot["documents"]["global"]
     if document is not None and key in document.get("adaptive_profiles", {}):
@@ -518,16 +630,16 @@ def _profile_for(snapshot: Mapping[str, Any], provider: str, model: str) -> tupl
     return copy.deepcopy(profile) if profile is not None else None, source
 
 
-def _validate_request(request: Any, bundle: Mapping[str, Any]) -> dict[str, Any]:
+def _validate_request(request: Any, bundle: Mapping[str, Any], host: str) -> dict[str, Any]:
     value = _require_object(request, "request")
-    _reject_unknown(value, {"interaction", "role", "tier", "risk_flags", "reason", "session_override", "capabilities"}, "request")
+    _reject_unknown(value, {"interaction", "role", "tier", "risk_flags", "reason", "session_override", "capabilities", "overrides"}, "request")
     interaction = value.get("interaction")
-    if interaction not in INTERACTIONS:
+    if interaction not in HOST_INTERACTIONS[host]:
         raise _error("request.interaction", "must be a known interaction")
     role = value.get("role")
     if role is not None:
         if interaction not in NATIVE_INTERACTIONS:
-            raise _error("request.role", "is not allowed for claude-review")
+            raise _error("request.role", f"is not allowed for {interaction}")
         if role not in _catalog(bundle)[1]:
             raise _error("request.role", "is not a known native role")
     tier = value.get("tier")
@@ -539,7 +651,7 @@ def _validate_request(request: Any, bundle: Mapping[str, Any]) -> dict[str, Any]
     if not isinstance(flags, list) or not all(isinstance(flag, str) and flag in RISK_FLAGS for flag in flags) or len(set(flags)) != len(flags):
         raise _error("request.risk_flags", "must be a unique list of known risk flags")
     if "session_override" in value and value["session_override"] != {}:
-        _validate_route(value["session_override"], interaction, "request.session_override", bundle, False)
+        _validate_route(value["session_override"], interaction, "request.session_override", bundle, False, host)
     capabilities = value.get("capabilities")
     if capabilities is not None:
         caps = _require_object(capabilities, "request.capabilities")
@@ -555,13 +667,20 @@ def _validate_request(request: Any, bundle: Mapping[str, Any]) -> dict[str, Any]
                     raise _error(f"request.capabilities.models.{model}", "must be a string array")
         if "preflight_valid" in caps and not isinstance(caps["preflight_valid"], bool):
             raise _error("request.capabilities.preflight_valid", "must be boolean")
-    return {"interaction": interaction, "role": role, "tier": tier, "reason": reason, "risk_flags": flags, "session_override": value.get("session_override"), "capabilities": capabilities}
+    overrides = value.get("overrides", [])
+    if overrides and interaction == EXTERNAL_INTERACTIONS[host]:
+        raise _error("request.overrides", f"are native dispatch settings and are not accepted for {interaction}; the launcher preflight checks reviewer overrides")
+    if (not isinstance(overrides, list) or not all(isinstance(item, str) and item.strip() and len(item) <= MAX_OVERRIDE_CHARS for item in overrides)
+            or len(set(overrides)) != len(overrides)):
+        raise _error("request.overrides", f"must be a unique list of setting names up to {MAX_OVERRIDE_CHARS} characters")
+    return {"interaction": interaction, "role": role, "tier": tier, "reason": reason, "risk_flags": flags, "session_override": value.get("session_override"), "capabilities": capabilities, "overrides": overrides}
 
 
-def _capability_gate(provider: str, model: str, effort: str, capabilities: Mapping[str, Any] | None, limitations: list[str]) -> tuple[str, bool, dict[str, Any]]:
+def _capability_gate(provider: str, execution: str, model: str, effort: str, capabilities: Mapping[str, Any] | None, limitations: list[str]) -> tuple[str, bool, dict[str, Any]]:
+    name = provider.capitalize()
     if capabilities is None:
-        if provider == "claude":
-            limitations.append("Claude route requires the guarded launcher preflight before any model call")
+        if execution == "external":
+            limitations.append(f"{name} route requires the guarded launcher preflight before any model call")
             return "requires_launcher_preflight", False, {"launcher_allowed": True}
         limitations.append("No native runtime capability metadata was supplied")
         return "unverified", False, {}
@@ -569,13 +688,13 @@ def _capability_gate(provider: str, model: str, effort: str, capabilities: Mappi
         raise _error("request.capabilities.provider", f"does not match {provider} route")
     models = capabilities.get("models")
     pair_advertised = isinstance(models, Mapping) and model in models and effort in models[model]
-    if provider == "claude":
+    if execution == "external":
         if models is not None and not pair_advertised:
-            limitations.append(f"Claude capability metadata does not support {model}/{effort}")
+            limitations.append(f"{name} capability metadata does not support {model}/{effort}")
             return "unsupported", False, {}
         if capabilities.get("preflight_valid") is True:
             return "preflight_valid", True, {"account_status": "unverified", "launcher_allowed": True}
-        limitations.append("Claude launcher preflight has not validated this requested route")
+        limitations.append(f"{name} launcher preflight has not validated this requested route")
         return "requires_launcher_preflight", False, {"launcher_allowed": True}
     if models is None:
         limitations.append("Native capability metadata did not list model and effort pairs")
@@ -597,9 +716,11 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
     """Resolve a request exclusively against an immutable saved snapshot."""
     frozen = validate_snapshot(snapshot)
     bundle = frozen["bundle"]
-    asked = _validate_request(request, bundle)
+    host = frozen["host"]
+    asked = _validate_request(request, bundle, host)
     interaction, role = asked["interaction"], asked["role"]
-    provider = _provider_for_interaction(interaction)
+    provider = _provider_for_interaction(host, interaction)
+    execution = _execution_for_interaction(host, interaction)
     route, provenance = _route_for(frozen, interaction, role, asked["session_override"])
     model = route["model"]
     known_provider = _catalog(bundle)[0].get(model)
@@ -626,7 +747,11 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
             recommended = profile["tiers"][tier]
             if _effort_index(bundle, provider, effort) < _effort_index(bundle, provider, recommended):
                 limitations.append(f"Fixed effort {effort} is below the Adaptive {tier} recommendation {recommended}")
-    status, allowed, extra = _capability_gate(provider, model, effort, asked["capabilities"], limitations)
+    status, allowed, extra = _capability_gate(provider, execution, model, effort, asked["capabilities"], limitations)
+    if asked["overrides"]:
+        names = ", ".join(asked["overrides"])
+        limitations.append(f"Runtime setting reported as replacing the requested route: {names}; dispatch is blocked and no substituted value is assumed")
+        status, allowed, extra = "blocked_by_override", False, {"overrides": list(asked["overrides"])}
     decision: dict[str, Any] = {
         "model": model,
         "reasoning": copy.deepcopy(reasoning),
@@ -643,6 +768,9 @@ def resolve(snapshot: Any, request: Any) -> dict[str, Any]:
         "schema_version": SCHEMA_VERSION,
         "policy_version": frozen["policy_version"],
         "snapshot_fingerprint": frozen["fingerprint"],
+        "host": host,
+        "provider": provider,
+        "execution": execution,
     }
     decision.update(extra)
     return decision
@@ -652,17 +780,19 @@ def effective_configuration(snapshot: Any) -> dict[str, Any]:
     """Return inherited routes for UI display without task assessment or capability claims."""
     frozen = validate_snapshot(snapshot)
     bundle = frozen["bundle"]
+    host = frozen["host"]
     interactions: dict[str, Any] = {}
     role_ids = [role["id"] for role in bundle["roles"]]
-    for interaction in INTERACTIONS:
+    for interaction in HOST_INTERACTIONS[host]:
         route, provenance = _route_for(frozen, interaction, None)
-        provider = _provider_for_interaction(interaction)
+        provider = _provider_for_interaction(host, interaction)
         profile, profile_source = _profile_for(frozen, provider, route["model"])
         display_reasoning = copy.deepcopy(route["reasoning"])
         if display_reasoning["mode"] == "adaptive":
             if profile is None:
                 raise _error(f"effective.interactions.{interaction}", f"Adaptive routing for {provider}:{route['model']} requires a complete profile")
-        entry = {"route": {"model": route["model"], "reasoning": display_reasoning}, "provenance": {"model": provenance["model"], "reasoning": provenance["reasoning"], "profile": profile_source}, "specialists": {}}
+        entry = {"route": {"model": route["model"], "reasoning": display_reasoning}, "provenance": {"model": provenance["model"], "reasoning": provenance["reasoning"], "profile": profile_source}, "specialists": {},
+                 "provider": provider, "execution": _execution_for_interaction(host, interaction)}
         if interaction in NATIVE_INTERACTIONS:
             for role in role_ids:
                 special_route, special_provenance = _route_for(frozen, interaction, role)
@@ -674,12 +804,12 @@ def effective_configuration(snapshot: Any) -> dict[str, Any]:
                 entry["specialists"][role] = {"route": {"model": special_route["model"], "reasoning": special_reasoning}, "provenance": {"model": special_provenance["model"], "reasoning": special_provenance["reasoning"], "profile": special_profile_source}}
         interactions[interaction] = entry
     profiles: dict[str, Any] = {}
-    for key, profile in bundle["defaults"].get("adaptive_profiles", {}).items():
+    for key, profile in bundle["hosts"][host]["defaults"].get("adaptive_profiles", {}).items():
         profiles[key] = copy.deepcopy(profile)
     for document in frozen["documents"].values():
         if document is not None:
             profiles.update(copy.deepcopy(document.get("adaptive_profiles", {})))
-    result: dict[str, Any] = {"interactions": interactions, "profiles": profiles}
+    result: dict[str, Any] = {"host": host, "interactions": interactions, "profiles": profiles}
     agents: dict[str, Any] = {}
     document = frozen["documents"]["global"] or _empty_preferences()
     for role in role_ids:
@@ -724,7 +854,8 @@ def main(argv: list[str] | None = None) -> int:
     subcommands = parser.add_subparsers(dest="command", required=True)
     subcommands.add_parser("catalog", help="write the bundled policy catalog as JSON")
     snapshot_parser = subcommands.add_parser("snapshot", help="read explicit preferences and create an immutable snapshot")
-    snapshot_parser.add_argument("--global", dest="global_path", required=True, help="explicit global preferences path")
+    snapshot_parser.add_argument("--global", dest="global_path", required=True, help="explicit global preferences path for the host")
+    snapshot_parser.add_argument("--host", choices=HOSTS, help="orchestration host; defaults to the installed routing/host.json host, else codex")
     snapshot_parser.add_argument("--bypass", action="append", default=[], help="exact source path to ignore for this run")
     snapshot_parser.add_argument("--output", help="new snapshot file path; creation is exclusive")
     resolve_parser = subcommands.add_parser("resolve", help="resolve a JSON request against a saved snapshot")
@@ -735,7 +866,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "catalog":
             result = load_bundle()
         elif args.command == "snapshot":
-            result = create_snapshot(args.global_path, bypass=args.bypass)
+            result = create_snapshot(args.global_path, bypass=args.bypass, host=args.host)
             if args.output:
                 _write_snapshot_exclusive(args.output, result)
         else:

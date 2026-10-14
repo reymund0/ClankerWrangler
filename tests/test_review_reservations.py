@@ -33,7 +33,7 @@ class ReservationTests(unittest.TestCase):
             manifest_path = root / "manifest.json"
             manifest_path.write_text("{}")
             manifest = {"selected_paths": ["code.py", "deleted.py"], "guidance_paths": [str(guidance)]}
-            with mock.patch.object(review, "reservation_root", return_value=root / "registry"):
+            with mock.patch.object(review.core, "reservation_root", return_value=root / "registry"):
                 first = review.reserve_review(repo, manifest, manifest_path, root / "report")
                 second = review.reserve_review(repo, manifest, manifest_path, root / "report2")
                 self.assertEqual(json.loads(first.read_text())["files"][0]["sha256"], review.sha256_file(source))
@@ -48,7 +48,7 @@ class ReservationTests(unittest.TestCase):
     def test_malformed_reservation_and_relative_paths_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            with mock.patch.object(review, "reservation_root", return_value=root):
+            with mock.patch.object(review.core, "reservation_root", return_value=root):
                 with self.assertRaises(review.ReviewError):
                     review.check_write_reservations(["relative.py"])
                 (root / "broken.json").write_text('{"files": [null]}')
@@ -67,7 +67,7 @@ class ReservationTests(unittest.TestCase):
                     if isinstance(outcome, BaseException):
                         raise outcome
                     return {"verdict": "clean", "coverage": [{"subject": s, "status": "covered", "evidence": "checked"} for s in ["code.py", "works"]], "findings": [], "limitations": []}
-                with mock.patch.object(review, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": "claude-opus-5"}), mock.patch.object(review, "collect_snapshot", return_value=(root / "snapshot", [{"path": "code.py", "state": "included", "kind": "required", "sha256": "fixture"}], "fp"), side_effect=review.ReviewError("snapshot failed") if outcome == "snapshot" else None), mock.patch.object(review, "invoke", side_effect=invoke), mock.patch.object(review, "current_fingerprint", return_value="fp"), mock.patch.object(review, "compare_source_changes", return_value={"status": "current", "attribution": "unattributed", "entries": []}), mock.patch.object(review, "cleanup_snapshot"), mock.patch("sys.argv", ["review", "--manifest", str(manifest_path), "--output-dir", str(root / "reports"), "--effort", "high"]), contextlib.redirect_stdout(io.StringIO()):
+                with mock.patch.object(review.core, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")), mock.patch.object(review, "resolve_claude", return_value=Path("claude")), mock.patch.object(review, "preflight", return_value={"requested_model": "claude-opus-5"}), mock.patch.object(review.core, "collect_snapshot", return_value=(root / "snapshot", [{"path": "code.py", "state": "included", "kind": "required", "sha256": "fixture"}], "fp"), side_effect=review.ReviewError("snapshot failed") if outcome == "snapshot" else None), mock.patch.object(review, "invoke", side_effect=invoke), mock.patch.object(review.core, "current_fingerprint", return_value="fp"), mock.patch.object(review.core, "compare_source_changes", return_value={"status": "current", "attribution": "unattributed", "entries": []}), mock.patch.object(review.core, "cleanup_snapshot"), mock.patch("sys.argv", ["review", "--manifest", str(manifest_path), "--output-dir", str(root / "reports"), "--effort", "high"]), contextlib.redirect_stdout(io.StringIO()):
                     code = review.main()
                 self.assertEqual(code, 0 if outcome is None else 2)
                 self.assertFalse(registry.exists())

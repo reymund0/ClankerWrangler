@@ -16,7 +16,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 # Source checkout shares policy/review helpers; installed bundles keep them adjacent.
 import sys
@@ -30,7 +30,8 @@ from model_discovery import DiscoveryClosed, DiscoveryManager
 
 MAX_DOCUMENT_BYTES = 262144
 API_VERSION = 1
-POLICY_VERSION = "6"
+POLICY_VERSION = "7"
+HOSTS = policy.HOSTS
 
 
 class EditorError(Exception):
@@ -87,28 +88,37 @@ def parse_json(content: bytes):
     return json.loads(content.decode("utf-8-sig"), parse_constant=reject_constant, object_pairs_hook=unique_object)
 
 
+def require_host(host) -> str:
+    """Reject anything but a known host before any file is touched."""
+    if not isinstance(host, str) or host not in HOSTS:
+        raise EditorError("Invalid orchestration host")
+    return host
+
+
 class PreferenceStore:
-    """One global destination, fixed by the process owner."""
+    """One fixed global destination per orchestration host, set by the process owner."""
     def __init__(self, *, global_config_dir: Path | None = None):
         if global_config_dir is None:
             home = Path.home().resolve()
-            self.targets = {"global": (home, home / ".clanker" / "orchestration-routing.json")}
+            self.targets = {host: (home, home / ".clanker" / policy.HOST_PREFERENCE_FILES[host]) for host in HOSTS}
         else:
             directory = Path(global_config_dir).absolute()
             anchor = directory.parent.resolve()
-            self.targets = {"global": (anchor, anchor / directory.name / "orchestration-routing.json")}
+            self.targets = {host: (anchor, anchor / directory.name / policy.HOST_PREFERENCE_FILES[host]) for host in HOSTS}
         for anchor, target in self.targets.values():
             safe_path(anchor, target)
-        self._mutex = threading.RLock()
+        # Each host saves under its own mutex and lock file, so one host never waits on the other.
+        self._mutexes = {host: threading.RLock() for host in HOSTS}
 
-    def target(self, scope: str) -> tuple[Path, Path]:
-        if scope not in self.targets:
+    def target(self, scope: str, host: str = "codex") -> tuple[Path, Path]:
+        require_host(host)
+        if scope != "global":
             raise EditorError("Selected configuration scope is unavailable")
-        anchor, target = self.targets[scope]
+        anchor, target = self.targets[host]
         return anchor, safe_path(anchor, target)
 
-    def read(self, scope: str) -> dict:
-        anchor, target = self.target(scope)
+    def read(self, scope: str, host: str = "codex") -> dict:
+        anchor, target = self.target(scope, host)
         content = None
         try:
             if target.exists():
@@ -130,27 +140,40 @@ class PreferenceStore:
                             "error": "Invalid saved preferences: configuration file is too large"}
                 content = b"".join(chunks)
             document = {"schema_version": 1} if content is None else parse_json(content)
-            migration_pending = policy.needs_profile_migration(document)
-            document = policy.validate_preferences(document)
+            migration_pending = policy.needs_profile_migration(document, host=host)
+            document = policy.validate_preferences(document, host=host)
             return {"path": str(target), "revision": revision(content), "document": document,
                     "migration_pending": migration_pending}
         except (ValueError, policy.RoutingError) as error:
             return {"path": str(target), "revision": revision(content), "document": None,
                     "error": "Invalid saved preferences: " + str(error)}
 
-    def snapshot(self, scope: str, document: dict | None = None):
-        self.target(scope)
-        global_state = self.read("global")
+    def snapshot(self, scope: str, document: dict | None = None, host: str = "codex"):
+        self.target(scope, host)
+        global_state = self.read("global", host)
         if document is None:
             if global_state.get("error"):
                 raise EditorError(global_state["error"])
             document = global_state["document"]
-        return policy.snapshot_from_documents(document, sources={"global": global_state["path"]})
+        return policy.snapshot_from_documents(document, sources={"global": global_state["path"]}, host=host)
 
-    def configuration(self) -> dict:
-        states = {"global": self.read("global")}
-        result = {"schema_version": API_VERSION, "policy_version": POLICY_VERSION, "scopes": states,
-                  "bundle": policy.load_bundle(), "effective": None}
+    @staticmethod
+    def host_bundle(host: str) -> dict:
+        """The bundled policy as seen from one host: its interaction catalog (with each route's derived provider) and defaults."""
+        bundle = policy.load_bundle()
+        entry = bundle["hosts"][host]
+        interactions = [{"id": item["id"], "label": item["label"], "execution": item["execution"],
+                         "provider": policy._provider_for_interaction(host, item["id"]), "default_model": item["default_model"]}
+                        for item in entry["interactions"]]
+        return {"schema_version": bundle["schema_version"], "policy_version": bundle["policy_version"], "host": host,
+                "roles": bundle["roles"], "models": bundle["models"], "effort_orders": bundle["effort_orders"],
+                "interactions": interactions, "defaults": entry["defaults"]}
+
+    def configuration(self, host: str = "codex") -> dict:
+        require_host(host)
+        states = {"global": self.read("global", host)}
+        result = {"schema_version": API_VERSION, "policy_version": POLICY_VERSION, "host": host, "scopes": states,
+                  "bundle": self.host_bundle(host), "effective": None}
         try:
             for state in states.values():
                 if state is not None and state.get("error"):
@@ -158,32 +181,35 @@ class PreferenceStore:
             frozen = policy.snapshot_from_documents(
                 states["global"]["document"],
                 sources={key: value["path"] for key, value in states.items() if value is not None},
+                host=host,
             )
             result["effective"] = policy.effective_configuration(frozen)
         except (EditorError, policy.RoutingError, ValueError) as error:
             result["error"] = str(error)
         return result
 
-    def preview(self, scope: str, document: dict, request: dict | None = None) -> dict:
-        policy.validate_preferences(document)
-        snapshot = self.snapshot(scope, document)
-        return {"effective": policy.effective_configuration(snapshot),
+    def preview(self, scope: str, document: dict, request: dict | None = None, host: str = "codex") -> dict:
+        require_host(host)
+        policy.validate_preferences(document, host=host)
+        snapshot = self.snapshot(scope, document, host)
+        return {"host": host, "effective": policy.effective_configuration(snapshot),
                 "decision": policy.resolve(snapshot, request) if request is not None else None}
 
-    def save(self, scope: str, document: dict, expected_revision: str) -> dict:
+    def save(self, scope: str, document: dict, expected_revision: str, host: str = "codex") -> dict:
+        require_host(host)
         if not isinstance(expected_revision, str) or not expected_revision:
             raise EditorError("A loaded revision is required")
-        document = policy.validate_preferences(document)
+        document = policy.validate_preferences(document, host=host)
         serialized = (json.dumps(document, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode("utf-8")
         if len(serialized) > MAX_DOCUMENT_BYTES:
             raise EditorError("Configuration document is too large")
-        self.preview(scope, document)
-        anchor, target = self.target(scope)
+        self.preview(scope, document, host=host)
+        anchor, target = self.target(scope, host)
         lock = target.with_suffix(".json.lock")
         temp_path = None
         lock_owned = False
         migration_backup = None
-        with self._mutex:
+        with self._mutexes[host]:
             safe_path(anchor, target.parent)
             target.parent.mkdir(parents=True, exist_ok=True)
             safe_path(anchor, lock)
@@ -195,10 +221,10 @@ class PreferenceStore:
                 lock_owned = True
                 with os.fdopen(lock_fd, "w", encoding="utf-8") as output:
                     json.dump({"pid": os.getpid(), "started_at": time.time()}, output)
-                state = self.read(scope)
+                state = self.read(scope, host)
                 if state["revision"] != expected_revision:
                     raise EditorError("Preferences changed since loading. Reload the latest revision before saving your draft.", 409)
-                self.preview(scope, document)
+                self.preview(scope, document, host=host)
                 if state.get("migration_pending"):
                     with safe_path(anchor, target).open("rb") as source:
                         original = source.read(MAX_DOCUMENT_BYTES + 1)
@@ -233,7 +259,7 @@ class PreferenceStore:
                 safe_path(anchor, target)
                 # Detect non-cooperating edits as late as possible. An external writer
                 # can still race between this check and replace; no CAS is promised.
-                if self.read(scope)["revision"] != expected_revision:
+                if self.read(scope, host)["revision"] != expected_revision:
                     raise EditorError("Preferences changed during saving; saved content was preserved.", 409)
                 os.replace(temp_path, target)
                 temp_path = None
@@ -242,7 +268,7 @@ class PreferenceStore:
                     safe_path(anchor, temp_path).unlink(missing_ok=True)
                 if lock_owned:
                     safe_path(anchor, lock).unlink(missing_ok=True)
-        result = self.configuration()
+        result = self.configuration(host)
         if migration_backup is not None:
             result["scopes"][scope]["migration_backup"] = migration_backup
         return result
@@ -402,12 +428,19 @@ class EditorHandler(BaseHTTPRequestHandler):
             path = unquote(parsed.path)
             api = path.startswith("/api/")
             self.boundary(api)
-            if parsed.query or parsed.fragment:
+            host = "codex"
+            if path == "/api/config" and parsed.query and not parsed.fragment:
+                # The only supported query selects the orchestration host; it is validated before any file access.
+                params = parse_qs(parsed.query, keep_blank_values=True)
+                if set(params) != {"host"} or len(params["host"]) != 1:
+                    raise EditorError("Query parameters are unsupported")
+                host = require_host(params["host"][0])
+            elif parsed.query or parsed.fragment:
                 raise EditorError("Query parameters are unsupported")
             if path == "/api/wrangler":
                 self.json_response(200, self.server.installer.status())
             elif path == "/api/config":
-                self.json_response(200, {**self.server.store.configuration(), "wrangler": self.server.installer.status()})
+                self.json_response(200, {**self.server.store.configuration(host), "wrangler": self.server.installer.status()})
             elif path == "/api/models":
                 self.json_response(200, self.server.discovery.catalog())
             elif api:
@@ -444,15 +477,16 @@ class EditorHandler(BaseHTTPRequestHandler):
                     raise EditorError("Model refresh accepts only an empty object")
                 self.json_response(200, self.server.discovery.catalog(force=True))
                 return
-            allowed = {"scope", "document", "request"} if self.path == "/api/preview" else {"scope", "document", "revision"}
+            allowed = {"scope", "host", "document", "request"} if self.path == "/api/preview" else {"scope", "host", "document", "revision"}
             if set(value) - allowed or not {"scope", "document"}.issubset(value):
                 raise EditorError("Unsupported or missing request fields")
             if value["scope"] != "global":
                 raise EditorError("Invalid configuration scope")
+            host = require_host(value.get("host", "codex"))
             if self.path == "/api/preview":
-                result = self.server.store.preview(value["scope"], value["document"], value.get("request"))
+                result = self.server.store.preview(value["scope"], value["document"], value.get("request"), host)
             else:
-                result = self.server.store.save(value["scope"], value["document"], value.get("revision"))
+                result = self.server.store.save(value["scope"], value["document"], value.get("revision"), host)
                 result["wrangler"] = self.server.installer.status()
             self.json_response(200, result)
         except (DiscoveryClosed, EditorError, policy.RoutingError, ValueError, TypeError, OSError) as error:
@@ -474,7 +508,8 @@ def main():
         store = PreferenceStore(global_config_dir=args.global_config_dir)
         with EditorServer(store, asset_root(args.assets), args.port) as server:
             print("Open the local editor: " + server.origin + "/#token=" + server.token, flush=True)
-            print("Global preferences: " + str(store.target("global")[1]), flush=True)
+            for host in HOSTS:
+                print(host.capitalize() + " preferences: " + str(store.target("global", host)[1]), flush=True)
             print("Press Ctrl+C to stop. No agents or model inference are launched by this editor.", flush=True)
             server.serve_forever()
     except KeyboardInterrupt:

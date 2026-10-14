@@ -36,6 +36,21 @@ npm run dev
 
 The launcher selects the newest runnable Python 3.10+ from unversioned and versioned executables on `PATH`, plus `/opt/homebrew/bin` and `/usr/local/bin` on macOS. To pin an installation, run `CLANKER_PYTHON=/absolute/path/to/python3 npm run dev`. An invalid override fails without falling back.
 
+## Orchestration Nation Hosts
+
+Orchestration Nation can be led from Codex or from Claude Code. Both installers put the same coordinator, specialist guidance, and shared cross-review reference into each agent, plus that agent's own host reference (`references/host.md`) and host configuration (`routing/host.json`). The coordinator reads those two files to learn its host, its preference file, how to dispatch native workers, and which external reviewer to use.
+
+| Host | Native workers | External review | Preference file |
+| --- | --- | --- | --- |
+| Codex | Codex collaboration tools | Claude Code CLI (`scripts/claude_cross_review.py`) | `~/.clanker/orchestration-routing.json` |
+| Claude Code | Agent tool with the `clanker-orchestration-worker` agent | Codex CLI (`scripts/codex_cross_review.py`) | `~/.clanker/orchestration-routing-claude.json` |
+
+The two preference files use the same schema and are independent: neither host reads or changes the other's file, and the installers never write either one. A missing file means bundled defaults. Claude-led defaults are Sonnet for planning and reviews, Haiku for implementation, and `gpt-6.1-sol` for the Codex review, all Adaptive.
+
+To lead from Claude Code you need Python 3.10+, Claude Code with Agent-tool support, and, for external review, the Codex CLI logged in with ChatGPT. The review launcher only checks that login: it never logs in, switches billing, uses API keys, or edits Codex settings, so use the official Codex login flow yourself first. `./wrangle.sh` (or `.\wrangle.ps1`) also installs the generic worker at `<claude-root>/agents/clanker-orchestration-worker.md`. If an unmanaged file already has that name, it is moved to `<claude-root>/backups/orchestration-nation/` before the worker is written. Codex gets no agent definition.
+
+The routing editor opens with a host selector. Each host edits its own preference file with its own draft, and `--global-config-dir <temporary-directory>` redirects both files when you want to try it without touching real preferences. Routing policy 7 requires the installed helpers and editor build to match, and snapshots from policy 6 are rejected, so install the complete bundle and start new runs.
+
 ## Step 4
 
 💰 PROFIT. 💰

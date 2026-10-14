@@ -1,17 +1,27 @@
 ---
 name: clanker-orchestration-nation
-description: Coordinate a bounded set of Codex specialists for software work with explicit model routing, OpenSpec continuity, and an append-only run log. Use for multi-role changes, not ordinary single-owner edits.
+description: Coordinate a bounded set of specialists for software work with explicit model routing, OpenSpec continuity, and an append-only run log. Use for multi-role changes, not ordinary single-owner edits.
 ---
 
 # Clanker Orchestration Nation
 
-Coordinate only the specialists the task needs. The Codex parent owns scope,
+Coordinate only the specialists the task needs. The parent owns scope,
 integration, OpenSpec artifacts/task state, and the run log. Workers own bounded
 assignments and return evidence; they do not recursively delegate.
 
-Use native Codex collaboration tools. Claude Code is supported only through the
-external cross-review launcher, not as the orchestration host. Do not substitute a
-local Codex CLI or custom agent framework when native delegation is unavailable.
+Use the host's native delegation mechanism, described in the host reference below.
+Do not substitute a local model CLI or custom agent framework when native delegation
+is unavailable.
+
+## Read the host configuration
+
+Before resolving any route, read `references/host.md` and `routing/host.json` relative
+to this coordinator's package. They identify the orchestration host, its preference
+file, its native dispatch and capability procedure, and its external reviewer. If
+either file is missing or invalid, stop, report the missing prerequisite, and dispatch
+no worker. Do not infer the host from the environment. When running from the source
+checkout, where host files live under `subagents/hosts/<host>/`, the user must name the
+host; read that host's files and pass `--host` to the snapshot command.
 
 ## Establish scope
 
@@ -35,26 +45,20 @@ snapshot and resolver commands, request fields, dispatch gates, and evidence cap
 Read its configuration/editor sections only when those details are needed.
 
 Resolve every assignment through that procedure using the run snapshot. Disclose the
-global preference source and consequential routing limitations; do not silently
-substitute settings when resolution or dispatch is blocked.
+host, the global preference source and consequential routing limitations; do not
+silently substitute settings when resolution or dispatch is blocked.
 
 Use the returned `model` and `effort` as the native tool's model and reasoning-effort
-arguments. Prefer an empty history fork with a focused assignment; a bounded history
-is allowed when needed. A full-history fork inherits parent settings and must not be
-used to select worker settings. Requested settings are not proof of observed settings.
+arguments, as the host reference describes. Requested settings are not proof of
+observed settings.
 
 ## Select roles and hand off
 
-Choose the smallest useful team. Limit concurrent assignments to three, or the runtime's
-lower limit, counting Claude review; run at most one Claude review per run at a time.
+Choose the smallest useful team. Follow the host reference's concurrency limit, counting
+any external review; run at most one external review per run at a time.
 Parallelize independent work and serialize changes to shared files, interfaces, browser
 state, or the reviewed build. Keep useful inspection or integration work with the parent.
-
-Before spawning, inspect worker state and available capacity. Reuse a suitable idle
-worker only when its known requested model/effort matches the newly resolved route;
-refresh its role, ownership, and context. Otherwise sequence the work or handle it
-directly within the parent's scope. After a capacity rejection, do not repeat the same
-spawn until capacity changes, and never count the rejected assignment as running.
+Follow the host reference for worker reuse and capacity before spawning.
 
 | Role | Instruction file | Use for |
 | --- | --- | --- |
@@ -148,17 +152,18 @@ evidence needed for acceptance. A short reply never replaces parent verification
 
 ## Review and integrate
 
-For substantial plans, select Claude review before implementation; for substantial
+For substantial plans, select external cross-review before implementation; for substantial
 integrated changes, select it before completion. This includes UI/API/data contracts,
 consequential architecture, auth, migrations/data integrity, deployment, and measured
 performance risk. Honor explicit requests and opt-outs, skip small low-risk edits,
 and record the reason. Planning-only authorization permits only the planning checkpoint.
 
-Before preparing or launching a selected Claude review, read
-`clanker-claude-cross-review.md` from the same source/reference layout as the specialists.
-It owns packet preparation, routing to the launcher, prerequisites, source-change
-reconciliation, and the one-automatic-recheck limit. Claude supplements native review
-and tests; it does not authorize implementation or deployment.
+Before preparing or launching a selected external review, read
+`clanker-cross-review.md` from the same source/reference layout as the specialists.
+It owns packet preparation, routing to the launcher named in `routing/host.json`,
+source-change reconciliation, and the one-automatic-recheck limit; the reviewer's
+prerequisites are in the host reference. The external reviewer supplements native
+review and tests; it does not authorize implementation or deployment.
 
 Assign browser/test acceptance separately with an owner and evidence status; do not
 ask a static reviewer to certify a live check. Split large reviews by coherent
@@ -194,19 +199,45 @@ Append complete, run-attributed timestamped blocks; never rewrite a whole-file s
 Preserve other runs. Read relevant entries on resume or when reconciling uncertain
 state, rather than rereading the growing log before every append. Record:
 
-- At start: workspace, branch, request, session when known, OpenSpec context, parent
-  settings, complexity/risk rationale, and any no-delegation decision.
+- At start: workspace, branch, request, session when known, OpenSpec context, the
+  orchestration host and its preference source, parent settings, complexity/risk
+  rationale, and any no-delegation decision.
 - Before dispatch: assignment ID, role/interaction, instruction path, ownership, concise
-  rationale, and routing evidence captured as described in the dispatch procedure.
+  rationale, the readable settings line below, and routing evidence captured as
+  described in the dispatch procedure.
 - On meaningful changes: actual dispatch outcome, observed settings or unknown,
   verification results, review dispositions/waivers, blockers, and snapshot reloads.
   Use readable timestamped blocks that name the run and assignment, status, owned paths,
   evidence/check, and next owner.
-- At completion: completed, blocked, or interrupted outcome and remaining checks.
+- At completion: completed, blocked, or interrupted outcome, the route-outcome table
+  below, and remaining checks.
   State task completion separately from native review, external review, and runtime
   acceptance; mark each evidence state complete, partial, pending, or excluded, and
   explain exclusions without treating them as waivers.
   Reconcile pending events from observed state after an abrupt interruption.
+
+Every worker dispatch and external review block opens with one readable settings line
+built from the resolver JSON or the launcher's `report.json`, never retyped from
+memory, for example
+`Model: haiku · Reasoning: Adaptive/straightforward → medium · Observed: unknown`.
+It states the requested model and reasoning effort, including fixed or Adaptive mode and
+the assessed tier, and the observed model and effort only when the runtime or reviewer
+report supplies them. Unreported observed values read `unknown`; never infer them from
+the request or a model's self-description. The block also states the host, and the
+provider and execution kind (`native` or `external`) from the resolver output. An
+external review block names the reviewer provider and links its `report.json`.
+
+The closing entry includes a route-outcome table with one row per native worker
+assignment: assignment, role, requested model, effort and tier, and an outcome. The
+parent decides outcomes from its own verification evidence, never from worker
+readiness claims:
+
+- `first-pass`: accepted by parent verification without fixes.
+- `revised`: accepted after fixes on the same route.
+- `rerouted`: reassigned to a different model, effort, or role, or taken over by the
+  parent; name the replacement route. The replacement assignment gets its own row.
+- `blocked`: not completed, including work a worker called ready that failed required
+  parent verification and was not completed.
 
 Reuse generated routing JSON and link review reports instead of restating their fields
 in narrative. Keep entries free of secrets, raw private payloads, and hidden reasoning.

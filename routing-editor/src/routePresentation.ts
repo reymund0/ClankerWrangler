@@ -1,5 +1,5 @@
 import { getOwnAgentRoute, getOwnRoute } from './draft'
-import { specialistChoices } from './specialists'
+import { isNative, specialistChoices } from './specialists'
 import type { AgentRoute, ConfigResponse, EffectiveRoute, Interaction, Preferences, Reasoning, Role } from './types'
 
 function uniform<T>(values: T[]): T | undefined {
@@ -12,7 +12,7 @@ export function deriveAgentState(config: ConfigResponse, document: Preferences, 
   const roleId = typeof role === 'string' ? role : role.id
   const own = getOwnAgentRoute(document, roleId)
   const activities = config.bundle.interactions.filter((interaction) =>
-    interaction.provider === 'codex' && specialistChoices(config, document, interaction.id).some((candidate) => candidate.id === roleId))
+    isNative(interaction) && specialistChoices(config, document, interaction.id).some((candidate) => candidate.id === roleId))
   const rawBaseline = config.effective?.agents?.[roleId]
   const baseline: EffectiveRoute | undefined = rawBaseline ? { ...rawBaseline, route: {
     ...(rawBaseline.route?.model && !(rawBaseline.provenance?.model?.startsWith('global.agents.') && !own?.model) ? { model: rawBaseline.route.model } : {}),

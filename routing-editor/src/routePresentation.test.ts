@@ -6,22 +6,22 @@ const role = { id: 'clanker-ui-developer', label: 'UI developer' }
 
 function configFixture(): ConfigResponse {
   const interactions = [
-    { id: 'planning', label: 'Planning', provider: 'codex' as const, default_model: 'gpt-5.6-terra' },
-    { id: 'implementation', label: 'Implementation', provider: 'codex' as const, default_model: 'gpt-5.6-terra' },
-    { id: 'native-review', label: 'Native review', provider: 'codex' as const, default_model: 'gpt-5.6-terra' },
-    { id: 'visual-review', label: 'Visual review', provider: 'codex' as const, default_model: 'gpt-5.6-terra' },
-    { id: 'claude-review', label: 'Claude review', provider: 'claude' as const, default_model: 'claude-opus-5' },
+    { id: 'planning', label: 'Planning', provider: 'codex' as const, default_model: 'gpt-5.6-terra', execution: 'native' as const },
+    { id: 'implementation', label: 'Implementation', provider: 'codex' as const, default_model: 'gpt-5.6-terra', execution: 'native' as const },
+    { id: 'native-review', label: 'Native review', provider: 'codex' as const, default_model: 'gpt-5.6-terra', execution: 'native' as const },
+    { id: 'visual-review', label: 'Visual review', provider: 'codex' as const, default_model: 'gpt-5.6-terra', execution: 'native' as const },
+    { id: 'claude-review', label: 'Claude review', provider: 'claude' as const, default_model: 'claude-opus-5', execution: 'external' as const },
   ]
   const emptyRoute = { route: {}, provenance: {} }
   return {
     schema_version: 1,
-    policy_version: '6',
+    policy_version: '7', host: 'codex' as const,
     scopes: {
       global: { path: '/global.json', revision: 'global', document: { schema_version: 1 } },
     },
     bundle: {
       schema_version: 1,
-      policy_version: '6',
+      policy_version: '7', host: 'codex' as const,
       interactions,
       roles: [role],
       models: [

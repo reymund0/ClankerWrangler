@@ -329,6 +329,41 @@ class DiscoveryManagerTests(unittest.TestCase):
         ], "claude")])
         self.assertEqual(sent, [{"type": "control_request", "request_id": "clanker-model-discovery", "request": {"subtype": "initialize"}}])
 
+    def claude_probe(self, messages):
+        manager = self.manager()
+        manager._resolve = lambda provider: Path(sys.executable)
+        manager._run_lines = lambda command, *args: [(" ".join(discovery.CLAUDE_HELP_FLAGS)).encode()] if command[-1] == "--help" else [b"claude-test"]
+        manager._open_stream = lambda *args: (MagicMock(), MagicMock())
+        manager._stop = lambda *args: None
+        manager._release_process = lambda *args: None
+        manager._send = lambda *args: None
+        feed = iter(messages)
+        manager._next_message = lambda *args: next(feed)
+        return manager
+
+    def test_claude_initialize_skips_ui_invalidate_and_other_system_notifications(self):
+        initialize = {"type": "control_response", "response": {"request_id": "clanker-model-discovery", "response": {"models": [
+            {"value": "sonnet", "resolvedModel": "claude-sonnet-fixture", "displayName": "Sonnet", "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"]},
+            {"value": "haiku", "displayName": "Haiku", "supportedEffortLevels": ["low", "medium"]}]}}}
+        notifications = [{"type": "system", "subtype": "ui_invalidate", "reason": "startup"}, {"type": "system", "subtype": "init"}]
+        result = self.claude_probe([*notifications, initialize])._probe_claude_inner()
+        self.assertEqual([(model["id"], model["efforts"]) for model in result["models"]],
+                         [("sonnet", ["low", "medium", "high", "xhigh", "max"]), ("haiku", ["low", "medium"])])
+        self.assertEqual(result["status"], "live")
+
+    def test_claude_initialize_still_rejects_a_wrong_first_non_notification_message(self):
+        good = {"type": "control_response", "response": {"request_id": "clanker-model-discovery", "response": {"models": []}}}
+        cases = (
+            [{"type": "system", "subtype": "ui_invalidate"}, {"type": "assistant", "message": "hello"}, good],
+            [{"type": "system", "subtype": "ui_invalidate"}, {"type": "control_response", "response": {"request_id": "other", "response": {"models": []}}}, good],
+            [{"type": "system", "subtype": "ui_invalidate"}, {"type": "control_response", "response": {"request_id": "clanker-model-discovery", "response": {"models": "x"}}}, good],
+            [{"type": "result"}, good],
+        )
+        for messages in cases:
+            with self.subTest(first=messages[1] if len(messages) > 2 else messages[0]):
+                with self.assertRaisesRegex(discovery.DiscoveryError, "malformed model metadata"):
+                    self.claude_probe(messages)._probe_claude_inner()
+
     def test_short_live_ndjson_is_read_before_process_exit(self):
         manager = self.manager()
         code = "import sys,time; sys.stdout.write('{\\\"id\\\":1,\\\"result\\\":{}}\\n'); sys.stdout.flush(); time.sleep(3)"

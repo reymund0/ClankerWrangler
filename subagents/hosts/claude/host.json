@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "host": "claude",
+  "preferences_file": "orchestration-routing-claude.json",
+  "external_review": {"interaction": "codex-review", "launcher": "scripts/codex_cross_review.py"}
+}

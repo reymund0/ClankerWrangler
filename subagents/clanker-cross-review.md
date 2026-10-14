@@ -1,16 +1,19 @@
 ---
-name: clanker-claude-cross-review
-description: Obtain an independent Claude Code plan or implementation review of parent-authorized evidence, using the repository, a retained change packet, and evidence-based reconciliation.
+name: clanker-cross-review
+description: Obtain an independent external plan or implementation review of parent-authorized evidence from the provider that is not the orchestration host, using the repository, a retained change packet, and evidence-based reconciliation.
 ---
 
-# Claude Cross-Review
+# External Cross-Review
 
 ## Ownership and selection
 
-This reference is loaded by the Codex parent, not dispatched as a native Codex role.
-Codex owns scope, artifact preparation, invocation, reconciliation, logging, and fixes.
-Claude reviews within the task's existing authorization. Do not invoke another
-orchestrator or agent team from the reviewer.
+This reference is loaded by the parent, not dispatched as a native role. The parent
+owns scope, artifact preparation, invocation, reconciliation, logging, and fixes.
+The external reviewer is the provider that is not the host: it reviews within the
+task's existing authorization and is advisory. The host reference and `routing/host.json`
+name the reviewer, its launcher, and its prerequisites. Do not invoke another
+orchestrator or agent team from the reviewer, and never treat a native worker as the
+external review.
 
 The coordinator owns review selection. Follow the selected checkpoint and preserve
 planning-only scope, explicit requests, and opt-outs.
@@ -30,7 +33,7 @@ planning-only scope, explicit requests, and opt-outs.
    contract. Include neighboring fixtures when their guards determine a claim. For
    preservation claims, inspect supplied baseline/diffs for actual before/after change;
    when prior evidence is absent, keep the comparison with its named owner and limit
-   Claude's claim to supported current correctness.
+   the reviewer's claim to supported current correctness.
 3. Select relevant specialist files from the coordinator's existing role catalog, as for
    native workers. Resolve source files beside this reference, or installed files under
    the loaded coordinator's `references/`. Verify each selected path. Supply this
@@ -40,7 +43,7 @@ planning-only scope, explicit requests, and opt-outs.
    Guidance must be available but does not need a separate coverage item. Role
    instructions do not authorize implementation, command/test execution,
    deployment, or delegation beyond the current assignment. Native model defaults do
-   not change Claude's selected model or effort. Visual acceptance stays with the native
+   not change the reviewer's selected model or effort. Visual acceptance stays with the native
    UI/UX reviewer. Record selected roles and resolved paths in the dispatch log.
 4. Define acceptance using selected change evidence, requirement mappings, and any
    `required_context_paths`. Ordinary `context_paths` and guidance remain available
@@ -54,7 +57,10 @@ planning-only scope, explicit requests, and opt-outs.
 5. Write the manifest and run `--prepare-only` as described below. Parent task
    authorization already governs selected files and the review; the handoff does not
    require a second per-file export approval. Keep the captured packet and source-change
-   evidence for reconciliation if files change during review.
+   evidence for reconciliation if files change during review. A manifest prepared before
+   this reference replaced `clanker-claude-cross-review.md` that still lists the old path
+   fails preparation with that missing path named: replace it with
+   `references/clanker-cross-review.md` and prepare again.
 
 ## Plan review criteria
 
@@ -69,29 +75,27 @@ required context explicitly and return focused questions, not speculative redesi
 
 Use the shared code-review criteria and evidence requirements. State required
 files/scenarios not reviewed. Supplied test logs are parent evidence;
-Claude must not claim it ran tests, inspected a browser, or verified anything beyond
-the evidence it accessed.
+the reviewer must not claim it ran tests, inspected a browser, or verified anything
+beyond the evidence it accessed.
 
 ## Launcher and prerequisites
 
-Locate `scripts/claude_cross_review.py` relative to the coordinator package. In the
-source checkout it is under `subagents/scripts/`. Use a verified Python 3.10+ executable;
-no third-party packages are needed. The launcher requires an installed Claude Code CLI
-and confirmed subscription login. Read its `--help` before invocation and use supported flags.
+Locate the launcher named by `external_review.launcher` in `routing/host.json` relative
+to the coordinator package. In the source checkout the launchers are under
+`subagents/scripts/`. Use a verified Python 3.10+ executable; no third-party packages
+are needed. Read its `--help` before invocation and use supported flags. The reviewer's
+CLI, login, and settings prerequisites are in the host reference; report the specific
+prerequisite if preflight blocks, and never log in, switch billing, install software, or
+edit persistent configuration.
 
-Model selection is independent of the Codex parent and native worker defaults. Resolve
-the packet's `claude-review` route using the coordinator run snapshot and dispatch
-procedure in `routing/usage.md`; reassess remaining risk for each recheck. Pass the
-resolved model and effort explicitly. Keep persistent Claude settings unchanged and
-unknown effective settings unknown. Do not
-silently switch to API billing, install software, edit persistent configuration, or
-initiate login. If preflight blocks, report the specific prerequisite.
+Model selection is independent of the parent and native worker defaults. Resolve the
+packet's external-review route (`external_review.interaction`) using the coordinator run
+snapshot and dispatch procedure in `routing/usage.md`; reassess remaining risk for each
+recheck. Pass the resolved model and effort explicitly. Keep persistent reviewer settings
+unchanged and unknown effective settings unknown.
 
-The launcher checks subscription authentication and invocation capabilities. Use a
-finite wall-clock timeout (default: 2700 seconds / 45 minutes), adjustable with
-`--timeout-seconds`. Normal CLI and managed permissions apply. Do not add
-permission-bypass flags or send a resume argument by default; each initial review
-forms its own judgment.
+Use a finite wall-clock timeout (default: 2700 seconds / 45 minutes), adjustable with
+`--timeout-seconds`.
 
 ## Manifest and invocation
 
@@ -123,9 +127,9 @@ Report actual format or access limits instead of filtering evidence by name or c
   "required_context_paths": ["AGENTS.md"],
   "read_roots": ["C:/work/shared-contracts"],
   "guidance_paths": [
-    "C:/Users/example/.codex/skills/clanker-orchestration-nation/references/clanker-claude-cross-review.md",
-    "C:/Users/example/.codex/skills/clanker-orchestration-nation/references/clanker-backend-developer.md",
-    "C:/Users/example/.codex/skills/clanker-code-review/SKILL.md"
+    "C:/Users/example/<agent-root>/skills/clanker-orchestration-nation/references/clanker-cross-review.md",
+    "C:/Users/example/<agent-root>/skills/clanker-orchestration-nation/references/clanker-backend-developer.md",
+    "C:/Users/example/<agent-root>/skills/clanker-code-review/SKILL.md"
   ],
   "requirements": ["Expired invitations cannot be accepted."],
   "requirement_paths": {
@@ -145,13 +149,13 @@ implementation. The launcher captures those files and records provenance and has
 records with `pending`, `passed`, or `failed` status; they are not reviewer attestations.
 
 ```text
-python <package>/scripts/claude_cross_review.py --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --prepare-only
-python <package>/scripts/claude_cross_review.py --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --model <resolved-model> --effort <resolved-effort>
-python <package>/scripts/claude_cross_review.py --check-current <saved-report.json>
+python <package>/<launcher> --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --prepare-only
+python <package>/<launcher> --manifest <manifest.json> --output-dir <repo>/.clanker/reviews --model <resolved-model> --effort <resolved-effort>
+python <package>/<launcher> --check-current <saved-report.json>
 ```
 
 Run preparation before invocation. It checks manifest structure, required evidence,
-and output readiness without Claude, login, effort, or a model call. `prepared` is not
+and output readiness without the reviewer CLI, login, effort, or a model call. `prepared` is not
 approval; execution repeats the checks against current inputs.
 The retained packet supplies line-readable Git diff files under
 `_clanker_packet/diffs/`, referenced by `_clanker_packet/evidence.json`. Read those
@@ -159,12 +163,15 @@ files directly instead of extracting escaped diff strings from JSON.
 
 ## Run and collect
 
-Launch each review once and retain its process/session handle. Prefer completion
+Launch each review once, as a background command where the host reference requires it
+(never foreground a review that can outlast the host's command timeout), and retain its
+process/session handle. Prefer completion
 notifications where the host supports them; otherwise use bounded waits rather than
 rapid status polling. Do independent work while the review runs. Collect the launcher
 receipt once for execution status and the saved report path. Inspect `report.json`
-selectively for verdict, findings, required coverage, parent-check/source-change
-state, and the evidence needed for reconciliation. `summary.md` is an alternative
+selectively for the `reviewer` identity, verdict, findings, required coverage,
+parent-check/source-change state, requested and observed model and effort, and the
+evidence needed for reconciliation. `summary.md` is an alternative
 human-readable view, not a mandatory second full read. Keep both complete files on
 disk; do not dump duplicate representations, restart a healthy review, or spawn a
 native agent solely to wait. Preserve material findings and coverage gaps in the
@@ -182,7 +189,9 @@ concrete evidence or a reason for a gap.
 Each finding includes an id, severity (`blocking`, `major`, `minor`, `info`), location,
 scenario, evidence, confidence (`confirmed`/`plausible`), and `suggested_remedy`.
 Host execution status, scope identity, requested settings, and observed runtime metadata
-are separate from the model verdict.
+(unreported values are `unknown`) are separate from the model verdict. Reports from
+reviews of either provider under one run ID have distinct report paths and identify
+their reviewer.
 
 A valid completed review keeps its captured-version verdict and execution status even
 when source comparison later finds changes or becomes unavailable. Comparison errors
@@ -201,7 +210,7 @@ and verified, or explicitly waived by the user. Rechecks remain bounded to one
 automatic recheck per phase; report remaining gaps after that limit.
 
 The parent records the report link, coverage, dispositions, and remaining checks using
-the coordinator's logging procedure. Preserve all attempts. Claude and the launcher
+the coordinator's logging procedure. Preserve all attempts. The reviewer and the launcher
 must not update the shared log or OpenSpec task state.
 
 ## Write coordination

@@ -1,4 +1,5 @@
 """Exercise both real installers only against temporary agent destinations."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -10,6 +11,11 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 NAME = "clanker-orchestration-nation"
 RETIRED = ("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
+OLD_REVIEW_REFERENCE = "clanker-claude-cross-review"
+WORKER = "clanker-orchestration-worker"
+# Same marker with different letter case: the installer must treat this file as unmanaged and back it up.
+WORKER_CASE_VARIANT = "<!-- CLANKER-ORCHESTRATION-NATION: MANAGED WORKER DEFINITION -->\nuser agent with a case-differing marker\n"
+SCRIPTS = ("claude_cross_review.py", "codex_cross_review.py", "cross_review_core.py", "model_discovery.py", "routing_editor.py", "routing_policy.py")
 
 
 class InstallerTests(unittest.TestCase):
@@ -24,7 +30,58 @@ class InstallerTests(unittest.TestCase):
             if creation.returncode:
                 self.skipTest("Symlink/junction creation unavailable")
 
-    def exercise(self, shell, built, scenario=None, linked_agent_roots=False):
+    def assert_host_install(self, source_repo, base, bundle, host):
+        """Each root gets its own host reference and configuration, the shared reviewer reference, and (Claude only) the worker."""
+        source = source_repo / "subagents"
+        self.assertEqual((bundle / "references/host.md").read_bytes(), (source / "hosts" / host / "host.md").read_bytes())
+        self.assertEqual((bundle / "routing/host.json").read_bytes(), (source / "hosts" / host / "host.json").read_bytes())
+        other = "codex" if host == "claude" else "claude"
+        self.assertNotEqual((bundle / "references/host.md").read_bytes(), (source / "hosts" / other / "host.md").read_bytes())
+        self.assertEqual((bundle / "references/clanker-cross-review.md").read_bytes(), (source / "clanker-cross-review.md").read_bytes())
+        self.assertFalse((bundle / "references" / (OLD_REVIEW_REFERENCE + ".md")).exists())
+        if host == "claude":
+            worker = base / "agents" / (WORKER + ".md")
+            self.assertEqual(worker.read_bytes(), (source / "claude" / (WORKER + ".md")).read_bytes())
+            self.assertEqual([path.name for path in (base / "agents").iterdir()], [worker.name])
+        else:
+            self.assertFalse((base / "agents").exists())
+
+    def assert_installed_launchers(self, root, bundle, host):
+        """Run the installed helpers: imports resolve, the snapshot host comes from routing/host.json, retired guidance is explained."""
+        scripts = bundle / "scripts"
+        home = root / "snapshot-home"  # No preference files: this only checks host selection, not the fixture preferences.
+        for launcher in ("claude_cross_review.py", "codex_cross_review.py"):
+            result = subprocess.run([sys.executable, "-B", str(scripts / launcher), "--help"], cwd=root, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        preferences = {"claude": "orchestration-routing-claude.json", "codex": "orchestration-routing.json"}
+        other = "codex" if host == "claude" else "claude"
+        policy = [sys.executable, "-B", str(scripts / "routing_policy.py"), "snapshot"]
+        output = root / ("snapshot-" + host + ".json")
+        output.unlink(missing_ok=True)
+        made = subprocess.run([*policy, "--global", str(home / ".clanker" / preferences[host]), "--output", str(output)], cwd=root, capture_output=True, text=True, timeout=30)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        self.assertEqual(json.loads(made.stdout)["host"], host)
+        for arguments in (["--host", other, "--global", str(home / ".clanker" / preferences[host])], ["--global", str(home / ".clanker" / preferences[other])]):
+            rejected = subprocess.run([*policy, *arguments], cwd=root, capture_output=True, text=True, timeout=30)
+            self.assertEqual(rejected.returncode, 2, rejected.stdout)
+        repository = root / "launcher-repo"
+        repository.mkdir(exist_ok=True)
+        (repository / "plan.md").write_text("Plan.\n", encoding="utf-8")
+        retired = bundle / "references" / (OLD_REVIEW_REFERENCE + ".md")
+        manifest = root / "retired-manifest.json"
+        manifest.write_text(json.dumps({"repository": str(repository), "phase": "plan", "run_id": "retired-" + host, "selected_paths": ["plan.md"],
+                                        "requirements": ["R1"], "verification_evidence": ["Planning only"], "guidance_paths": [str(retired)]}), encoding="utf-8")
+        prepared = subprocess.run([sys.executable, "-B", str(scripts / "claude_cross_review.py"), "--manifest", str(manifest),
+                                   "--output-dir", str(root / "launcher-reports"), "--prepare-only"], cwd=root, capture_output=True, text=True, timeout=30)
+        self.assertEqual(prepared.returncode, 2, prepared.stdout)
+        report = json.loads(next((root / "launcher-reports" / ("retired-" + host)).glob("plan-*/report.json")).read_text(encoding="utf-8"))
+        detail = " ".join(report["limitations"])
+        self.assertEqual(report["execution_status"], "blocked")
+        self.assertIn(str(retired), detail)
+        self.assertIn("references/clanker-cross-review.md", detail)
+        shutil.rmtree(root / "launcher-reports")
+
+    def exercise(self, shell, built, scenario=None, linked_agent_roots=False, worker_text="user agent without marker"):
         with tempfile.TemporaryDirectory(prefix="clanker installers ") as temp:
             root = Path(temp)
             source_repo = root / "source"
@@ -42,7 +99,7 @@ class InstallerTests(unittest.TestCase):
                 build = source_repo / "routing-editor/dist"
                 (build / "assets").mkdir(parents=True)
                 (build / "index.html").write_text("<!doctype html><title>Fixture editor</title>")
-                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"6"}')
+                (build / "compatibility.json").write_text('{"schema_version":1,"policy_version":"7"}')
                 (build / "assets/app.js").write_text("// fixture build")
             claude, codex, windsurf = [root / name for name in ("claude", "codex", "windsurf")]
             sentinel = root / "unexpected-claude-call"
@@ -58,6 +115,9 @@ class InstallerTests(unittest.TestCase):
             preference.parent.mkdir(parents=True)
             legacy_bytes = b'{"schema_version":1,"adaptive_profiles":{"codex:custom":{"tiers":{"mechanical":"low","routine":"medium","complex":"high","exceptional":"xhigh"},"default_ceiling":"xhigh"}}}\n'
             preference.write_bytes(legacy_bytes)
+            claude_preference = preference.with_name("orchestration-routing-claude.json")
+            claude_bytes = b'{"schema_version":1,"interactions":{"implementation":{"model":"haiku"}}}\n'
+            claude_preference.write_bytes(claude_bytes)
             env.update(CLAUDE_ROOT=str(claude), CODEX_ROOT=str(codex), WINDSURF_MEMORIES_ROOT=str(windsurf),
                        HOME=str(isolated_home), USERPROFILE=str(isolated_home))
             if shell == "powershell":
@@ -92,17 +152,20 @@ class InstallerTests(unittest.TestCase):
                         self.assertEqual(target_bundle.read_bytes(), (base / "skills" / NAME / "SKILL.md").read_bytes())
                 self.assertEqual(project_preference.read_bytes(), project_bytes)
                 self.assertEqual(preference.read_bytes(), legacy_bytes)
+                self.assertEqual(claude_preference.read_bytes(), claude_bytes)
+                self.assertEqual(sorted(path.name for path in preference.parent.iterdir()), [claude_preference.name, preference.name])
                 if expected:
                     return result
                 self.assertEqual((windsurf / "global_rules.md").read_bytes(), (source_repo / "global_rules.md").read_bytes())
-                for base, rules in ((claude, "CLAUDE.md"), (codex, "AGENTS.md")):
+                for base, rules, host in ((claude, "CLAUDE.md", "claude"), (codex, "AGENTS.md", "codex")):
                     bundle = base / "skills" / NAME
                     self.assertEqual((bundle / "SKILL.md").read_bytes(), (source_repo / "subagents" / (NAME + ".md")).read_bytes())
-                    for script_name in ("claude_cross_review.py", "routing_policy.py", "routing_editor.py", "model_discovery.py"):
+                    for script_name in SCRIPTS:
                         self.assertEqual((bundle / "scripts" / script_name).read_bytes(),
                                          (source_repo / ("routing-editor/scripts" if script_name in ("routing_editor.py", "model_discovery.py") else "subagents/scripts") / script_name).read_bytes())
-                    self.assertEqual(sorted(f.name for f in (bundle / "scripts").iterdir()),
-                                     ["claude_cross_review.py", "model_discovery.py", "routing_editor.py", "routing_policy.py"])
+                    self.assertEqual(sorted(f.name for f in (bundle / "scripts").iterdir()), sorted(SCRIPTS))
+                    self.assert_host_install(source_repo, base, bundle, host)
+                    self.assert_installed_launchers(root, bundle, host)
                     help_result = subprocess.run([sys.executable, "-B", str(bundle / "scripts/routing_editor.py"), "--help"],
                                                  cwd=root, capture_output=True, text=True, timeout=10)
                     self.assertEqual(help_result.returncode, 0, help_result.stderr)
@@ -164,6 +227,13 @@ class InstallerTests(unittest.TestCase):
                 (editor / "assets").mkdir(exist_ok=True)
                 (editor / "assets" / "stale.js").write_text("stale")
                 (editor / "user-note.txt").write_text("keep note")
+                backups = base / "backups/orchestration-nation"
+                (base / "skills" / NAME / "references" / (OLD_REVIEW_REFERENCE + ".md")).write_text("custom old reference")
+                (backups / (OLD_REVIEW_REFERENCE + ".md")).write_text("earlier old reference")
+            worker = claude / "agents" / (WORKER + ".md")
+            self.assertIn("managed worker definition", worker.read_text(encoding="utf-8"))
+            worker.write_text(worker_text)
+            (claude / "backups/orchestration-nation" / (WORKER + ".md")).write_text("earlier worker backup")
 
             if scenario == "retained_link":
                 old = claude / "skills/clanker-backend-developer"
@@ -182,7 +252,7 @@ class InstallerTests(unittest.TestCase):
                 saved_script = (source_repo / ("wrangle.ps1" if shell == "powershell" else "wrangle.sh")).read_text()
                 linked = None
 
-                if scenario in ("references_parent", "standalone_link", "backup_parent", "backup_directory", "skills_parent"):
+                if scenario in ("references_parent", "standalone_link", "backup_parent", "backup_directory", "skills_parent", "agents_link"):
                     if scenario == "references_parent":
                         original = references.with_name("references-original")
                         references.rename(original)
@@ -199,6 +269,10 @@ class InstallerTests(unittest.TestCase):
                         linked = claude / "backups/orchestration-nation"
                         original = claude / "backups/orchestration-nation-original"
                         linked.rename(original)
+                    elif scenario == "agents_link":
+                        linked = claude / "agents"
+                        original = claude / "agents-original"
+                        linked.rename(original)
                     else:
                         linked = claude / "skills"
                         original = claude / "skills-original"
@@ -214,6 +288,47 @@ class InstallerTests(unittest.TestCase):
                         linked.symlink_to(outside_reference)
                     except OSError:
                         self.skipTest("File symlink creation unavailable")
+                elif scenario in ("old_reference_link", "old_reference_directory"):
+                    linked = references / (OLD_REVIEW_REFERENCE + ".md")
+                    original = linked.with_name(linked.name + ".original")
+                    linked.rename(original)
+                    if scenario == "old_reference_link":
+                        outside_old = outside / "old-reference.md"
+                        outside_old.write_bytes(original.read_bytes())
+                        try:
+                            linked.symlink_to(outside_old)
+                        except OSError:
+                            self.skipTest("File symlink creation unavailable")
+                    else:
+                        linked.mkdir()
+                elif scenario in ("worker_backup_link", "worker_backup_file"):
+                    # Only the unmarked worker needs a backup: remove every retired entry first.
+                    for name in RETIRED:
+                        (references / (name + ".md")).unlink()
+                        shutil.rmtree(claude / "skills" / name)
+                    (references / (OLD_REVIEW_REFERENCE + ".md")).unlink()
+                    linked = claude / "backups/orchestration-nation"
+                    original = claude / "backups/orchestration-nation-original"
+                    linked.rename(original)
+                    if scenario == "worker_backup_link":
+                        self.link_directory(linked, outside)
+                    else:
+                        linked.write_text("not a directory")
+                elif scenario == "worker_link":
+                    linked = claude / "agents" / (WORKER + ".md")
+                    original = linked.with_name(linked.name + ".original")
+                    linked.rename(original)
+                    outside_worker = outside / "worker.md"
+                    outside_worker.write_bytes(original.read_bytes())
+                    try:
+                        linked.symlink_to(outside_worker)
+                    except OSError:
+                        self.skipTest("File symlink creation unavailable")
+                elif scenario == "worker_directory":
+                    linked = claude / "agents" / (WORKER + ".md")
+                    original = linked.with_name(linked.name + ".original")
+                    linked.rename(original)
+                    linked.mkdir()
                 elif scenario == "reference_directory":
                     reference.unlink()
                     reference.mkdir()
@@ -264,8 +379,23 @@ class InstallerTests(unittest.TestCase):
                 for path in later_steps:
                     self.assertEqual(path.read_text(), "later step unchanged")
                 self.assertEqual((outside / "sentinel").read_text(), "outside unchanged")
-                if scenario in ("references_parent", "standalone_link", "backup_parent", "backup_directory", "skills_parent"):
+                if scenario in ("references_parent", "standalone_link", "backup_parent", "backup_directory", "skills_parent", "agents_link"):
                     self.assertEqual(list(outside.iterdir()), [outside / "sentinel"])
+                elif scenario == "old_reference_link":
+                    self.assertEqual(outside_old.read_bytes(), original.read_bytes())
+                    self.assertEqual(set(outside.iterdir()), {outside / "sentinel", outside_old})
+                elif scenario == "old_reference_directory":
+                    self.assertEqual(list(linked.iterdir()), [])
+                elif scenario == "worker_backup_link":
+                    self.assertEqual(list(outside.iterdir()), [outside / "sentinel"])
+                elif scenario == "worker_backup_file":
+                    self.assertEqual(linked.read_text(), "not a directory")
+                elif scenario == "worker_link":
+                    self.assertEqual(outside_worker.read_bytes(), original.read_bytes())
+                    self.assertEqual(set(outside.iterdir()), {outside / "sentinel", outside_worker})
+                    self.assertEqual(original.read_text(encoding="utf-8"), worker_text)
+                elif scenario == "worker_directory":
+                    self.assertEqual(list(linked.iterdir()), [])
                 elif scenario == "reference_link":
                     self.assertEqual(outside_reference.read_bytes(), saved_reference)
                     self.assertEqual(set(outside.iterdir()), {outside / "sentinel", outside_reference})
@@ -287,11 +417,17 @@ class InstallerTests(unittest.TestCase):
                     self.assertEqual((claude / "backups/orchestration-nation" / (RETIRED[0] + "-2.md")).read_bytes(), saved_reference)
                     (source_repo / ("wrangle.ps1" if shell == "powershell" else "wrangle.sh")).write_text(saved_script)
                 elif linked:
-                    if linked.is_symlink():
+                    if linked.is_symlink() or linked.is_file():
                         linked.unlink()
                     else:
                         linked.rmdir()  # Removes the fixture junction, not its target.
                     original.rename(linked)
+                    if scenario.startswith("worker_backup"):
+                        for name in RETIRED:  # Put back the entries removed to isolate the worker preflight.
+                            (references / (name + ".md")).write_bytes(("custom reference " + name).encode())
+                            (claude / "skills" / name).mkdir()
+                            (claude / "skills" / name / "custom.txt").write_text("custom standalone " + name)
+                        (references / (OLD_REVIEW_REFERENCE + ".md")).write_text("custom old reference")
                 elif scenario == "reference_directory":
                     reference.rmdir()
                     reference.write_bytes(saved_reference)
@@ -305,6 +441,16 @@ class InstallerTests(unittest.TestCase):
             for base in (claude, codex):
                 self.assertEqual((base / "skills/unrelated/SKILL.md").read_text(), "untouched")
                 self.assertEqual((base / "skills" / NAME / "references/user-note.txt").read_text(), "keep note")
+                retired_backups = base / "backups/orchestration-nation"
+                self.assertEqual((retired_backups / (OLD_REVIEW_REFERENCE + ".md")).read_text(), "earlier old reference")
+                self.assertEqual((retired_backups / (OLD_REVIEW_REFERENCE + "-2.md")).read_text(), "custom old reference")
+                self.assertFalse((retired_backups / (OLD_REVIEW_REFERENCE + "-3.md")).exists())
+                if base == claude:
+                    self.assertEqual((retired_backups / (WORKER + ".md")).read_text(), "earlier worker backup")
+                    self.assertEqual((retired_backups / (WORKER + "-2.md")).read_text(), worker_text)
+                    self.assertFalse((retired_backups / (WORKER + "-3.md")).exists())
+                else:
+                    self.assertEqual([path.name for path in retired_backups.glob(WORKER + "*")], [])
                 editor = base / "skills" / NAME / "editor"
                 self.assertEqual((editor / "user-note.txt").read_text(), "keep note")
                 if (source_repo / "routing-editor" / "dist").is_dir():
@@ -358,6 +504,32 @@ class InstallerTests(unittest.TestCase):
 
     def test_bash_linked_retired_reference(self):
         self.exercise("bash", built=False, scenario="reference_link")
+
+    def test_powershell_worker_definition_failures(self):
+        for scenario in ("agents_link", "worker_link", "worker_directory"):
+            with self.subTest(scenario=scenario):
+                self.exercise("powershell", built=False, scenario=scenario)
+
+    def test_bash_worker_definition_failures(self):
+        for scenario in ("agents_link", "worker_link", "worker_directory"):
+            with self.subTest(scenario=scenario):
+                self.exercise("bash", built=False, scenario=scenario)
+
+    def test_powershell_old_reference_and_worker_backup_failures(self):
+        for scenario in ("old_reference_link", "old_reference_directory", "worker_backup_link", "worker_backup_file"):
+            with self.subTest(scenario=scenario):
+                self.exercise("powershell", built=False, scenario=scenario)
+
+    def test_bash_old_reference_and_worker_backup_failures(self):
+        for scenario in ("old_reference_link", "old_reference_directory", "worker_backup_link", "worker_backup_file"):
+            with self.subTest(scenario=scenario):
+                self.exercise("bash", built=False, scenario=scenario)
+
+    def test_powershell_worker_marker_is_case_sensitive(self):
+        self.exercise("powershell", built=False, worker_text=WORKER_CASE_VARIANT)
+
+    def test_bash_worker_marker_is_case_sensitive(self):
+        self.exercise("bash", built=False, worker_text=WORKER_CASE_VARIANT)
 
     def test_powershell_fresh_upgrade_repeat(self):
         self.exercise("powershell", built=False)

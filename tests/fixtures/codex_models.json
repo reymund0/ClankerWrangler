@@ -1,0 +1,77 @@
+{
+  "models": [
+    {
+      "slug": "gpt-6.1-sol",
+      "display_name": "GPT-6.1-Sol",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "fixture"
+        },
+        {
+          "effort": "medium",
+          "description": "fixture"
+        },
+        {
+          "effort": "high",
+          "description": "fixture"
+        },
+        {
+          "effort": "xhigh",
+          "description": "fixture"
+        },
+        {
+          "effort": "max",
+          "description": "fixture"
+        },
+        {
+          "effort": "ultra",
+          "description": "fixture"
+        }
+      ],
+      "visibility": "list"
+    },
+    {
+      "slug": "gpt-6-luna",
+      "display_name": "GPT-6-Luna",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "fixture"
+        },
+        {
+          "effort": "medium",
+          "description": "fixture"
+        },
+        {
+          "effort": "high",
+          "description": "fixture"
+        },
+        {
+          "effort": "xhigh",
+          "description": "fixture"
+        },
+        {
+          "effort": "max",
+          "description": "fixture"
+        }
+      ],
+      "visibility": "list"
+    },
+    {
+      "slug": "gpt-5.5",
+      "display_name": "GPT-5.5",
+      "supported_reasoning_levels": [
+        {
+          "effort": "low",
+          "description": "fixture"
+        },
+        {
+          "effort": "medium",
+          "description": "fixture"
+        }
+      ],
+      "visibility": "list"
+    }
+  ]
+}

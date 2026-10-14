@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Coordinate Codex specialists around the user's software-development scope, with explicit model selection, bounded ownership, and OpenSpec-based completion evidence.
+Coordinate native specialists under a Codex or Claude Code orchestration host around the user's software-development scope, with explicit model selection, bounded ownership, and OpenSpec-based completion evidence.
 
 ## Requirements
 

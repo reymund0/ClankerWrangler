@@ -22,7 +22,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         previous_tempdir = tempfile.tempdir
         tempfile.tempdir = str(ignored_temp_root)
         self.addCleanup(setattr, tempfile, "tempdir", previous_tempdir)
-        self.close_job = mock.patch.object(review, "close_review_job").start()
+        self.close_job = mock.patch.object(review.core, "close_review_job").start()
         self.addCleanup(mock.patch.stopall)
 
     def test_snapshot_is_explicit_and_detects_changes(self):
@@ -169,7 +169,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process._review_job = None
         process.communicate.return_value = (json.dumps(envelope), "")
         args = types.SimpleNamespace(max_turns=1, model=None, effort=None, timeout_seconds=1)
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process):
             with self.assertRaisesRegex(review.ReviewError, "envelope"):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "implementation"}, args)
 
@@ -178,7 +178,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process._review_job = None
         process.communicate.side_effect = [subprocess.TimeoutExpired([], 1), ("", "")]
         args = types.SimpleNamespace(max_turns=1, model=None, effort=None, timeout_seconds=1)
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process), mock.patch.object(review, "terminate") as terminate:
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process), mock.patch.object(review.core, "terminate") as terminate:
             with self.assertRaisesRegex(review.ReviewError, "timed out"):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
         terminate.assert_called_once_with(process)
@@ -188,7 +188,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process._review_job = None
         process.communicate.side_effect = [KeyboardInterrupt(), ("", "")]
         args = types.SimpleNamespace(max_turns=1, model=None, effort=None, timeout_seconds=1)
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process), mock.patch.object(review, "terminate") as terminate:
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process), mock.patch.object(review.core, "terminate") as terminate:
             with self.assertRaises(KeyboardInterrupt):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
         terminate.assert_called_once_with(process)
@@ -221,14 +221,14 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         nonzero = mock.Mock(returncode=9)
         nonzero._review_job = None
         nonzero.communicate.return_value = ("token=private", "")
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=nonzero):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=nonzero):
             with self.assertRaisesRegex(review.ReviewError, "code 9") as raised:
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
         self.assertNotIn("private", str(raised.exception))
         oversized = mock.Mock(returncode=0)
         oversized._review_job = None
         oversized.communicate.return_value = ("x" * (review.MAX_OUTPUT_BYTES + 1), "")
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=oversized):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=oversized):
             with self.assertRaisesRegex(review.ReviewError, "bounded output"):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
 
@@ -257,7 +257,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
                 return root / "report.json"
             argv = ["runner", "--manifest", str(manifest_path), "--output-dir", str(root / "out"), "--effort", "medium"]
             changes = {"status": "changed", "attribution": "unattributed", "entries": [{"path": str(manifest_path), "status": "changed", "kind": "manifest", "reason": "manifest changed"}]}
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "configured"}), mock.patch.object(review, "collect_snapshot", return_value=(snapshot, files, "fingerprint")), mock.patch.object(review, "invoke", side_effect=invoke_side_effect), mock.patch.object(review, "compare_source_changes", return_value=changes), mock.patch.object(review, "write_report", side_effect=writer), mock.patch.object(review, "cleanup_snapshot"):
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(review.core, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "configured"}), mock.patch.object(review.core, "collect_snapshot", return_value=(snapshot, files, "fingerprint")), mock.patch.object(review, "invoke", side_effect=invoke_side_effect), mock.patch.object(review.core, "compare_source_changes", return_value=changes), mock.patch.object(review.core, "write_report", side_effect=writer), mock.patch.object(review.core, "cleanup_snapshot"):
                 self.assertEqual(0, review.main())
             self.assertEqual("completed", captured["execution_status"])
             self.assertEqual("clean", captured["verdict"])
@@ -275,7 +275,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
             snapshot = pathlib.Path(tempfile.mkdtemp(prefix="claude-cross-review-"))
             argv = ["runner", "--manifest", str(manifest_path), "--output-dir", str(root / "out"), "--effort", "medium"]
             error_output = io.StringIO()
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stderr", error_output), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", side_effect=AssertionError("invalid manifest resolved Claude")), mock.patch.object(review, "preflight") as preflight, mock.patch.object(review, "collect_snapshot", side_effect=AssertionError("invalid manifest collected evidence")), mock.patch.object(review, "invoke") as invoke:
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stderr", error_output), mock.patch.object(review.core, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", side_effect=AssertionError("invalid manifest resolved Claude")), mock.patch.object(review, "preflight") as preflight, mock.patch.object(review.core, "collect_snapshot", side_effect=AssertionError("invalid manifest collected evidence")), mock.patch.object(review, "invoke") as invoke:
                 self.assertEqual(2, review.main())
             self.assertIn("Required or mapped evidence is excluded", error_output.getvalue())
             self.assertFalse((root / "out").exists())
@@ -288,7 +288,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process = mock.Mock(returncode=0)
         process._review_job = None
         process.communicate.return_value = (json.dumps(denied), "")
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process):
             result = review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
         self.assertTrue(any("denied" in item.lower() for item in result["limitations"]))
 
@@ -296,7 +296,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process = mock.Mock(returncode=0)
         process._review_job = None
         process.communicate.return_value = (json.dumps(exhausted), "")
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process):
             with self.assertRaises(review.ReviewError):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
 
@@ -304,7 +304,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
         process = mock.Mock(returncode=0)
         process._review_job = None
         process.communicate.return_value = (json.dumps(spawned), "")
-        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review, "start_review_process", return_value=process):
+        with tempfile.TemporaryDirectory() as temporary, mock.patch.object(review.core, "start_review_process", return_value=process):
             with self.assertRaisesRegex(review.ReviewError, "nested reviewer delegation"):
                 review.invoke(pathlib.Path("claude.exe"), pathlib.Path(temporary), {"phase": "plan"}, args)
 
@@ -345,7 +345,7 @@ class ClaudeCrossReviewTests(unittest.TestCase):
             argv = ["runner", "--manifest", str(manifest_path), "--output-dir", str(root / "reports"), "--effort", "medium"]
             stdout = io.StringIO()
             stderr = io.StringIO()
-            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr), mock.patch.object(review, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}), mock.patch.object(review, "start_review_process", return_value=process):
+            with mock.patch.object(sys, "argv", argv), mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr), mock.patch.object(review.core, "reservation_root", return_value=root / "reservations"), mock.patch.object(review, "resolve_claude", return_value=pathlib.Path("claude.exe")), mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}), mock.patch.object(review.core, "start_review_process", return_value=process):
                 self.assertEqual(2, review.main())
 
             summary = json.loads(stdout.getvalue().strip().splitlines()[-1])

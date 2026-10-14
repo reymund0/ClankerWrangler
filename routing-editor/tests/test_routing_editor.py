@@ -185,9 +185,9 @@ class StoreTests(unittest.TestCase):
         real_preview = self.store.preview
         calls = 0
         expanded = original + b" " * editor.MAX_DOCUMENT_BYTES
-        def grow_after_validation(*args):
+        def grow_after_validation(*args, **kwargs):
             nonlocal calls
-            result = real_preview(*args)
+            result = real_preview(*args, **kwargs)
             calls += 1
             if calls == 2:
                 path.write_bytes(expanded)
@@ -251,13 +251,13 @@ class StoreTests(unittest.TestCase):
         rev = self.store.read("global")["revision"]
         original_read = self.store.read
         calls = 0
-        def modified_read(scope):
+        def modified_read(scope, host="codex"):
             nonlocal calls
             calls += 1
             # save: preview read, locked revision read, preview read, final read.
             if calls == 4:
                 path.write_text(json.dumps(LUNA), encoding="utf-8")
-            return original_read(scope)
+            return original_read(scope, host)
         with patch.object(self.store, "read", side_effect=modified_read):
             with self.assertRaises(editor.EditorError) as caught:
                 self.store.save("global", EMPTY, rev)
@@ -357,6 +357,118 @@ class StoreTests(unittest.TestCase):
         self.assertFalse(list(outside.iterdir()))
 
 
+CLAUDE_HAIKU = {"schema_version": 1, "interactions": {"implementation": {"model": "haiku", "reasoning": {"mode": "fixed", "effort": "low"}}}}
+CLAUDE_REQUEST = {"interaction": "implementation", "tier": "straightforward", "reason": "Clear bounded task"}
+
+
+class HostStoreTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.store = editor.PreferenceStore(global_config_dir=self.root / "global")
+
+    def test_each_host_has_its_own_fixed_file_under_the_config_directory(self):
+        codex = self.store.target("global", "codex")[1]
+        claude = self.store.target("global", "claude")[1]
+        self.assertEqual((codex.name, claude.name), ("orchestration-routing.json", "orchestration-routing-claude.json"))
+        self.assertEqual(codex.parent, claude.parent)
+        self.assertEqual(self.store.target("global")[1], codex)
+
+    def test_claude_save_leaves_codex_bytes_revision_and_draft_untouched(self):
+        self.store.save("global", LUNA, "missing", "codex")
+        codex_path = self.store.target("global", "codex")[1]
+        before = (codex_path.read_bytes(), self.store.read("global", "codex")["revision"])
+        saved = self.store.save("global", CLAUDE_HAIKU, "missing", "claude")
+        self.assertEqual(saved["host"], "claude")
+        self.assertEqual(saved["scopes"]["global"]["document"], CLAUDE_HAIKU)
+        self.assertEqual((codex_path.read_bytes(), self.store.read("global", "codex")["revision"]), before)
+        self.assertEqual(self.store.read("global", "claude")["document"], CLAUDE_HAIKU)
+        self.assertNotEqual(self.store.read("global", "claude")["revision"], before[1])
+        self.assertFalse(list(self.root.rglob("*.lock")))
+
+    def test_claude_save_never_creates_the_codex_file(self):
+        self.store.save("global", CLAUDE_HAIKU, "missing", "claude")
+        self.assertEqual([path.name for path in (self.root / "global").iterdir()], ["orchestration-routing-claude.json"])
+        self.assertEqual(self.store.read("global", "codex")["revision"], "missing")
+
+    def test_stale_lock_and_stale_revision_are_per_host(self):
+        codex_path = self.store.target("global", "codex")[1]
+        codex_path.parent.mkdir(parents=True)
+        codex_path.with_suffix(".json.lock").write_text('{"pid": 1}', encoding="utf-8")
+        with self.assertRaises(editor.EditorError) as locked:
+            self.store.save("global", LUNA, "missing", "codex")
+        self.assertEqual(locked.exception.status, 409)
+        self.store.save("global", CLAUDE_HAIKU, "missing", "claude")
+        with self.assertRaises(editor.EditorError) as stale:
+            self.store.save("global", CLAUDE_HAIKU, "missing", "claude")
+        self.assertEqual(stale.exception.status, 409)
+        self.assertTrue(codex_path.with_suffix(".json.lock").exists())
+
+    def test_documents_are_validated_against_their_own_host(self):
+        cross_codex = {"schema_version": 1, "interactions": {"codex-review": {"model": "gpt-6.1-sol"}}}
+        cross_claude = {"schema_version": 1, "interactions": {"claude-review": {"model": "opus"}}}
+        for action in (lambda: self.store.preview("global", cross_codex, host="codex"), lambda: self.store.save("global", cross_codex, "missing", "codex"),
+                       lambda: self.store.preview("global", cross_claude, host="claude"), lambda: self.store.save("global", cross_claude, "missing", "claude")):
+            with self.assertRaisesRegex(policy.RoutingError, "is not supported by the"):
+                action()
+        self.assertFalse((self.root / "global").exists())
+        self.store.save("global", {"schema_version": 1, "interactions": {"claude-review": {"model": "opus"}}}, "missing", "codex")
+        path = self.store.target("global", "claude")[1]
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(cross_claude), encoding="utf-8")
+        state = self.store.configuration("claude")
+        self.assertIn("claude-review", state["error"])
+        self.assertIsNone(state["effective"])
+        self.assertIsNone(self.store.configuration("codex").get("error"))
+
+    def test_configuration_reports_host_catalog_and_effective_routes(self):
+        claude = self.store.configuration("claude")
+        self.assertEqual((claude["host"], claude["policy_version"]), ("claude", "7"))
+        self.assertEqual([(item["id"], item["execution"], item["provider"]) for item in claude["bundle"]["interactions"]],
+                         [("planning", "native", "claude"), ("implementation", "native", "claude"), ("native-review", "native", "claude"),
+                          ("visual-review", "native", "claude"), ("codex-review", "external", "codex")])
+        self.assertEqual(claude["effective"]["host"], "claude")
+        self.assertEqual(claude["effective"]["interactions"]["implementation"]["route"]["model"], "haiku")
+        codex = self.store.configuration()
+        self.assertEqual((codex["host"], codex["bundle"]["interactions"][-1]["id"], codex["bundle"]["interactions"][-1]["provider"]), ("codex", "claude-review", "claude"))
+        self.assertEqual(codex["effective"]["interactions"]["implementation"]["route"]["model"], "gpt-5.6-terra")
+        self.assertEqual((codex["bundle"]["host"], claude["bundle"]["host"]), ("codex", "claude"))
+        self.assertNotIn("hosts", codex["bundle"])
+        self.assertEqual(claude["bundle"]["defaults"]["interactions"]["implementation"]["model"], "haiku")
+        self.assertEqual(codex["bundle"]["defaults"]["interactions"]["implementation"]["model"], "gpt-5.6-terra")
+        self.assertEqual(self.store.configuration("claude")["scopes"]["global"]["path"], str(self.store.target("global", "claude")[1]))
+
+    def test_preview_matches_the_policy_resolver_for_both_hosts(self):
+        capabilities = {"claude": {"provider": "claude", "source": "fixture", "models": {"haiku": ["low", "medium"]}},
+                        "codex": {"provider": "codex", "source": "fixture", "models": {"gpt-5.6-luna": ["medium", "high"]}}}
+        documents = {"claude": CLAUDE_HAIKU, "codex": LUNA}
+        for host in ("claude", "codex"):
+            request = {**CLAUDE_REQUEST, "capabilities": capabilities[host], "overrides": ["CLAUDE_CODE_EFFORT_LEVEL"]}
+            preview = self.store.preview("global", documents[host], request, host)
+            snapshot = policy.snapshot_from_documents(documents[host], sources={"global": str(self.store.target("global", host)[1])}, host=host)
+            self.assertEqual(preview["decision"], policy.resolve(snapshot, request))
+            self.assertEqual(preview["effective"], policy.effective_configuration(snapshot))
+            self.assertEqual((preview["decision"]["host"], preview["decision"]["provider"], preview["decision"]["execution"]), (host, host, "native"))
+            self.assertEqual(preview["decision"]["capability_status"], "blocked_by_override")
+        self.assertFalse((self.root / "global").exists())
+
+    def test_unknown_host_is_rejected_before_any_file_access(self):
+        for host in ("windsurf", "", None, 7, ["codex"], "Codex", "codex "):
+            for action in (lambda: self.store.read("global", host), lambda: self.store.target("global", host),
+                           lambda: self.store.configuration(host), lambda: self.store.preview("global", EMPTY, host=host),
+                           lambda: self.store.save("global", EMPTY, "missing", host), lambda: self.store.snapshot("global", EMPTY, host)):
+                with self.subTest(host=host), self.assertRaisesRegex(editor.EditorError, "Invalid orchestration host"):
+                    action()
+        self.assertFalse((self.root / "global").exists())
+
+    def test_the_default_global_directory_keeps_the_codex_file_name(self):
+        with patch.object(Path, "home", return_value=self.root):
+            store = editor.PreferenceStore()
+        self.assertEqual(store.target("global", "codex")[1], (self.root / ".clanker" / "orchestration-routing.json").resolve())
+        self.assertEqual(store.target("global", "claude")[1], (self.root / ".clanker" / "orchestration-routing-claude.json").resolve())
+
+
 class HTTPTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -365,7 +477,7 @@ class HTTPTests(unittest.TestCase):
         self.assets = self.root / "assets"
         self.assets.mkdir()
         (self.assets / "index.html").write_text("<!doctype html><title>Editor</title>")
-        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "6"}))
+        (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": "7"}))
         self.store = editor.PreferenceStore(global_config_dir=self.root / "prefs")
         self.catalog = {"providers": {provider: {"status": "unavailable", "source": provider + "-cli",
                         "cli_version": None, "updated_at": None, "error": "CLI unavailable", "models": []}
@@ -425,6 +537,44 @@ class HTTPTests(unittest.TestCase):
         status, body, _ = self.request("POST", "/api/save", {"scope": "global", "document": LUNA, "revision": "missing"})
         self.assertEqual(status, 200, body)
         self.assertEqual(self.store.read("global")["document"], LUNA)
+
+    def test_host_scoped_config_preview_and_save(self):
+        for host, path in (("codex", "/api/config"), ("claude", "/api/config?host=claude")):
+            status, body, _ = self.request("GET", path)
+            self.assertEqual(status, 200, body)
+            config = json.loads(body)
+            self.assertEqual((config["host"], config["scopes"]["global"]["revision"]), (host, "missing"))
+            self.assertTrue(config["scopes"]["global"]["path"].endswith("orchestration-routing-claude.json" if host == "claude" else "orchestration-routing.json"))
+        status, body, _ = self.request("POST", "/api/save", {"scope": "global", "host": "codex", "document": LUNA, "revision": "missing"})
+        self.assertEqual(status, 200, body)
+        codex_path = self.store.target("global", "codex")[1]
+        codex_before = (codex_path.read_bytes(), self.store.read("global", "codex")["revision"])
+        status, body, _ = self.request("POST", "/api/preview", {"scope": "global", "host": "claude", "document": CLAUDE_HAIKU, "request": CLAUDE_REQUEST})
+        self.assertEqual(status, 200, body)
+        preview = json.loads(body)
+        self.assertEqual((preview["host"], preview["decision"]["host"], preview["decision"]["model"], preview["decision"]["effort"]), ("claude", "claude", "haiku", "low"))
+        self.assertFalse(self.store.target("global", "claude")[1].exists())
+        status, body, _ = self.request("POST", "/api/save", {"scope": "global", "host": "claude", "document": CLAUDE_HAIKU, "revision": "missing"})
+        self.assertEqual(status, 200, body)
+        self.assertEqual(json.loads(body)["host"], "claude")
+        self.assertEqual((codex_path.read_bytes(), self.store.read("global", "codex")["revision"]), codex_before)
+        self.assertEqual(self.store.read("global", "claude")["document"], CLAUDE_HAIKU)
+
+    def test_unknown_host_is_rejected_before_any_file_access(self):
+        for path in ("/api/config?host=windsurf", "/api/config?host=", "/api/config?host=codex&host=claude", "/api/config?host=codex&x=1", "/api/config?other=1"):
+            self.assertEqual(self.request("GET", path)[0], 400, path)
+        with patch.object(self.store, "preview") as preview, patch.object(self.store, "save") as save, patch.object(self.store, "configuration") as configuration:
+            self.assertEqual(self.request("GET", "/api/config?host=windsurf")[0], 400)
+            for host in ("windsurf", "", None, 5, ["codex"]):
+                for endpoint, body in (("/api/preview", {"scope": "global", "host": host, "document": EMPTY}),
+                                       ("/api/save", {"scope": "global", "host": host, "document": EMPTY, "revision": "missing"})):
+                    with self.subTest(endpoint=endpoint, host=host):
+                        status, response, _ = self.request("POST", endpoint, body)
+                        self.assertEqual(status, 400, response)
+            preview.assert_not_called()
+            save.assert_not_called()
+            configuration.assert_not_called()
+        self.assertFalse((self.root / "prefs").exists())
 
     def test_project_scope_rejected_before_store_access(self):
         with patch.object(self.store, "preview") as preview, patch.object(self.store, "save") as save:
@@ -517,7 +667,7 @@ class HTTPTests(unittest.TestCase):
         (self.assets / "compatibility.json").write_text('{"schema_version":2,"policy_version":"1"}')
         with self.assertRaises(editor.EditorError):
             editor.asset_root(self.assets)
-        for version in ("2", "4", "5"):
+        for version in ("2", "4", "5", "6"):
             (self.assets / "compatibility.json").write_text(json.dumps({"schema_version": 1, "policy_version": version}))
             with self.subTest(version=version), self.assertRaisesRegex(editor.EditorError, "rebuild and reinstall"):
                 editor.asset_root(self.assets)

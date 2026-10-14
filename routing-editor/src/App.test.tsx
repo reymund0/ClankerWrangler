@@ -7,16 +7,16 @@ import type { ConfigResponse } from './types'
 import bundledPolicy from '../../subagents/routing/policy.json'
 
 const config: ConfigResponse = {
-  schema_version: 1, policy_version: '6',
+  schema_version: 1, policy_version: '7', host: 'codex' as const,
   scopes: { global: { path: '/home/test/.clanker/orchestration-routing.json', revision: 'abc', document: { schema_version: 1 } } },
   bundle: {
-    schema_version: 1, policy_version: '6',
+    schema_version: 1, policy_version: '7', host: 'codex' as const,
     interactions: [
-      { id: 'planning', label: 'Planning and design', provider: 'codex', default_model: 'gpt-5.6-sol' },
-      { id: 'implementation', label: 'Implementation and testing', provider: 'codex', default_model: 'gpt-5.6-terra' },
-      { id: 'native-review', label: 'Native review', provider: 'codex', default_model: 'gpt-5.6-sol' },
-      { id: 'visual-review', label: 'Visual review', provider: 'codex', default_model: 'gpt-5.6-sol' },
-      { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5' },
+      { id: 'planning', label: 'Planning and design', provider: 'codex', default_model: 'gpt-5.6-sol', execution: 'native' },
+      { id: 'implementation', label: 'Implementation and testing', provider: 'codex', default_model: 'gpt-5.6-terra', execution: 'native' },
+      { id: 'native-review', label: 'Native review', provider: 'codex', default_model: 'gpt-5.6-sol', execution: 'native' },
+      { id: 'visual-review', label: 'Visual review', provider: 'codex', default_model: 'gpt-5.6-sol', execution: 'native' },
+      { id: 'claude-review', label: 'Claude review', provider: 'claude', default_model: 'claude-opus-5', execution: 'external' },
     ],
     roles: [],
     models: [{ id: 'gpt-5.6-terra', label: 'Terra', provider: 'codex', efforts: ['low', 'medium', 'high', 'xhigh', 'max'] }, { id: 'gpt-5.6-luna', label: 'Luna', provider: 'codex', efforts: ['medium', 'high', 'xhigh', 'max'] }, { id: 'claude-opus-5', label: 'Opus', provider: 'claude', efforts: ['low', 'medium', 'high'] }],
@@ -284,7 +284,7 @@ describe('routing editor', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
     expect(fetchMock.mock.calls[1][0]).toBe('/api/save')
-    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scope: 'global', revision: 'abc', document: { schema_version: 1 } })
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ scope: 'global', host: 'codex', revision: 'abc', document: { schema_version: 1 } })
   })
 
   it('hides Adaptive effort controls and lets users select the first fixed effort', async () => {
@@ -885,7 +885,7 @@ describe('agent-first cards', () => {
     const completion = deferred<Response>()
     const fetchStarted = deferred<void>()
     const fetchMock = vi.fn((path: string) => {
-      if (path === '/api/config') return Promise.resolve(response(loaded))
+      if (path.startsWith('/api/config')) return Promise.resolve(response(loaded))
       if (path === '/api/wrangler') { fetchStarted.resolve(undefined); return completion.promise }
       return Promise.resolve(response({ effective: loaded.effective, decision: null }))
     })
@@ -997,5 +997,232 @@ describe('agent-first cards', () => {
     await inspectWorker('UI developer')
     const implementation = [...activePanel().querySelectorAll<HTMLButtonElement>('.route-cell')].find((button) => button.getAttribute('aria-label')?.startsWith('UI developer, Implementation and testing:'))!
     expect(implementation.getAttribute('aria-label')).toContain('fixed · high')
+  })
+})
+
+describe('orchestration hosts', () => {
+  const route = (model: string) => ({ route: { model, reasoning: { mode: 'adaptive' as const } }, provenance: { model: 'bundle.defaults', reasoning: 'bundle.defaults' }, specialists: {} })
+
+  function hostConfigs() {
+    const codex = structuredClone(config)
+    codex.bundle.roles = [{ id: 'clanker-backend-developer', label: 'Backend developer' }]
+    const claude: ConfigResponse = structuredClone(codex)
+    claude.host = 'claude'
+    claude.scopes.global = { path: '/home/test/.clanker/orchestration-routing-claude.json', revision: 'claude-1', document: { schema_version: 1 } }
+    claude.bundle.host = 'claude'
+    claude.bundle.interactions = [
+      { id: 'planning', label: 'Planning and design', provider: 'claude', default_model: 'sonnet', execution: 'native' },
+      { id: 'implementation', label: 'Implementation and testing', provider: 'claude', default_model: 'haiku', execution: 'native' },
+      { id: 'native-review', label: 'Native review', provider: 'claude', default_model: 'sonnet', execution: 'native' },
+      { id: 'visual-review', label: 'Visual review', provider: 'claude', default_model: 'sonnet', execution: 'native' },
+      { id: 'codex-review', label: 'Codex cross-review', provider: 'codex', default_model: 'gpt-6.1-sol', execution: 'external' },
+    ]
+    claude.effective = { interactions: {
+      planning: route('sonnet'), implementation: route('haiku'), 'native-review': route('sonnet'), 'visual-review': route('sonnet'), 'codex-review': route('gpt-6.1-sol'),
+    }, profiles: {} }
+    return { codex, claude }
+  }
+
+  function hostFetch(configs: ReturnType<typeof hostConfigs>, saveErrors: Partial<Record<'codex' | 'claude', string>> = {}) {
+    return vi.fn((path: string, init?: RequestInit) => {
+      if (path === '/api/config?host=codex') return Promise.resolve(response(configs.codex))
+      if (path === '/api/config?host=claude') return Promise.resolve(response(configs.claude))
+      if (path === '/api/preview') {
+        const body = JSON.parse(String(init?.body)) as { host: 'codex' | 'claude' }
+        return Promise.resolve(response({ effective: configs[body.host].effective, decision: null }))
+      }
+      if (path === '/api/save') {
+        const body = JSON.parse(String(init?.body)) as { host: 'codex' | 'claude'; document: ConfigResponse['scopes']['global']['document'] }
+        if (saveErrors[body.host]) return Promise.resolve(response({ error: saveErrors[body.host] }, 400))
+        const saved = structuredClone(configs[body.host])
+        saved.scopes.global = { ...saved.scopes.global, revision: `${body.host}-saved`, document: body.document }
+        return Promise.resolve(response(saved))
+      }
+      return Promise.reject(new Error('unexpected request ' + path))
+    })
+  }
+
+  const hostButton = (name: string) => [...document.querySelectorAll<HTMLButtonElement>('.host-switch button')].find((button) => button.textContent?.startsWith(name))!
+  const calls = (fetchMock: ReturnType<typeof vi.fn>, path: string) => fetchMock.mock.calls.filter(([url]) => url === path)
+
+  it('offers a host selector that loads only the visible host until the other is chosen', async () => {
+    const configs = hostConfigs()
+    const fetchMock = hostFetch(configs)
+    await render(fetchMock, 'Worker routes')
+    expect(document.querySelector('.host-switch')?.getAttribute('aria-label')).toBe('Orchestration host')
+    expect(hostButton('Codex host').getAttribute('aria-pressed')).toBe('true')
+    expect(hostButton('Claude host').getAttribute('aria-pressed')).toBe('false')
+    expect(document.querySelector('.header-path code')?.textContent).toBe('/home/test/.clanker/orchestration-routing.json')
+    expect(calls(fetchMock, '/api/config?host=codex')).toHaveLength(1)
+    expect(calls(fetchMock, '/api/config?host=claude')).toHaveLength(0)
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    expect(calls(fetchMock, '/api/config?host=claude')).toHaveLength(1)
+    expect(hostButton('Claude host').getAttribute('aria-pressed')).toBe('true')
+    expect(document.querySelector('.header-path code')?.textContent).toBe('/home/test/.clanker/orchestration-routing-claude.json')
+  })
+
+  it('shows the Claude-host matrix with Claude native models and a Codex cross-review row', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    await render(hostFetch(configs), 'Worker routes')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(180) })
+    await openTab('Worker routes')
+    const panel = activePanel()
+    expect([...panel.querySelectorAll('.route-matrix thead th')].map((cell) => cell.textContent)).toEqual([
+      'Specialist', 'Agent default', 'Planning and design', 'Implementation and testing', 'Native review', 'Visual review'])
+    expect(panel.textContent).toContain('Codex cross-review')
+    expect(panel.textContent).not.toContain('Claude cross-review')
+    expect([...panel.querySelectorAll('.matrix-row')]).toHaveLength(2)
+    expect(panel.querySelector('.claude-row')?.textContent).toContain('gpt-6.1-sol')
+    const implementation = [...panel.querySelectorAll<HTMLButtonElement>('.route-cell')].find((cell) => cell.getAttribute('aria-label')?.startsWith('Backend developer, Implementation and testing:'))!
+    expect(implementation.getAttribute('aria-label')).toContain('haiku')
+  })
+
+  it('draws model choices from the provider of each Claude-host route', async () => {
+    const configs = hostConfigs()
+    await render(hostFetch(configs), 'Worker routes')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await openTab('Activity defaults')
+    const implementation = [...activityModel('Implementation and testing').options].map((option) => option.value)
+    expect(implementation).toContain('claude-opus-5')
+    expect(implementation.filter((value) => value.startsWith('gpt-'))).toEqual([])
+    await openTab('Worker routes')
+    const external = [...activePanel().querySelectorAll<HTMLButtonElement>('.specialist-select')].find((button) => button.textContent?.includes('Codex cross-review'))!
+    await act(async () => { external.click() })
+    expect(inspector().querySelector('h2')?.textContent).toBe('Codex cross-review')
+    const choices = [...inspector().querySelectorAll<HTMLSelectElement>('.model-picker select')[0].options].map((option) => option.value)
+    expect(choices).toContain('gpt-5.6-terra')
+    expect(choices).not.toContain('claude-opus-5')
+  })
+
+  it('keeps each host draft, unsaved count and revision when switching', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    const fetchMock = hostFetch(configs)
+    await render(fetchMock, 'Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'gpt-5.6-luna')
+    expect(hostButton('Codex host').textContent).toContain('1 unsaved')
+    expect(document.querySelector('.save-state')?.textContent).toBe('1 unsaved change')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    expect(hostButton('Codex host').textContent).toContain('1 unsaved')
+    expect(hostButton('Claude host').textContent).not.toContain('unsaved')
+    expect(document.querySelector('.save-state')?.textContent).toBe('All changes saved')
+    await openTab('Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'claude-opus-5')
+    expect(hostButton('Claude host').textContent).toContain('1 unsaved')
+    expect(hostButton('Codex host').textContent).toContain('1 unsaved')
+    await act(async () => { hostButton('Codex host').click() })
+    await openTab('Activity defaults')
+    expect(activityModel('Implementation and testing').value).toBe('gpt-5.6-luna')
+    expect(calls(fetchMock, '/api/config?host=codex')).toHaveLength(1)
+    expect(calls(fetchMock, '/api/config?host=claude')).toHaveLength(1)
+    await act(async () => { hostButton('Claude host').click() })
+    await openTab('Activity defaults')
+    expect(activityModel('Implementation and testing').value).toBe('claude-opus-5')
+  })
+
+  it('saves only the selected host with that host revision and keeps the other draft', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    const fetchMock = hostFetch(configs)
+    await render(fetchMock, 'Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'gpt-5.6-luna')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await openTab('Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'claude-opus-5')
+    await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
+    const saves = calls(fetchMock, '/api/save').map(([, init]) => JSON.parse(String((init as RequestInit).body)))
+    expect(saves).toEqual([{ scope: 'global', host: 'claude', revision: 'claude-1', document: { schema_version: 1, interactions: { implementation: { model: 'claude-opus-5' } } } }])
+    expect(hostButton('Claude host').textContent).not.toContain('unsaved')
+    expect(hostButton('Codex host').textContent).toContain('1 unsaved')
+    await act(async () => { hostButton('Codex host').click() })
+    await openTab('Activity defaults')
+    expect(activityModel('Implementation and testing').value).toBe('gpt-5.6-luna')
+  })
+
+  it('keeps a host field error across a host switch without showing it on the other host', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    await render(hostFetch(configs, { codex: 'global.interactions.planning.model: save rejected' }), 'Activity defaults')
+    await setInput(activityModel('Planning and design'), 'gpt-5.6-luna')
+    await act(async () => { actionButton('Save global preferences').click(); await Promise.resolve() })
+    expect(document.getElementById('interactions.planning-model-error')?.textContent).toContain('save rejected')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await openTab('Activity defaults')
+    expect(document.getElementById('interactions.planning-model-error')).toBeNull()
+    expect(document.querySelector('.alert-stack')).toBeNull()
+    await act(async () => { hostButton('Codex host').click() })
+    await openTab('Activity defaults')
+    expect(document.getElementById('interactions.planning-model-error')?.textContent).toContain('save rejected')
+    expect(document.querySelector('.alert-stack')?.textContent).toContain('save rejected')
+  })
+
+  it('exports the active host draft under that host filename', async () => {
+    vi.useFakeTimers()
+    const downloads: string[] = []
+    const urlStatics = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL }
+    Object.assign(URL, { createObjectURL: () => 'blob:draft', revokeObjectURL: () => undefined })
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) { downloads.push(this.download) })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const configs = hostConfigs()
+    await render(hostFetch(configs), 'Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'gpt-5.6-luna')
+    await act(async () => { actionButton('Export draft & reload').click() })
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await openTab('Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'claude-opus-5')
+    await act(async () => { actionButton('Export draft & reload').click() })
+    expect(downloads).toEqual(['routing-codex-draft.json', 'routing-claude-draft.json'])
+    expect(confirm).toHaveBeenCalledTimes(2)
+    vi.restoreAllMocks()
+    Object.assign(URL, urlStatics)
+    if (!urlStatics.createObjectURL) { Reflect.deleteProperty(URL, 'createObjectURL'); Reflect.deleteProperty(URL, 'revokeObjectURL') }
+  })
+
+  it('resets only the active host draft', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    configs.claude.scopes.global.document = { schema_version: 1, interactions: { implementation: { model: 'claude-opus-5' } } }
+    await render(hostFetch(configs), 'Activity defaults')
+    await setInput(activityModel('Implementation and testing'), 'gpt-5.6-luna')
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await openTab('Activity defaults')
+    expect(activityModel('Implementation and testing').value).toBe('claude-opus-5')
+    await act(async () => { actionButton('Reset global preferences').click() })
+    expect(document.querySelector('.save-state')?.textContent).toBe('1 unsaved change')
+    expect(hostButton('Claude host').textContent).toContain('1 unsaved')
+    expect(activityModel('Implementation and testing').value).not.toBe('claude-opus-5')
+    await act(async () => { hostButton('Codex host').click() })
+    await openTab('Activity defaults')
+    expect(activityModel('Implementation and testing').value).toBe('gpt-5.6-luna')
+    expect(hostButton('Codex host').textContent).toContain('1 unsaved')
+  })
+
+  it('sends the selected host with every preview request', async () => {
+    vi.useFakeTimers()
+    const configs = hostConfigs()
+    const fetchMock = hostFetch(configs)
+    await render(fetchMock, 'Activity defaults')
+    await act(async () => { await vi.advanceTimersByTimeAsync(180) })
+    await act(async () => { hostButton('Claude host').click() })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await vi.advanceTimersByTimeAsync(180) })
+    await openTab('Preview a route')
+    await act(async () => { actionButton('Preview route', previewForm()).click(); await Promise.resolve() })
+    const previews = calls(fetchMock, '/api/preview').map(([, init]) => JSON.parse(String((init as RequestInit).body)) as { host: string; request?: { interaction: string } })
+    expect(previews.map((body) => body.host)).toEqual(['codex', 'claude', 'claude'])
+    expect(previews[2].request?.interaction).toBe('implementation')
+    const activities = [...previewForm().querySelectorAll<HTMLOptionElement>('label select option')].map((option) => option.textContent)
+    expect(activities).toContain('Codex cross-review')
+    expect(activities).not.toContain('Claude review')
   })
 })

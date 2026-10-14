@@ -72,7 +72,7 @@ class GuidancePathReadinessTests(unittest.TestCase):
         stderr = io.StringIO()
         with contextlib.ExitStack() as stack:
             stack.enter_context(mock.patch.object(sys, "argv", argv))
-            stack.enter_context(mock.patch.object(review, "reservation_root", return_value=self.reservations))
+            stack.enter_context(mock.patch.object(review.core, "reservation_root", return_value=self.reservations))
             for patcher in [*self.no_claude, *patches]:
                 stack.enter_context(patcher)
             stack.enter_context(contextlib.redirect_stdout(stdout))
@@ -165,12 +165,22 @@ class GuidancePathReadinessTests(unittest.TestCase):
 
         code, _, report, output = self.invoke_prepare(
             self.manifest(guidance_paths=[str(guidance)]),
-            patches=[mock.patch.object(review, "collect_snapshot", side_effect=capture_unrelated)],
+            patches=[mock.patch.object(review.core, "collect_snapshot", side_effect=capture_unrelated)],
         )
 
         self.assertEqual(2, code, output)
         self.assertEqual("blocked", report["readiness"]["status"])
         self.assertTrue(any(item["subject"] == str(guidance) for item in report["readiness"]["blockers"]))
+
+    def test_shared_cross_review_reference_prepares_as_guidance(self):
+        subagents = Path(__file__).resolve().parents[1] / "subagents"
+        shared = subagents / "clanker-cross-review.md"
+        self.assertTrue(shared.is_file())
+        self.assertFalse((subagents / "clanker-claude-cross-review.md").exists())
+        code, _, report, output = self.invoke_prepare(self.manifest(guidance_paths=[str(shared)]))
+        self.assertEqual(0, code, output)
+        self.assertEqual("ready", report["readiness"]["status"])
+        self.assertEqual([str(shared)], [item["path"] for item in report["source_evidence"]["guidance"]])
 
     def test_empty_guidance_capture_blocks_and_missing_guidance_file_blocks(self):
         guidance = self.root / "role.md"
@@ -185,7 +195,7 @@ class GuidancePathReadinessTests(unittest.TestCase):
         with self.subTest("empty capture"):
             code, _, report, output = self.invoke_prepare(
                 self.manifest(guidance_paths=[str(guidance)]),
-                patches=[mock.patch.object(review, "collect_snapshot", side_effect=omit_guidance)],
+                patches=[mock.patch.object(review.core, "collect_snapshot", side_effect=omit_guidance)],
             )
             self.assertEqual(2, code, output)
             self.assertEqual("blocked", report["readiness"]["status"])

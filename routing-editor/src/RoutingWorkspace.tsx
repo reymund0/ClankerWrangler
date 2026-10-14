@@ -2,9 +2,9 @@ import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react'
 import { api, ApiError } from './api'
 import { WranglerPanel } from './WranglerPanel'
 import { clone, emptyPreferences, getOwnRoute, reasoningFor, resetAgentField, resetAgentRoute, resetField, resetRoute, updateAgentRoute, updateRoute } from './draft'
-import { specialistChoices } from './specialists'
+import { isNative, specialistChoices } from './specialists'
 import { deriveAgentState } from './routePresentation'
-import type { AdaptiveProfile, AgentRoute, ConfigResponse, Decision, EffectiveRoute, Interaction, ModelCatalogResponse, Preferences, Reasoning, Route } from './types'
+import type { AdaptiveProfile, AgentRoute, ConfigResponse, Decision, EffectiveRoute, Host, Interaction, ModelCatalogResponse, Preferences, Reasoning, Route } from './types'
 
 const tiers = ['straightforward', 'involved', 'demanding'] as const
 const tierLabels: Record<typeof tiers[number], string> = { straightforward: 'Straightforward', involved: 'Involved', demanding: 'Demanding' }
@@ -15,6 +15,10 @@ const tierDefinitions: Record<typeof tiers[number], string> = {
 }
 const risks = ['security', 'data-integrity', 'recovery', 'cross-layer', 'uncertainty', 'performance'] as const
 type Provider = 'codex' | 'claude'
+const hosts: readonly Host[] = ['codex', 'claude']
+const providerLabel = (provider: Provider): string => provider === 'codex' ? 'Codex' : 'Claude'
+const externalInteraction = (config: ConfigResponse): Interaction | undefined => config.bundle.interactions.find((item) => item.execution === 'external')
+const nativeInteractions = (config: ConfigResponse): Interaction[] => config.bundle.interactions.filter(isNative)
 type Choice = { id: string; label: string }
 type Screen = 'routes' | 'activities' | 'profiles' | 'preview'
 type Prefill = { interaction: string; role: string; serial: number }
@@ -139,7 +143,7 @@ function RouteEditor({ config, catalog, document, interaction, role, errors, onC
   const own = getOwnRoute(document, interaction, role)
   const effective = effectiveRoute(config, interaction, role)
   const route = effective.route ?? {}
-  const provider = config.bundle.interactions.find((item) => item.id === interaction)?.provider ?? 'codex'
+  const provider = config.bundle.interactions.find((item) => item.id === interaction)?.provider ?? config.bundle.host
   const valueModel = own?.model ?? route.model ?? ''
   const valueReasoning: Reasoning = own?.reasoning ?? route.reasoning ?? { mode: 'adaptive' }
   const path = `interactions.${interaction}${role ? `.specialists.${role}` : ''}`
@@ -202,7 +206,8 @@ function WorkerMatrix({ config, document, selectedRole, errors, onSelect }: {
   errors: Record<string, string>
   onSelect: (role: string, activity?: string) => void
 }) {
-  const interactions = config.bundle.interactions.filter((item) => item.provider === 'codex')
+  const interactions = nativeInteractions(config)
+  const external = externalInteraction(config)
   return <div className="matrix-shell">
     <div className="matrix-scroll"><table className="route-matrix"><caption className="sr-only">Worker routes by activity</caption><thead><tr><th scope="col">Specialist</th><th scope="col">Agent default</th>{interactions.map((item) => <th scope="col" key={item.id}>{item.label}</th>)}</tr></thead><tbody>
       {config.bundle.roles.map((role) => {
@@ -234,14 +239,15 @@ function WorkerMatrix({ config, document, selectedRole, errors, onSelect }: {
           })}
         </tr>
       })}
-      {config.bundle.interactions.filter((item) => item.id === 'claude-review').map((interaction) => {
+      {(external ? [external] : []).map((interaction) => {
         const route = effectiveRoute(config, interaction.id).route
         const own = getOwnRoute(document, interaction.id)
         const model = own?.model ?? route?.model ?? ''
+        const crossReview = `${providerLabel(interaction.provider)} cross-review`
         return <tr className="matrix-row claude-row" key={interaction.id}>
-          <th scope="row" className="matrix-specialist"><button type="button" className="specialist-select" onClick={() => onSelect('claude-review')} aria-pressed={selectedRole === 'claude-review'}><strong>Claude cross-review</strong><span className="mono">{interaction.id}</span></button></th>
-          <td className="matrix-claude-cell" colSpan={interactions.length + 1}><button type="button" className="route-cell state-claude" onClick={() => onSelect('claude-review')} aria-label={`Claude cross-review: ${model || 'Unresolved'}`}>
-            <RouteSummary route={{ model, reasoning: own?.reasoning ?? route?.reasoning }} /><span className="state-tag">{own?.model || own?.reasoning ? 'Set globally' : 'Inherited'}</span>{model && isClaudeAlias(model) && <span className="badge">Alias · resolution may change</span>}
+          <th scope="row" className="matrix-specialist"><button type="button" className="specialist-select" onClick={() => onSelect(interaction.id)} aria-pressed={selectedRole === interaction.id}><strong>{crossReview}</strong><span className="mono">{interaction.id}</span></button></th>
+          <td className="matrix-claude-cell" colSpan={interactions.length + 1}><button type="button" className="route-cell state-claude" onClick={() => onSelect(interaction.id)} aria-label={`${crossReview}: ${model || 'Unresolved'}`}>
+            <RouteSummary route={{ model, reasoning: own?.reasoning ?? route?.reasoning }} /><span className="state-tag">{own?.model || own?.reasoning ? 'Set globally' : 'Inherited'}</span>{model && interaction.provider === 'claude' && isClaudeAlias(model) && <span className="badge">Alias · resolution may change</span>}
           </button></td>
         </tr>
       })}
@@ -260,7 +266,9 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
   onChange: (next: Preferences, changedPaths?: string[]) => void
   onPreview: (interaction: string, role: string) => void
 }) {
-  const claude = roleId === 'claude-review'
+  const external = externalInteraction(config)
+  const claude = Boolean(external) && roleId === external?.id
+  const host = config.bundle.host
   const role = config.bundle.roles.find((item) => item.id === roleId)
   const [expandedActivity, setExpandedActivity] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
@@ -278,12 +286,12 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
   }, [roleId, exceptionErrorKeys])
 
   if (claude) {
-    const interaction = config.bundle.interactions.find((item) => item.id === 'claude-review')
-    if (!interaction) return <aside className="inspector empty"><h2>Claude route</h2><p>No Claude cross-review activity is configured.</p></aside>
+    const interaction = external
+    if (!interaction) return <aside className="inspector empty"><h2>Cross-review route</h2><p>No external cross-review activity is configured.</p></aside>
     const own = getOwnRoute(document, interaction.id)
     const effectiveModel = own?.model ?? effectiveRoute(config, interaction.id).route?.model ?? ''
-    return <aside className="inspector" aria-labelledby="inspector-title"><div className="inspector-heading"><div><p className="eyebrow">Selected route</p><h2 id="inspector-title">Claude cross-review</h2><p className="mono">{interaction.id}</p></div><span className="badge">claude</span></div>
-      {effectiveModel && isClaudeAlias(effectiveModel) && <p className="alias-note">Alias · resolution may change when the CLI resolves this route.</p>}
+    return <aside className="inspector" aria-labelledby="inspector-title"><div className="inspector-heading"><div><p className="eyebrow">Selected route</p><h2 id="inspector-title">{providerLabel(interaction.provider)} cross-review</h2><p className="mono">{interaction.id}</p></div><span className="badge">{interaction.provider}</span></div>
+      {effectiveModel && interaction.provider === 'claude' && isClaudeAlias(effectiveModel) && <p className="alias-note">Alias · resolution may change when the CLI resolves this route.</p>}
       <RouteEditor config={config} catalog={catalog} document={document} interaction={interaction.id} errors={errors} onChange={onChange} />
       <button type="button" className="text-button" onClick={() => onChange(resetRoute(document, interaction.id), [`interactions.${interaction.id}`])} disabled={!own?.model && !own?.reasoning}>Reset route to inherited</button>
       <button type="button" className="primary inspector-preview" onClick={() => onPreview(interaction.id, '')}>Preview a decision for this route</button>
@@ -300,17 +308,17 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
   const model = state.valueModel
   const reasoning = state.valueReasoning
   const selectedEffort = reasoning?.mode === 'fixed' ? reasoning.effort : ''
-  const effort = state.modelMixed && !own?.model ? mixedEffortChoices(config, catalog, 'codex', state.actualModels, selectedEffort) : effortChoices(config, catalog, 'codex', model, selectedEffort)
+  const effort = state.modelMixed && !own?.model ? mixedEffortChoices(config, catalog, host, state.actualModels, selectedEffort) : effortChoices(config, catalog, host, model, selectedEffort)
   const update = (change: Partial<AgentRoute>, field: 'model' | 'reasoning') => onChange(updateAgentRoute(document, role.id, change), [`${path}.${field}`])
   const availableToAdd = state.activities.filter((activity) => !state.exceptionActivities.includes(activity.id))
   const pathHelp = (field: 'model' | 'reasoning') => `${path}-${field}-help ${path}-${field}-error${routeError ? ` ${path}-route-error` : ''}`
 
   return <aside className="inspector" aria-labelledby="inspector-title">
-    <div className="inspector-heading"><div><p className="eyebrow">Selected specialist</p><h2 id="inspector-title">{role.label}</h2><p className="mono">{role.id}</p></div><span className="badge">codex</span></div>
+    <div className="inspector-heading"><div><p className="eyebrow">Selected specialist</p><h2 id="inspector-title">{role.label}</h2><p className="mono">{role.id}</p></div><span className="badge">{host}</span></div>
     <p className="field-help">Default route for this specialist. Activity exceptions stay separate.</p>
     <fieldset className="agent-fields"><legend>Agent default</legend>
       <label>Model
-        <ModelPicker catalog={catalog} provider="codex" value={model} emptyLabel={state.modelMixed ? 'Varies by activity — choose a default' : 'Inherited model unresolved'} describedBy={pathHelp('model')} onChange={(value) => update({ model: value }, 'model')} />
+        <ModelPicker catalog={catalog} provider={host} value={model} emptyLabel={state.modelMixed ? 'Varies by activity — choose a default' : 'Inherited model unresolved'} describedBy={pathHelp('model')} onChange={(value) => update({ model: value }, 'model')} />
         <span id={`${path}-model-help`} className="field-help">{state.modelMixed ? 'Varies by activity. Choose a default to replace only this field.' : own?.model ? sourceLabel('global preferences') : state.baseline?.route?.model ? sourceLabel(state.baseline.provenance?.model) : state.inheritedModel ? 'Derived from activity routes' : sourceLabel()}</span>
         <FieldError id={`${path}-model-error`} error={modelError} /><FieldError id={`${path}-route-error`} error={routeError} />
       </label>
@@ -342,7 +350,7 @@ function AgentInspector({ config, catalog, document, roleId, selectedActivity, s
         {adding && <div className="add-exception-list" role="group" aria-label="Choose activity for exception">{availableToAdd.map((activity) => <button type="button" key={activity.id} onClick={() => { setExpandedActivity(activity.id); setAdding(false) }}>{activity.label}</button>)}</div>}
       </div>}
     </div>
-    {state.activities[0] ? <button type="button" className="primary inspector-preview" onClick={() => onPreview(state.activities.some((item) => item.id === selectedActivity) ? selectedActivity : state.activities[0].id, role.id)}>Preview a decision for this agent</button> : <p className="field-help">This specialist is not used by a Codex activity yet, so there is no activity to preview.</p>}
+    {state.activities[0] ? <button type="button" className="primary inspector-preview" onClick={() => onPreview(state.activities.some((item) => item.id === selectedActivity) ? selectedActivity : state.activities[0].id, role.id)}>Preview a decision for this agent</button> : <p className="field-help">This specialist is not used by a {providerLabel(host)} activity yet, so there is no activity to preview.</p>}
   </aside>
 }
 
@@ -577,7 +585,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
   useEffect(() => { if (prefill) { setInteraction(prefill.interaction); setRole(prefill.role) } }, [prefill?.serial])
   useEffect(() => { requestVersion.current += 1; setDecision(null); setBusy(false); onSuccess() }, [document, interaction, role, tier, reason, selectedRisks, sessionModel, sessionMode, sessionEffort])
   const selected = config.bundle.interactions.find((item) => item.id === interaction) ?? config.bundle.interactions[0]
-  const selectedProvider = selected?.provider ?? 'codex'
+  const selectedProvider = selected?.provider ?? config.bundle.host
   const specialists = specialistChoices(config, document, interaction)
   useEffect(() => { if (role && !specialists.some((item) => item.id === role)) setRole('') }, [role, specialists])
   const specialistModel = role ? getOwnRoute(document, interaction, role)?.model : undefined
@@ -592,7 +600,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
     setBusy(true)
     const session_override = Object.keys(sessionRoute).length ? sessionRoute : undefined
     try {
-      const response = await api.preview(document, { interaction, ...(role ? { role } : {}), tier, risk_flags: selectedRisks, reason, ...(session_override ? { session_override } : {}) })
+      const response = await api.preview(config.bundle.host, document, { interaction, ...(role ? { role } : {}), tier, risk_flags: selectedRisks, reason, ...(session_override ? { session_override } : {}) })
       if (version === requestVersion.current) { setDecision(response.decision); onSuccess() }
     } catch (error) {
       if (version === requestVersion.current) { setDecision(null); onError(error) }
@@ -606,7 +614,7 @@ function Preview({ config, catalog, document, prefill, onError, onSuccess }: {
       <p className="eyebrow">Draft preview</p><h1 id="preview-title">Preview a route</h1>
       <p className="preview-intro">Uses this unsaved global draft. Nothing is saved or run.</p>
       <label>Activity<select value={interaction} onChange={(event) => { setInteraction(event.target.value); setRole('') }}>{config.bundle.interactions.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
-      {selectedProvider === 'codex' && <label>Specialist (optional)<select value={role} onChange={(event) => setRole(event.target.value)}><option value="">Activity route</option>{specialists.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>}
+      {isNative(selected) && <label>Specialist (optional)<select value={role} onChange={(event) => setRole(event.target.value)}><option value="">Activity route</option>{specialists.map((item) => <option value={item.id} key={item.id}>{item.label}</option>)}</select></label>}
       <div><span className="field-label">Task tier</span><Segmented label="Task tier" values={tiers} value={tier} onChange={(value) => setTier(value as typeof tier)} format={(value) => value[0].toUpperCase() + value.slice(1)} /></div>
       <fieldset className="risk-fieldset"><legend>Risk flags</legend><div className="risk-chips">{risks.map((risk) => <button type="button" key={risk} aria-pressed={selectedRisks.includes(risk)} onClick={() => toggleRisk(risk)}>{risk}</button>)}</div></fieldset>
       <label>Reason<input required value={reason} onChange={(event) => setReason(event.target.value)} /></label>
@@ -663,10 +671,10 @@ function countChanges(saved: unknown, draft: unknown): number {
   return 1
 }
 
-function errorTab(field: string): Screen | null {
+function errorTab(field: string, externalId?: string): Screen | null {
   if (field === 'preview') return 'preview'
   if (field.startsWith('adaptive_profiles')) return 'profiles'
-  if (field.startsWith('agents.') || field.includes('.specialists.') || field.includes('claude-review')) return 'routes'
+  if (field.startsWith('agents.') || field.includes('.specialists.') || (externalId !== undefined && field.includes(externalId))) return 'routes'
   if (field.startsWith('interactions.')) return 'activities'
   return null
 }
@@ -678,11 +686,8 @@ const tabs: { id: Screen; label: string }[] = [
   { id: 'preview', label: 'Preview a route' },
 ]
 
-export function RoutingWorkspace() {
+function useHostEditor(host: Host, active: boolean) {
   const [config, setConfig] = useState<ConfigResponse | null>(null)
-  const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null)
-  const [catalogError, setCatalogError] = useState('')
-  const [catalogLoading, setCatalogLoading] = useState(false)
   const [displayEffective, setDisplayEffective] = useState<ConfigResponse['effective']>(null)
   const [draft, setDraft] = useState<Preferences>(emptyPreferences())
   const [dirty, setDirty] = useState(false)
@@ -697,22 +702,12 @@ export function RoutingWorkspace() {
   const [selectedRole, setSelectedRole] = useState('')
   const [selectedActivity, setSelectedActivity] = useState('')
   const [selectionSerial, setSelectionSerial] = useState(0)
-  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
-    try { return (localStorage.getItem('routing-editor-theme') as 'system' | 'light' | 'dark') || 'system' } catch { return 'system' }
-  })
   const [prefill, setPrefill] = useState<Prefill | null>(null)
   const [prefillSerial, setPrefillSerial] = useState(0)
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>([])
   const draftVersion = useRef(0)
   const loadVersion = useRef(0)
-  const catalogVersion = useRef(0)
-
-  useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'system') root.removeAttribute('data-theme')
-    else root.dataset.theme = theme
-    try { localStorage.setItem('routing-editor-theme', theme) } catch { /* Theme remains active for this page. */ }
-  }, [theme])
+  const started = useRef(false)
 
   const replaceSaveErrors = (error: unknown, message: string, includeFieldError: boolean) => setErrors((current) => {
     const preserved = Object.fromEntries(Object.entries(current).filter(([field]) => field !== 'save' && !field.startsWith('interactions.') && !field.startsWith('adaptive_profiles.')))
@@ -730,7 +725,7 @@ export function RoutingWorkspace() {
     const versionAtStart = draftVersion.current
     setLoading(true); setDisplayEffective(null)
     try {
-      const next = await api.config()
+      const next = await api.config(host)
       if (version !== loadVersion.current) return false
       if (draftVersion.current !== versionAtStart) return false
       setConfig(next); setDraft(documentFor(next)); setDirty(false); setErrors(next.error ? { load: next.error } : {}); setPreviewErrors({}); setValidationErrors({}); setDismissedAlerts([])
@@ -740,34 +735,20 @@ export function RoutingWorkspace() {
       return false
     } finally { if (version === loadVersion.current) setLoading(false) }
   }
-  const loadCatalog = async (refresh = false) => {
-    const version = ++catalogVersion.current
-    setCatalogLoading(true)
-    try {
-      const next = await (refresh ? api.refreshModels() : api.models())
-      if (version !== catalogVersion.current) return
-      if (!next.providers?.codex || !next.providers?.claude) throw new Error('The local model catalog response was incomplete.')
-      setCatalog(next); setCatalogError('')
-    } catch (error) {
-      if (version !== catalogVersion.current) return
-      setCatalogError(error instanceof ApiError && error.status === 404
-        ? 'Model discovery is unavailable on this editor service. Saved selections remain visible but cannot be changed until a local CLI catalog is available.'
-        : error instanceof Error ? error.message : 'Unable to load the local model catalog.')
-    } finally { if (version === catalogVersion.current) setCatalogLoading(false) }
-  }
-  useEffect(() => { void load(); void loadCatalog() }, [])
+  // A host loads when first shown, so an unvisited host costs no request and never reads its file.
+  useEffect(() => { if (active && !started.current) { started.current = true; void load() } }, [active])
   useEffect(() => {
     if (!config) return
     let stale = false
     const timer = window.setTimeout(() => {
-      void api.preview(draft).then((response) => { if (!stale) { setDisplayEffective(response.effective); setValidationErrors({}) } }).catch((error) => { if (!stale) setValidationErrors(errorsFor(error, 'validation')) })
+      void api.preview(host, draft).then((response) => { if (!stale) { setDisplayEffective(response.effective); setValidationErrors({}) } }).catch((error) => { if (!stale) setValidationErrors(errorsFor(error, 'validation')) })
     }, 180)
     return () => { stale = true; window.clearTimeout(timer) }
   }, [config, draft])
 
   useEffect(() => {
     if (!config?.bundle.roles.length) return
-    if (selectedRole === 'claude-review' || selectedRole && config.bundle.roles.some((role) => role.id === selectedRole)) return
+    if (selectedRole === externalInteraction(config)?.id || selectedRole && config.bundle.roles.some((role) => role.id === selectedRole)) return
     setSelectedRole(config.bundle.roles[0].id)
   }, [config])
   const save = async () => {
@@ -778,7 +759,7 @@ export function RoutingWorkspace() {
     const documentAtSave = draft
     setSaving(true)
     try {
-      const next = await api.save(documentAtSave, revision)
+      const next = await api.save(host, documentAtSave, revision)
       setConfig(next)
       if (draftVersion.current === versionAtSave) {
         setDraft(documentFor(next)); setDirty(false); setErrors({}); setPreviewErrors({}); setValidationErrors({})
@@ -796,7 +777,7 @@ export function RoutingWorkspace() {
     if (saving) return
     if (dirty) {
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' })
-      const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = 'routing-global-draft.json'; anchor.click(); URL.revokeObjectURL(anchor.href)
+      const anchor = document.createElement('a'); anchor.href = URL.createObjectURL(blob); anchor.download = `routing-${host}-draft.json`; anchor.click(); URL.revokeObjectURL(anchor.href)
       if (!window.confirm('Your draft was exported. Discard it and reload the latest saved preferences?')) return
     }
     if (await load()) setNotice('Reloaded saved preferences.')
@@ -811,24 +792,83 @@ export function RoutingWorkspace() {
     const next = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
     if (next >= 0) { event.preventDefault(); setScreen(tabs[next].id); document.getElementById(`tab-${tabs[next].id}`)?.focus() }
   }
+  const savedChanges = config ? countChanges(documentFor(config), draft) : 0
+  return {
+    host, config, displayEffective, draft, dirty, errors, setPreviewErrors, notice, loading, saving, screen, setScreen, selectedRole, setSelectedRole,
+    selectedActivity, setSelectedActivity, selectionSerial, setSelectionSerial, prefill, dismissedAlerts, setDismissedAlerts, savedChanges,
+    updateDraft, load, save, reload, reset, openPreview, handleTabKey,
+  }
+}
+
+function HostSelector({ active, counts, onSelect }: { active: Host; counts: Record<Host, number>; onSelect: (host: Host) => void }) {
+  return <div className="host-switch" role="group" aria-label="Orchestration host">
+    {hosts.map((host) => <button type="button" key={host} aria-pressed={active === host} onClick={() => onSelect(host)}>
+      {providerLabel(host)} host{counts[host] > 0 && <span className="host-count">{counts[host]} unsaved<span className="sr-only"> {counts[host] === 1 ? 'change' : 'changes'}</span></span>}
+    </button>)}
+  </div>
+}
+
+export function RoutingWorkspace() {
+  const [activeHost, setActiveHost] = useState<Host>('codex')
+  const [catalog, setCatalog] = useState<ModelCatalogResponse | null>(null)
+  const [catalogError, setCatalogError] = useState('')
+  const [catalogLoading, setCatalogLoading] = useState(false)
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>(() => {
+    try { return (localStorage.getItem('routing-editor-theme') as 'system' | 'light' | 'dark') || 'system' } catch { return 'system' }
+  })
+  const catalogVersion = useRef(0)
+  // Each host keeps its own revision, draft, errors and screen state, so switching never discards or merges a draft.
+  const editors = { codex: useHostEditor('codex', activeHost === 'codex'), claude: useHostEditor('claude', activeHost === 'claude') }
+  const {
+    config, displayEffective, draft, dirty, errors, setPreviewErrors, notice, loading, saving, screen, setScreen, selectedRole, setSelectedRole,
+    selectedActivity, setSelectedActivity, selectionSerial, setSelectionSerial, prefill, dismissedAlerts, setDismissedAlerts, savedChanges,
+    updateDraft, load, save, reload, reset, openPreview, handleTabKey,
+  } = editors[activeHost]
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (theme === 'system') root.removeAttribute('data-theme')
+    else root.dataset.theme = theme
+    try { localStorage.setItem('routing-editor-theme', theme) } catch { /* Theme remains active for this page. */ }
+  }, [theme])
+
+  const loadCatalog = async (refresh = false) => {
+    const version = ++catalogVersion.current
+    setCatalogLoading(true)
+    try {
+      const next = await (refresh ? api.refreshModels() : api.models())
+      if (version !== catalogVersion.current) return
+      if (!next.providers?.codex || !next.providers?.claude) throw new Error('The local model catalog response was incomplete.')
+      setCatalog(next); setCatalogError('')
+    } catch (error) {
+      if (version !== catalogVersion.current) return
+      setCatalogError(error instanceof ApiError && error.status === 404
+        ? 'Model discovery is unavailable on this editor service. Saved selections remain visible but cannot be changed until a local CLI catalog is available.'
+        : error instanceof Error ? error.message : 'Unable to load the local model catalog.')
+    } finally { if (version === catalogVersion.current) setCatalogLoading(false) }
+  }
+  useEffect(() => { void loadCatalog() }, [])
+
   const currentPath = config?.scopes.global.path
   const displayConfig = config ? { ...config, effective: displayEffective } : null
-  const fieldErrorScreens = new Set(Object.keys(errors).map(errorTab).filter((item): item is Screen => item !== null))
-  const savedChanges = config ? countChanges(documentFor(config), draft) : 0
+  const externalId = config ? externalInteraction(config)?.id : undefined
+  const fieldErrorScreens = new Set(Object.keys(errors).map((field) => errorTab(field, externalId)).filter((item): item is Screen => item !== null))
   const dirtyLabel = savedChanges === 1 ? '1 unsaved change' : `${savedChanges} unsaved changes`
   const migrationPending = Boolean(config?.scopes.global.migration_pending)
   const knownAlerts = ['load', 'save', 'validation', 'preview']
   const alerts = [
     ...(dirty && notice ? [{ key: 'notice', message: notice }] : []),
     ...knownAlerts.flatMap((key) => errors[key] ? [{ key, message: errors[key] }] : []),
-    ...Object.entries(errors).filter(([key]) => !knownAlerts.includes(key) && errorTab(key) === null).map(([key, message]) => ({ key: `field:${key}`, message })),
+    ...Object.entries(errors).filter(([key]) => !knownAlerts.includes(key) && errorTab(key, externalId) === null).map(([key, message]) => ({ key: `field:${key}`, message })),
   ]
+  const counts = { codex: editors.codex.savedChanges, claude: editors.claude.savedChanges }
 
   return <div className="routing-workspace">
     <header className="workspace-header">
       <div className="header-top">
         <div className="brand-block"><span className="brand-mark" aria-hidden="true">ON</span><div><strong>Orchestration Nation</strong><span>Routing</span></div></div>
-        <div className="header-path"><span className="sr-only">Configuration file</span><code>{currentPath ?? 'Loading configuration path…'}</code></div>
+        <HostSelector active={activeHost} counts={counts} onSelect={setActiveHost} />
+        <div className="header-path"><span className="sr-only">Configuration file for the {providerLabel(activeHost)} host</span><code title={currentPath}>{currentPath ?? 'Loading configuration path…'}</code></div>
         <div className={`save-state ${dirty ? 'dirty' : ''}`} aria-live="polite" role="status">{dirty ? dirtyLabel : notice || 'All changes saved'}</div>
         <label className="theme-select">Theme<select aria-label="Theme" value={theme} onChange={(event) => setTheme(event.target.value as typeof theme)}><option value="system">System theme</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
         <div className="header-actions"><WranglerPanel status={config?.wrangler} /><button type="button" className="secondary" onClick={() => void reload()} disabled={saving || loading}>Export draft &amp; reload</button><button type="button" className="secondary" onClick={reset} disabled={saving || loading}>Reset global preferences</button><button type="button" className="primary save-button" onClick={() => void save()} disabled={(!dirty && !config?.scopes.global.migration_pending) || saving || loading}>{saving ? 'Saving…' : 'Save global preferences'}</button></div>
@@ -844,7 +884,7 @@ export function RoutingWorkspace() {
     {alerts.length > 0 && <section className="alert-stack" aria-label="Routing editor alerts">{alerts.map(({ key, message }) => !dismissedAlerts.includes(key) && <div className={`alert-banner${key === 'notice' ? ' alert-banner--notice' : ''}`} role={key === 'load' || key === 'save' || key.startsWith('field:') ? 'alert' : 'status'} key={key}><p><strong>{key === 'load' ? 'Unable to load' : key === 'save' ? 'Save status' : key === 'validation' ? 'Draft validation' : key === 'preview' ? 'Preview failed' : key === 'notice' ? 'Draft status' : 'Configuration field needs attention'}</strong><span>{message}</span></p>{key === 'load' && <button type="button" className="text-button" onClick={() => void load()}>Retry load</button>}<button type="button" className="dismiss-alert" aria-label={`Dismiss ${key} message`} onClick={() => setDismissedAlerts((current) => [...current, key])}>×</button></div>)}</section>}
     {loading && <p className="loading" role="status">Loading routing preferences…</p>}
     {!config && !loading && dismissedAlerts.includes('load') && <div className="alert-stack"><p>Routing preferences are unavailable.</p><button type="button" className="secondary" onClick={() => void load()}>Retry load</button></div>}
-    {displayConfig && <main className="screen-content">
+    {displayConfig && <main className="screen-content" key={activeHost}>
       <section id="panel-routes" className="tab-panel" role="tabpanel" aria-labelledby="tab-routes" hidden={screen !== 'routes'}>
         <div className="screen-title"><div><p className="eyebrow">Configure native specialists</p><h1>Worker routes</h1><p>Compare each specialist’s global default with its activity routes, then inspect or edit the selected worker.</p></div><div className="legend"><span><i className="legend-dot inherited" />Inherited</span><span><i className="legend-dot set" />Set globally</span><span><i className="legend-dot exception" />Activity exception</span></div></div>
         <p className="session-note"><strong>Parent session settings are session-controlled.</strong> They remain read-only and are not changed by worker routes.</p>
@@ -856,7 +896,7 @@ export function RoutingWorkspace() {
       <section id="panel-activities" className="tab-panel" role="tabpanel" aria-labelledby="tab-activities" hidden={screen !== 'activities'}>
         <div className="screen-title"><div><p className="eyebrow">Global routes</p><h1>Activity defaults</h1><p>Global activity defaults are followed by global agent defaults, then activity-specific specialist routes.</p></div></div>
         <ol className="precedence-strip"><li>Bundled defaults</li><li aria-current="step">Global activity</li><li>Global agent</li><li>Global specialist</li></ol>
-        <div className="interaction-grid activity-grid">{displayConfig.bundle.interactions.filter((item) => item.provider === 'codex').map((interaction) => <ActivityDefaultCard key={interaction.id} config={displayConfig} catalog={catalog} document={draft} interaction={interaction} errors={errors} onChange={updateDraft} />)}</div>
+        <div className="interaction-grid activity-grid">{nativeInteractions(displayConfig).map((interaction) => <ActivityDefaultCard key={interaction.id} config={displayConfig} catalog={catalog} document={draft} interaction={interaction} errors={errors} onChange={updateDraft} />)}</div>
       </section>
       <section id="panel-profiles" className="tab-panel" role="tabpanel" aria-labelledby="tab-profiles" hidden={screen !== 'profiles'}>
         <div className="screen-title"><div><p className="eyebrow">Adaptive reasoning policy</p><h1>Adaptive profiles</h1><p>Task tiers map directly to the requested model effort levels.</p></div></div>

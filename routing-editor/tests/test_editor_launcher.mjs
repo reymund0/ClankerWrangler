@@ -111,11 +111,11 @@ test('development startup without Node dependencies cleans its Python backend', 
     for (const directory of ['routing-editor/scripts', 'routing-editor/dist', 'subagents/scripts', 'subagents/routing']) {
       await mkdir(path.join(fixture, directory), { recursive: true });
     }
-    for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/claude_cross_review.py', 'subagents/scripts/routing_policy.py', 'subagents/routing/policy.json']) {
+    for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/claude_cross_review.py', 'subagents/scripts/cross_review_core.py', 'subagents/scripts/routing_policy.py', 'subagents/routing/policy.json']) {
       await copyFile(path.join(root, name), path.join(fixture, name));
     }
     await writeFile(path.join(fixture, 'routing-editor/dist/index.html'), '<div id="root"></div>');
-    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '6' }));
+    await writeFile(path.join(fixture, 'routing-editor/dist/compatibility.json'), JSON.stringify({ schema_version: 1, policy_version: '7' }));
     const result = spawnSync(process.execPath, [path.join(fixture, 'routing-editor/scripts/editor.mjs'), 'dev', '--global-config-dir', path.join(fixture, 'prefs')], {
       encoding: 'utf8', timeout: 12000, windowsHide: true,
     });
@@ -156,7 +156,7 @@ for (const mode of ['start', 'dev']) {
     if (mode === 'dev') {
       // Keep a running source-checkout dev server and its dependency cache untouched.
       const checkout = path.join(fixture, 'checkout');
-      for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/routing_policy.py', 'subagents/scripts/claude_cross_review.py', 'subagents/routing/policy.json', 'routing-editor/index.html', 'routing-editor/package.json']) {
+      for (const name of ['routing-editor/scripts/editor.mjs', 'routing-editor/scripts/routing_editor.py', 'routing-editor/scripts/model_discovery.py', 'subagents/scripts/routing_policy.py', 'subagents/scripts/claude_cross_review.py', 'subagents/scripts/cross_review_core.py', 'subagents/routing/policy.json', 'routing-editor/index.html', 'routing-editor/package.json']) {
         await mkdir(path.dirname(path.join(checkout, name)), { recursive: true });
         await copyFile(path.join(root, name), path.join(checkout, name));
       }

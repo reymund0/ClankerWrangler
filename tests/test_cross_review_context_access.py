@@ -236,7 +236,7 @@ class ContextAccessTests(unittest.TestCase):
             return process
 
         args = type("Args", (), {"model": None, "effort": None, "timeout_seconds": 1, "review_log": None})()
-        with mock.patch.object(review, "start_review_process", side_effect=start), mock.patch.object(review, "close_review_job"):
+        with mock.patch.object(review.core, "start_review_process", side_effect=start), mock.patch.object(review.core, "close_review_job"):
             result = review.invoke(Path("claude"), snapshot, manifest, args)
 
         command = captured["command"]
@@ -290,7 +290,7 @@ class ContextAccessTests(unittest.TestCase):
     def test_failed_git_comparison_is_reported_as_unavailable(self):
         manifest = self.manifest()
         _, files, _ = self.snapshot(manifest)
-        with mock.patch.object(review, "_git_entry_fingerprint", side_effect=review.ReviewError("fixture git failure")):
+        with mock.patch.object(review.core, "_git_entry_fingerprint", side_effect=review.ReviewError("fixture git failure")):
             changes = review.compare_source_changes(self.repo, files)
 
         self.assertEqual("unavailable", changes["status"])

@@ -15,12 +15,20 @@ $OrchestrationSkillName = "clanker-orchestration-nation"
 $OrchestrationCoordinatorSource = Join-Path $SubagentsSource "$OrchestrationSkillName.md"
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 $CrossReviewLauncherSource = Join-Path $SubagentsSource "scripts\claude_cross_review.py"
+$CrossReviewCoreSource = Join-Path $SubagentsSource "scripts\cross_review_core.py"
+$CodexReviewLauncherSource = Join-Path $SubagentsSource "scripts\codex_cross_review.py"
+$HostsSource = Join-Path $SubagentsSource "hosts"
+$ClaudeWorkerName = "clanker-orchestration-worker"
+$ClaudeWorkerSource = Join-Path $SubagentsSource "claude\$ClaudeWorkerName.md"
+$ClaudeWorkerMarker = "<!-- clanker-orchestration-nation: managed worker definition -->"
 $RoutingPolicySource = Join-Path $SubagentsSource "scripts\routing_policy.py"
 $RoutingEditorSource = Join-Path $RepoRoot "routing-editor\scripts\routing_editor.py"
 $ModelDiscoverySource = Join-Path $RepoRoot "routing-editor\scripts\model_discovery.py"
 $RoutingDataSource = Join-Path $SubagentsSource "routing"
 $RoutingEditorDistSource = Join-Path $RepoRoot "routing-editor\dist"
 $RetiredSpecialistNames = @("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
+# References replaced by another file; only the installed reference is retired, never a standalone skill.
+$RetiredReferenceNames = @("clanker-claude-cross-review")
 
 function Copy-SafeFile {
     param(
@@ -235,6 +243,13 @@ function Get-RetiredSpecialistEntries {
             $entries += [PSCustomObject]@{ Source = $source; Name = $name; Extension = $extension }
         }
     }
+    foreach ($name in $RetiredReferenceNames) {
+        $source = Assert-NoReparsePath -Path (Join-Path $references "$name.md") -Root $AgentRoot -Description "retired reference" -AllowLinkedRoot
+        $item = Get-Item -LiteralPath $source -Force -ErrorAction SilentlyContinue
+        if ($null -eq $item) { continue }
+        if ($item.PSIsContainer) { throw "Unexpected retired reference entry type: $source" }
+        $entries += [PSCustomObject]@{ Source = $source; Name = $name; Extension = ".md" }
+    }
     if ($entries.Count) {
         foreach ($relative in @("backups", "backups\orchestration-nation")) {
             $backup = Assert-NoReparsePath -Path (Join-Path $AgentRoot $relative) -Root $AgentRoot -Description "retirement backup" -AllowLinkedRoot
@@ -264,6 +279,50 @@ function Move-RetiredSpecialistEntries {
     }
 }
 
+# The generic Claude worker lives in <claude-root>\agents. Preflight it before any write so a
+# linked agents directory or an unexpected entry stops the install untouched.
+function Assert-ClaudeWorkerInstallable {
+    param([Parameter(Mandatory)][string]$AgentRoot)
+
+    $agentsDirectory = Assert-NoReparsePath -Path (Join-Path $AgentRoot "agents") -Root $AgentRoot -Description "agent definitions" -AllowLinkedRoot
+    $destination = Assert-NoReparsePath -Path (Join-Path $agentsDirectory "$ClaudeWorkerName.md") -Root $AgentRoot -Description "worker definition" -AllowLinkedRoot
+    $agentsItem = Get-Item -LiteralPath $agentsDirectory -Force -ErrorAction SilentlyContinue
+    if ($null -ne $agentsItem -and -not $agentsItem.PSIsContainer) { throw "Agent definitions path is not a directory: $agentsDirectory" }
+    $item = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
+    if ($null -eq $item) { return $destination }
+    if ($item.PSIsContainer) { throw "Unexpected worker definition entry type: $destination" }
+    if (-not (Select-String -LiteralPath $destination -SimpleMatch -CaseSensitive $ClaudeWorkerMarker -Quiet)) {
+        foreach ($relative in @("backups", "backups\orchestration-nation")) {
+            $backup = Assert-NoReparsePath -Path (Join-Path $AgentRoot $relative) -Root $AgentRoot -Description "worker definition backup" -AllowLinkedRoot
+            $backupItem = Get-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
+            if ($null -ne $backupItem -and -not $backupItem.PSIsContainer) { throw "Backup destination is not a directory: $backup" }
+        }
+    }
+    return $destination
+}
+
+function Install-ClaudeWorker {
+    param([Parameter(Mandatory)][string]$AgentRoot)
+
+    $destination = Assert-ClaudeWorkerInstallable -AgentRoot $AgentRoot
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    $existing = Get-Item -LiteralPath $destination -Force -ErrorAction SilentlyContinue
+    if ($null -ne $existing -and -not (Select-String -LiteralPath $destination -SimpleMatch -CaseSensitive $ClaudeWorkerMarker -Quiet)) {
+        $backupRoot = Assert-NoReparsePath -Path (Join-Path $AgentRoot "backups\orchestration-nation") -Root $AgentRoot -Description "worker definition backup" -AllowLinkedRoot
+        New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+        $backup = Join-Path $backupRoot "$ClaudeWorkerName.md"
+        $suffix = 2
+        while ($null -ne (Get-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue)) {
+            $backup = Join-Path $backupRoot "$ClaudeWorkerName-$suffix.md"
+            $suffix++
+        }
+        $backup = Assert-NoReparsePath -Path $backup -Root $AgentRoot -Description "worker definition backup" -AllowLinkedRoot
+        Move-Item -LiteralPath $destination -Destination $backup -ErrorAction Stop
+        Write-Host "Moved unmanaged worker definition to backup: $destination -> $backup"
+    }
+    Copy-SafeFile -DestinationPath $destination -SourcePath $ClaudeWorkerSource
+}
+
 function Install-OrchestrationNationBundle {
     param(
         [Parameter(Mandatory)][string]$AgentName,
@@ -277,6 +336,14 @@ function Install-OrchestrationNationBundle {
     $bundleSkill = Join-Path $bundleDirectory "SKILL.md"
     $null = Assert-NoReparsePath -Path $bundleDirectory -Root $AgentSkillsRoot -Description "orchestration bundle"
     $retiredEntries = @(Get-RetiredSpecialistEntries -AgentRoot $AgentRoot -AgentSkillsRoot $AgentSkillsRoot)
+    $hostName = switch ($AgentName) {
+        "Claude Code" { "claude" }
+        "Codex" { "codex" }
+        default { throw "Unknown orchestration host for ${AgentName}" }
+    }
+    if ($AgentName -eq "Claude Code") {
+        $null = Assert-ClaudeWorkerInstallable -AgentRoot $AgentRoot
+    }
 
     New-Item -ItemType Directory -Path $referencesDirectory -Force | Out-Null
     Copy-SafeFile -DestinationPath $bundleSkill -SourcePath $OrchestrationCoordinatorSource
@@ -285,13 +352,16 @@ function Install-OrchestrationNationBundle {
         $referencePath = Join-Path $referencesDirectory $specialistSourceFile.Name
         Copy-SafeFile -DestinationPath $referencePath -SourcePath $specialistSourceFile.FullName
     }
+    Copy-SafeFile -DestinationPath (Join-Path $referencesDirectory "host.md") -SourcePath (Join-Path $HostsSource "$hostName\host.md")
 
     $scriptsDirectory = Join-Path $bundleDirectory "scripts"
     $scriptsItem = Get-Item -LiteralPath $scriptsDirectory -Force -ErrorAction SilentlyContinue
     if ($null -ne $scriptsItem -and ($scriptsItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
         throw "Refusing to install through a linked scripts directory: $scriptsDirectory"
     }
+    Copy-SafeFile -DestinationPath (Join-Path $scriptsDirectory "cross_review_core.py") -SourcePath $CrossReviewCoreSource
     Copy-SafeFile -DestinationPath (Join-Path $scriptsDirectory "claude_cross_review.py") -SourcePath $CrossReviewLauncherSource
+    Copy-SafeFile -DestinationPath (Join-Path $scriptsDirectory "codex_cross_review.py") -SourcePath $CodexReviewLauncherSource
     foreach ($routingScript in @($RoutingPolicySource, $RoutingEditorSource, $ModelDiscoverySource)) {
         $destination = Assert-NoReparsePath -Path (Join-Path $scriptsDirectory ([System.IO.Path]::GetFileName($routingScript))) -Root $bundleDirectory -Description "routing scripts"
         Copy-SafeFile -DestinationPath $destination -SourcePath $routingScript
@@ -299,6 +369,8 @@ function Install-OrchestrationNationBundle {
 
     $routingDirectory = Join-Path $bundleDirectory "routing"
     Copy-RoutingDirectory -SourceDirectory $RoutingDataSource -DestinationDirectory $routingDirectory -BundleDirectory $bundleDirectory -Description "routing data"
+    $hostConfigurationDestination = Assert-NoReparsePath -Path (Join-Path $routingDirectory "host.json") -Root $bundleDirectory -Description "host configuration"
+    Copy-SafeFile -DestinationPath $hostConfigurationDestination -SourcePath (Join-Path $HostsSource "$hostName\host.json")
 
     $editorDirectory = Join-Path $bundleDirectory "editor"
     Remove-RoutingEditorAssets -EditorDirectory $editorDirectory -BundleDirectory $bundleDirectory
@@ -317,6 +389,9 @@ function Install-OrchestrationNationBundle {
         New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
     }
     Move-RetiredSpecialistEntries -AgentRoot $AgentRoot -Entries $retiredEntries
+    if ($AgentName -eq "Claude Code") {
+        Install-ClaudeWorker -AgentRoot $AgentRoot
+    }
 }
 
 function Move-OrchestrationSpecialistDirectories {
@@ -380,6 +455,9 @@ function Install-AgentLinks {
     Write-Host "Configuring $AgentName at $AgentRoot"
 
     $null = @(Get-RetiredSpecialistEntries -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot)
+    if ($AgentName -eq "Claude Code") {
+        $null = Assert-ClaudeWorkerInstallable -AgentRoot $AgentRoot
+    }
 
     New-Item -ItemType Directory -Path $AgentRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $agentSkillsRoot -Force | Out-Null
@@ -436,6 +514,14 @@ if (-not (Test-Path -LiteralPath $GlobalRulesSource -PathType Leaf)) {
 
 if (-not (Test-Path -LiteralPath $CrossReviewLauncherSource -PathType Leaf)) {
     throw "Claude cross-review launcher not found: $CrossReviewLauncherSource"
+}
+
+foreach ($reviewSource in @($CrossReviewCoreSource, $CodexReviewLauncherSource, $ClaudeWorkerSource,
+        (Join-Path $HostsSource "claude\host.md"), (Join-Path $HostsSource "claude\host.json"),
+        (Join-Path $HostsSource "codex\host.md"), (Join-Path $HostsSource "codex\host.json"))) {
+    if (-not (Test-Path -LiteralPath $reviewSource -PathType Leaf)) {
+        throw "Orchestration host or review source file not found: $reviewSource"
+    }
 }
 
 foreach ($routingSource in @($RoutingPolicySource, $RoutingEditorSource, $ModelDiscoverySource)) {

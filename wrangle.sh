@@ -12,12 +12,20 @@ SUBAGENTS_SOURCE="$REPO_ROOT/subagents"
 ORCHESTRATION_NAME="clanker-orchestration-nation"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
 CROSS_REVIEW_LAUNCHER_SOURCE="$SUBAGENTS_SOURCE/scripts/claude_cross_review.py"
+CROSS_REVIEW_CORE_SOURCE="$SUBAGENTS_SOURCE/scripts/cross_review_core.py"
+CODEX_REVIEW_LAUNCHER_SOURCE="$SUBAGENTS_SOURCE/scripts/codex_cross_review.py"
+HOSTS_SOURCE="$SUBAGENTS_SOURCE/hosts"
+CLAUDE_WORKER_NAME="clanker-orchestration-worker"
+CLAUDE_WORKER_SOURCE="$SUBAGENTS_SOURCE/claude/$CLAUDE_WORKER_NAME.md"
+CLAUDE_WORKER_MARKER="<!-- clanker-orchestration-nation: managed worker definition -->"
 ROUTING_POLICY_SOURCE="$SUBAGENTS_SOURCE/scripts/routing_policy.py"
 ROUTING_EDITOR_SOURCE="$REPO_ROOT/routing-editor/scripts/routing_editor.py"
 MODEL_DISCOVERY_SOURCE="$REPO_ROOT/routing-editor/scripts/model_discovery.py"
 ROUTING_DATA_SOURCE="$SUBAGENTS_SOURCE/routing"
 ROUTING_EDITOR_DIST_SOURCE="$REPO_ROOT/routing-editor/dist"
 RETIRED_SPECIALISTS=(clanker-ux-designer clanker-documentation-writer clanker-product-engineer)
+# References replaced by another file; only the installed reference is retired, never a standalone skill.
+RETIRED_REFERENCES=(clanker-claude-cross-review)
 
 copy_safe_file() {
     local dest="$1"
@@ -210,6 +218,13 @@ preflight_retired_specialists() {
             have_entries=true
         done
     done
+    for name in "${RETIRED_REFERENCES[@]}"; do
+        source="$references/$name.md"
+        assert_safe_bundle_path "$agent_root" "$source" "retired reference" >/dev/null
+        [[ -e "$source" ]] || continue
+        [[ -f "$source" ]] || { echo "Error: Unexpected retired reference entry type: $source" >&2; exit 1; }
+        have_entries=true
+    done
     if "$have_entries"; then
         for backup in "$agent_root/backups" "$agent_root/backups/orchestration-nation"; do
             assert_safe_bundle_path "$agent_root" "$backup" "retirement backup" >/dev/null
@@ -218,31 +233,92 @@ preflight_retired_specialists() {
     fi
 }
 
+move_retired_entry() {
+    local agent_root="$1"
+    local source="$2"
+    local name="$3"
+    local extension="$4"
+    local backup_root="$agent_root/backups/orchestration-nation"
+    local destination suffix
+    assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
+    [[ -e "$source" ]] || return 0
+    assert_safe_bundle_path "$agent_root" "$backup_root" "retirement backup" >/dev/null
+    mkdir -p "$backup_root"
+    destination="$backup_root/$name$extension"
+    suffix=2
+    while [[ -e "$destination" || -L "$destination" ]]; do
+        destination="$backup_root/$name-$suffix$extension"
+        suffix=$((suffix + 1))
+    done
+    assert_safe_bundle_path "$agent_root" "$destination" "retirement backup" >/dev/null
+    mv -n "$source" "$destination"
+    [[ ! -e "$source" ]] || { echo "Error: Retirement move did not complete: $source -> $destination" >&2; exit 1; }
+    echo "Moved retired specialist to backup: $source -> $destination"
+}
+
 retire_specialists() {
     local agent_root="$1"
     local references="$agent_root/skills/$ORCHESTRATION_NAME/references"
-    local backup_root="$agent_root/backups/orchestration-nation"
-    local name source destination extension suffix
+    local name
     for name in "${RETIRED_SPECIALISTS[@]}"; do
-        for source in "$references/$name.md" "$agent_root/skills/$name"; do
-            assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
-            [[ -e "$source" ]] || continue
-            assert_safe_bundle_path "$agent_root" "$backup_root" "retirement backup" >/dev/null
-            mkdir -p "$backup_root"
-            extension=""
-            [[ "$source" != "$references/"* ]] || extension=".md"
-            destination="$backup_root/$name$extension"
-            suffix=2
-            while [[ -e "$destination" || -L "$destination" ]]; do
-                destination="$backup_root/$name-$suffix$extension"
-                suffix=$((suffix + 1))
-            done
-            assert_safe_bundle_path "$agent_root" "$destination" "retirement backup" >/dev/null
-            mv -n "$source" "$destination"
-            [[ ! -e "$source" ]] || { echo "Error: Retirement move did not complete: $source -> $destination" >&2; exit 1; }
-            echo "Moved retired specialist to backup: $source -> $destination"
-        done
+        move_retired_entry "$agent_root" "$references/$name.md" "$name" ".md"
+        move_retired_entry "$agent_root" "$agent_root/skills/$name" "$name" ""
     done
+    for name in "${RETIRED_REFERENCES[@]}"; do
+        move_retired_entry "$agent_root" "$references/$name.md" "$name" ".md"
+    done
+}
+
+# The generic Claude worker lives in <claude-root>/agents. Preflight it before any write so a
+# linked agents directory or an unexpected entry stops the install untouched.
+preflight_claude_worker() {
+    local agent_root="$1"
+    local agents_dir="$agent_root/agents"
+    local destination="$agents_dir/$CLAUDE_WORKER_NAME.md"
+    local backup
+    assert_safe_bundle_path "$agent_root" "$agents_dir" "agent definitions" >/dev/null
+    assert_safe_bundle_path "$agent_root" "$destination" "worker definition" >/dev/null
+    [[ ! -e "$agents_dir" || -d "$agents_dir" ]] || { echo "Error: Agent definitions path is not a directory: $agents_dir" >&2; exit 1; }
+    [[ -e "$destination" ]] || return 0
+    [[ -f "$destination" ]] || { echo "Error: Unexpected worker definition entry type: $destination" >&2; exit 1; }
+    if ! grep -qF -- "$CLAUDE_WORKER_MARKER" "$destination"; then
+        for backup in "$agent_root/backups" "$agent_root/backups/orchestration-nation"; do
+            assert_safe_bundle_path "$agent_root" "$backup" "worker definition backup" >/dev/null
+            [[ ! -e "$backup" || -d "$backup" ]] || { echo "Error: Backup destination is not a directory: $backup" >&2; exit 1; }
+        done
+    fi
+}
+
+install_claude_worker() {
+    local agent_root="$1"
+    local agents_dir="$agent_root/agents"
+    local destination="$agents_dir/$CLAUDE_WORKER_NAME.md"
+    local backup_root="$agent_root/backups/orchestration-nation"
+    local backup suffix
+    preflight_claude_worker "$agent_root"
+    mkdir -p "$agents_dir"
+    if [[ -f "$destination" ]] && ! grep -qF -- "$CLAUDE_WORKER_MARKER" "$destination"; then
+        mkdir -p "$backup_root"
+        backup="$backup_root/$CLAUDE_WORKER_NAME.md"
+        suffix=2
+        while [[ -e "$backup" || -L "$backup" ]]; do
+            backup="$backup_root/$CLAUDE_WORKER_NAME-$suffix.md"
+            suffix=$((suffix + 1))
+        done
+        assert_safe_bundle_path "$agent_root" "$backup" "worker definition backup" >/dev/null
+        mv -n "$destination" "$backup"
+        [[ ! -e "$destination" ]] || { echo "Error: Worker definition backup did not complete: $destination -> $backup" >&2; exit 1; }
+        echo "Moved unmanaged worker definition to backup: $destination -> $backup"
+    fi
+    copy_safe_file "$destination" "$CLAUDE_WORKER_SOURCE"
+}
+
+host_directory_for() {
+    case "$1" in
+        "Claude Code") echo "claude" ;;
+        "Codex") echo "codex" ;;
+        *) echo "Error: Unknown orchestration host for $1" >&2; exit 1 ;;
+    esac
 }
 
 install_orchestration_bundle() {
@@ -252,8 +328,13 @@ install_orchestration_bundle() {
     local agent_skills_root="$agent_root/skills"
     local bundle_dir="$agent_skills_root/$ORCHESTRATION_NAME"
     local references_dir="$bundle_dir/references"
+    local host_name
+    host_name="$(host_directory_for "$agent_name")"
     assert_safe_bundle_path "$agent_root" "$bundle_dir" "orchestration bundle" >/dev/null
     preflight_retired_specialists "$agent_root"
+    if [[ "$agent_name" == "Claude Code" ]]; then
+        preflight_claude_worker "$agent_root"
+    fi
 
     copy_safe_file "$bundle_dir/SKILL.md" "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md"
     while IFS= read -r -d '' specialist; do
@@ -262,11 +343,14 @@ install_orchestration_bundle() {
         [[ "$base" == "$ORCHESTRATION_NAME.md" ]] && continue
         copy_safe_file "$references_dir/$base" "$specialist"
     done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
+    copy_safe_file "$references_dir/host.md" "$HOSTS_SOURCE/$host_name/host.md"
     if [[ -L "$bundle_dir/scripts" ]]; then
         echo "Error: Cannot install through a linked scripts directory: $bundle_dir/scripts" >&2
         exit 1
     fi
+    copy_safe_file "$bundle_dir/scripts/cross_review_core.py" "$CROSS_REVIEW_CORE_SOURCE"
     copy_safe_file "$bundle_dir/scripts/claude_cross_review.py" "$CROSS_REVIEW_LAUNCHER_SOURCE"
+    copy_safe_file "$bundle_dir/scripts/codex_cross_review.py" "$CODEX_REVIEW_LAUNCHER_SOURCE"
     local policy_destination editor_destination discovery_destination
     policy_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/routing_policy.py" "routing scripts")"
     editor_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/routing_editor.py" "routing scripts")"
@@ -275,6 +359,7 @@ install_orchestration_bundle() {
     discovery_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/model_discovery.py" "routing scripts")"
     copy_safe_file "$discovery_destination" "$MODEL_DISCOVERY_SOURCE"
     copy_routing_directory "$ROUTING_DATA_SOURCE" "$bundle_dir/routing" "$bundle_dir" "routing data"
+    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/routing/host.json" "host configuration")" "$HOSTS_SOURCE/$host_name/host.json"
 
     local editor_dir="$bundle_dir/editor"
     remove_routing_editor_assets "$editor_dir" "$bundle_dir"
@@ -291,6 +376,9 @@ install_orchestration_bundle() {
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
     retire_specialists "$agent_root"
+    if [[ "$agent_name" == "Claude Code" ]]; then
+        install_claude_worker "$agent_root"
+    fi
 
     # Preserve old standalone entries outside skill discovery after the bundle is ready.
     local backup_base="$agent_root/backups"
@@ -339,6 +427,9 @@ install_agent_links() {
     agent_skills_root="$agent_root/skills"
     rules_link="$agent_root/$rules_file_name"
     preflight_retired_specialists "$agent_root"
+    if [[ "$agent_name" == "Claude Code" ]]; then
+        preflight_claude_worker "$agent_root"
+    fi
     mkdir -p "$agent_skills_root"
 
     remove_legacy_skills "$agent_skills_root"
@@ -392,6 +483,14 @@ if [[ ! -f "$CROSS_REVIEW_LAUNCHER_SOURCE" ]]; then
     echo "Error: Claude cross-review launcher not found: $CROSS_REVIEW_LAUNCHER_SOURCE" >&2
     exit 1
 fi
+
+for review_source in "$CROSS_REVIEW_CORE_SOURCE" "$CODEX_REVIEW_LAUNCHER_SOURCE" "$CLAUDE_WORKER_SOURCE" \
+    "$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json"; do
+    if [[ ! -f "$review_source" ]]; then
+        echo "Error: Orchestration host or review source file not found: $review_source" >&2
+        exit 1
+    fi
+done
 
 for routing_source in "$ROUTING_POLICY_SOURCE" "$ROUTING_EDITOR_SOURCE" "$MODEL_DISCOVERY_SOURCE"; do
     if [[ ! -f "$routing_source" ]]; then

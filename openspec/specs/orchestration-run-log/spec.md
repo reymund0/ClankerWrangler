@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Give the user a durable, readable record of orchestration choices and outcomes for each Codex run, alongside existing Clanker output files.
+Give the user a durable, readable record of orchestration choices and outcomes for each orchestration run under either host, alongside existing Clanker output files.
 
 ## Requirements
 

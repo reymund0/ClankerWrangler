@@ -498,3 +498,14 @@ label input, label select { min-width: 0; }
 .profile-family-heading button:hover { background: var(--accent-soft); }
 
 .provider-icon { width: 17px; height: 17px; flex: 0 0 auto; }
+
+/* Orchestration host selector (header). */
+.host-switch { display: inline-flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid #3A3D45; border-radius: 10px; background: #202228; }
+.host-switch button { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: #D6D8DD; font-size: 12px; font-weight: 550; white-space: nowrap; }
+.host-switch button[aria-pressed="true"] { background: #F4F3EE; color: #17191E; box-shadow: 0 1px 3px #0003; }
+.host-count { padding: 1px 7px; border: 1px solid #725323; border-radius: 999px; background: #3A2E1C; color: #F5D3A6; font-size: 10px; font-weight: 650; }
+.host-switch button[aria-pressed="true"] .host-count { border-color: #B98230; background: #F5D3A6; color: #3A2E1C; }
+@media (max-width: 640px) {
+  .host-switch { flex: 1 1 100%; }
+  .host-switch button { flex: 1 1 0; justify-content: center; }
+}

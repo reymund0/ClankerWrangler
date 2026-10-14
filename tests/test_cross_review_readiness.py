@@ -70,7 +70,7 @@ class ReadinessTests(unittest.TestCase):
         stderr = io.StringIO()
         with contextlib.ExitStack() as stack:
             stack.enter_context(mock.patch.object(sys, "argv", argv))
-            stack.enter_context(mock.patch.object(review, "reservation_root", return_value=self.reservations))
+            stack.enter_context(mock.patch.object(review.core, "reservation_root", return_value=self.reservations))
             for patcher in patches:
                 stack.enter_context(patcher)
             stack.enter_context(contextlib.redirect_stdout(stdout))
@@ -433,7 +433,7 @@ class ReadinessTests(unittest.TestCase):
             self.manifest(),
             "--prepare-only",
             patches=[
-                mock.patch.object(review, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")),
+                mock.patch.object(review.core, "reservation_root", side_effect=AssertionError("new review consulted legacy reservation registry")),
                 mock.patch.object(review, "resolve_claude", side_effect=AssertionError("filesystem failure resolved Claude")),
                 mock.patch.object(review, "preflight", side_effect=AssertionError("filesystem failure ran preflight")),
                 mock.patch.object(review, "invoke", side_effect=AssertionError("filesystem failure launched Claude")),
@@ -462,8 +462,8 @@ class ReadinessTests(unittest.TestCase):
                     patches=[
                         mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
                         mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
-                        mock.patch.object(review, "start_review_process", return_value=process),
-                        mock.patch.object(review, "close_review_job"),
+                        mock.patch.object(review.core, "start_review_process", return_value=process),
+                        mock.patch.object(review.core, "close_review_job"),
                     ],
                 )
                 self.assertEqual(2, code)
@@ -483,7 +483,7 @@ class ReadinessTests(unittest.TestCase):
             patches=[
                 mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
                 mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
-                mock.patch.object(review, "start_review_process", side_effect=OSError("credential=PRIVATE_LAUNCH_ERROR")),
+                mock.patch.object(review.core, "start_review_process", side_effect=OSError("credential=PRIVATE_LAUNCH_ERROR")),
             ],
         )
         self.assertEqual(2, code)
@@ -508,8 +508,8 @@ class ReadinessTests(unittest.TestCase):
         code, stdout, stderr = self.invoke_main(self.manifest(), "--effort", "medium", patches=[
             mock.patch.object(review, "resolve_claude", return_value=Path("claude")),
             mock.patch.object(review, "preflight", return_value={"requested_model": "opus"}),
-            mock.patch.object(review, "start_review_process", side_effect=start),
-            mock.patch.object(review, "close_review_job"),
+            mock.patch.object(review.core, "start_review_process", side_effect=start),
+            mock.patch.object(review.core, "close_review_job"),
         ])
         self.assertEqual(2, code)
         self.assertEqual(1, len(stdout.splitlines()))
@@ -529,7 +529,7 @@ class ReadinessTests(unittest.TestCase):
             self.manifest(),
             "--effort", "medium",
             patches=[
-                mock.patch.object(review, "report_directory", side_effect=PermissionError("private report path detail")),
+                mock.patch.object(review.core, "report_directory", side_effect=PermissionError("private report path detail")),
                 mock.patch.object(review, "resolve_claude", side_effect=AssertionError("report denial resolved Claude")),
                 mock.patch.object(review, "preflight", side_effect=AssertionError("report denial ran preflight")),
                 mock.patch.object(review, "invoke", side_effect=AssertionError("report denial launched Claude")),

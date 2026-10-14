@@ -34,7 +34,7 @@ class DiagnosticsTests(unittest.TestCase):
         def start(_command, snapshot, **streams):
             return self.real_start([sys.executable, "-u", "-c", code], snapshot, **streams)
 
-        with mock.patch.object(review, "start_review_process", side_effect=start), mock.patch.object(review, "HEARTBEAT_SECONDS", 0.1):
+        with mock.patch.object(review.core, "start_review_process", side_effect=start), mock.patch.object(review.core, "HEARTBEAT_SECONDS", 0.1):
             return review.invoke(pathlib.Path(sys.executable), self.root, {"phase": "plan"}, self.args)
 
     def events(self):
@@ -46,7 +46,7 @@ class DiagnosticsTests(unittest.TestCase):
         process = self.real_start([sys.executable, "-u", "-c", code], self.root)
         try:
             log.event("claude_started", claude_pid=process.pid, claude_running=True)
-            with mock.patch.object(review, "HEARTBEAT_SECONDS", 0.1):
+            with mock.patch.object(review.core, "HEARTBEAT_SECONDS", 0.1):
                 stdout, stderr = review.communicate_review(process, "single prompt", 3, log)
             self.assertEqual("13", stdout.strip())
             self.assertEqual("", stderr)
@@ -133,7 +133,7 @@ class DiagnosticsTests(unittest.TestCase):
                 raise OSError(5, "private disk error")
             original_event(name, **fields)
 
-        with mock.patch.object(review, "start_review_process", return_value=process), mock.patch.object(review, "close_review_job"), mock.patch.object(review, "terminate") as terminate, mock.patch.object(log, "event", side_effect=event):
+        with mock.patch.object(review.core, "start_review_process", return_value=process), mock.patch.object(review.core, "close_review_job"), mock.patch.object(review.core, "terminate") as terminate, mock.patch.object(log, "event", side_effect=event):
             with self.assertRaises(OSError):
                 review.invoke(pathlib.Path("claude"), self.root, {"phase": "plan"}, self.args)
         terminate.assert_called_once_with(process)
