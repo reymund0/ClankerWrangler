@@ -57,7 +57,7 @@ The editor SHALL let users select an interaction, optional native specialist, on
 - **THEN** the preview shows requested effort max from the Demanding mapping, without a cap or ceiling explanation, and neither dispatches an agent nor saves the draft
 
 ### Requirement: Local validated persistence
-The editor SHALL read and save only global preferences. Saves SHALL validate configuration, be atomic, detect changes since the loaded revision before replacement and serialize cooperating editor saves, and report success only after persistence. Invalid drafts and write failures SHALL preserve prior saved content and keep the draft recoverable. Global preferences SHALL survive skill installation and upgrade. The editor SHALL make the global destination visible before saving; existing project preference files SHALL remain untouched. The documented save guarantee SHALL acknowledge that a non-cooperating writer can race after the final revision check; atomic replacement alone SHALL NOT be presented as filesystem compare-and-swap. Loading invalid saved preferences or preparing a Reset draft SHALL NOT save automatically; replacing the saved document SHALL require an explicit Save.
+The editor SHALL read and save only global preferences. Saves SHALL validate configuration, be atomic, detect changes since the loaded revision before replacement and serialize cooperating editor saves, and report success only after persistence. Invalid drafts and write failures SHALL preserve prior saved content and keep the draft recoverable. Global preferences SHALL survive skill installation and upgrade. The editor SHALL make the global destination visible before saving; existing project preference files SHALL remain untouched. The documented save guarantee SHALL acknowledge that a non-cooperating writer can race after the final revision check; atomic replacement alone SHALL NOT be presented as filesystem compare-and-swap. Loading invalid saved preferences or preparing a Reset draft SHALL NOT save automatically; replacing the saved document SHALL require an explicit Save. Retired role IDs SHALL be rejected on load, preview, and save without automatic role migration or stripping.
 
 #### Scenario: Concurrent edit
 - **WHEN** another cooperating editor changes a preferences file after loading, or an external edit exists before the final save revision check
@@ -71,6 +71,14 @@ The editor SHALL read and save only global preferences. Saves SHALL validate con
 - **WHEN** saved global preferences contain a retired ceiling field and the owner opens the editor
 - **THEN** the editor reports the field-path validation error and leaves the file unchanged; Reset prepares an empty draft, and a separate explicit Save replaces all overrides with revision protection
 - **AND** preserving customizations requires a valid replacement retaining them or hand-editing the retired keys; Reset is a whole-file replacement action rather than ceiling cleanup
+
+#### Scenario: Retired role in saved preferences
+- **WHEN** saved preferences contain a retired native role in an agent default or activity-specific specialist override
+- **THEN** the editor reports its invalid field path and leaves the file unchanged; preserving unrelated customizations requires an owner-edited valid replacement, while Reset remains a draft followed by a separate explicit Save
+
+#### Scenario: Invalid retired-role preview or save
+- **WHEN** a preview request names a retired role or a preview/save draft contains a retired override
+- **THEN** the service rejects that input before execution or persistence and does not silently remove or remap the role
 
 ### Requirement: Restricted local service
 The editor service SHALL be loopback-only, accept configuration operations only for its fixed global destination, and reject unauthorized origins and write requests. It SHALL NOT expose arbitrary filesystem reads/writes, credential access, model execution, or arbitrary shell execution. An authenticated explicit Run Wrangler action MAY execute only the fixed source-checkout installer, with no browser-supplied command, arguments or paths; it SHALL reject concurrent runs and report bounded output, failure and timeout honestly. Paths escaping the allowed destinations through traversal or links SHALL be rejected. Project-scoped API requests SHALL be rejected without accessing a project file.
@@ -132,15 +140,23 @@ The editor SHALL provide Worker routes, Activity defaults, Adaptive profiles, an
 - **THEN** actions remain reachable, the matrix scrolls horizontally and the inspector stacks below it
 
 ### Requirement: Worker route matrix and inspector
-The worker screen SHALL display API-provided roles and Codex activities with an agent-default column, applicable activity cells, exception counts and a Claude cross-review row. Cells SHALL distinguish inherited, set-in-scope, exception, varying and not-used states using text as well as color. Selection SHALL expose model/reasoning controls, per-field and whole-route reset, applicable activity exception controls, provenance and prefilled preview navigation. Applicable roles SHALL use existing specialist filtering, including configured exceptions. Catalog status and refresh SHALL remain available. Mockup values SHALL NOT replace response data.
+The worker screen SHALL display API-provided roles and Codex activities with an agent-default column, applicable activity cells, exception counts and a Claude cross-review row. Cells SHALL distinguish inherited, set-in-scope, exception, varying and not-used states using text as well as color. Selection SHALL expose model/reasoning controls, per-field and whole-route reset, applicable activity exception controls, provenance and prefilled preview navigation. Applicable roles SHALL use existing specialist filtering, including configured exceptions for active roles. Catalog status and refresh SHALL remain available. Mockup values SHALL NOT replace response data. The matrix, inspector, activity choices, and preview selector SHALL expose only the ten active native roles; retired role overrides SHALL NOT restore a retired role as an existing exception.
 
 #### Scenario: Inspect mixed inheritance and exceptions
-- **WHEN** an agent has differing activity routes and an inherited or own activity exception
+- **WHEN** an active agent has differing activity routes and an inherited or own activity exception
 - **THEN** its default cell shows Varies by activity, its exception count remains visible, and editing/resetting the agent default preserves activity exceptions
 
 #### Scenario: Inspect Claude alias
 - **WHEN** a Claude alias route is selected
 - **THEN** the alias warning, route controls and reset-to-inherited action are available
+
+#### Scenario: Ten active worker roles
+- **WHEN** the current editor opens with valid preferences
+- **THEN** its worker matrix contains the ten active native roles and one separate Claude cross-review row, and UX designer, documentation writer, and product engineer are absent from every native role selector
+
+#### Scenario: Retired exception cannot reappear
+- **WHEN** a saved document or an attempted draft contains a retired specialist override
+- **THEN** the retired role is not presented as a selectable existing override, validation identifies the invalid field, and valid off-scenario exceptions for remaining roles retain their existing behavior
 
 ### Requirement: Dedicated default and profile screens
 Activity defaults SHALL show every Codex activity, provider, ownership, applicable specialists, model and segmented Adaptive/Fixed controls and resets. Adaptive profiles SHALL show effective and own profiles, locally reported model customization, CLI-constrained editable override fields, inherited read-only fields, per-model effort meters, changed-field highlighting and reset. The profile table SHALL contain exactly three tier columns labeled Straightforward, Involved, and Demanding, each with a short accessible definition matching routing guidance. An example SHALL show the first customized profile's involved mapping as the requested effort locally without calling preview. The profile table SHALL have no default-ceiling column, selector, or meter. Unavailable saved selections SHALL remain visible.
