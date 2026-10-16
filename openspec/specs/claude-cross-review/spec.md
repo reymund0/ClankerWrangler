@@ -14,8 +14,8 @@ The integration SHALL run under a Codex orchestrator, preserve the user-selected
 - **THEN** Claude returns advisory findings through the CLI and Codex remains responsible for integration and the final result
 
 #### Scenario: Unsupported orchestration host
-- **WHEN** the cross-review workflow is invoked with Claude Code as the orchestrator
-- **THEN** it reports that Claude-led orchestration is unsupported and does not recursively launch this workflow
+- **WHEN** Claude Code is the orchestration host and a cross-review checkpoint is selected
+- **THEN** Claude review is not selected; the host configuration's Codex reviewer is used instead, and this launcher is not recursively invoked
 
 ### Requirement: Scope determines review checkpoints
 The orchestrator SHALL select plan cross-review before implementing a substantial plan and implementation cross-review after integrating substantial changes. Substantial scope SHALL include changes crossing UI/API/data contracts, consequential architecture decisions, or authentication, authorization, migration, data-integrity, deployment, or measured performance risks. Small low-risk edits SHALL be skipped by default. Explicit requests and opt-outs SHALL override automatic selection. Each selection or skip SHALL record its phase and concise reason; reviewers SHALL NOT be launched after every individual implementation task.
@@ -200,11 +200,11 @@ The workflow SHALL preserve the existing daily orchestration log and parent-only
 - **THEN** each report remains independently identifiable and the daily log retains earlier events and links each outcome to the correct report
 
 ### Requirement: Single-skill distribution and verification
-Both existing installers SHALL package Claude reviewer guidance and the launcher under the existing orchestration skill, preserve unrelated skills and existing specialist migration behavior, and create no additional discoverable skill. Installation SHALL NOT launch Claude, log in, install prerequisites, or modify model settings. Verification SHALL distinguish deterministic launcher/installer tests from live authenticated review checks.
+Both existing installers SHALL package the shared cross-review guidance, the shared review machinery, and the Claude launcher under the existing orchestration skill, preserve unrelated skills and existing specialist migration behavior, and create no additional discoverable skill. Installation SHALL NOT launch Claude, log in, install prerequisites, or modify model settings. Verification SHALL distinguish deterministic launcher/installer tests from live authenticated review checks.
 
 #### Scenario: Fresh or repeated installation
 - **WHEN** either wrangle installer runs against an isolated fresh or existing destination
-- **THEN** the coordinator, reviewer reference, and supporting launcher are installed together with one visible orchestration skill and unrelated content preserved
+- **THEN** the coordinator, shared cross-review reference, shared review machinery, and supporting launchers are installed together with one visible orchestration skill and unrelated content preserved, and a previously installed Claude-only reviewer reference is backed up under the existing retirement rules
 
 #### Scenario: Live authentication unavailable during testing
 - **WHEN** deterministic tests pass but a real subscription-authenticated review cannot run
@@ -284,6 +284,7 @@ The launcher SHALL print the unique attempt directory and diagnostic paths to st
 #### Scenario: Owned timeout or interruption
 - **WHEN** the launcher times out or receives a handled interruption
 - **THEN** it records the termination reason, terminates the owned process tree, and retains safe progress and an incomplete final result
+
 ### Requirement: Native guidance path identity
 Preparation SHALL recognize explicit captured guidance by its native original/resolved identity, including Windows slash differences. Original subjects and mappings SHALL be preserved. Actual unavailable required or mapped evidence SHALL block, while removed content/filename/ignore/default-size filters SHALL NOT return through identity matching.
 
@@ -309,3 +310,18 @@ The legacy write-check interface SHALL remain usable for existing records withou
 #### Scenario: Unchanged-input freshness query
 - **WHEN** captured inputs are unchanged
 - **THEN** exit0/current=true are returned, with eligibility dependent on actual completed clean required coverage
+
+### Requirement: Shared external-review contract
+Claude and Codex reviews SHALL use one review contract for manifests, scoped evidence packets, required coverage, findings, limitations, verdicts, reports, source-change reconciliation, freshness queries, diagnostics, progress, timeouts, and owned-process cleanup. Reports SHALL identify the reviewer provider, external execution, and the orchestration host it implies. The Claude launcher's existing options, defaults, report fields, and exit codes SHALL remain compatible; guidance paths naming the retired Claude-only reference are the one documented manifest migration.
+
+#### Scenario: Existing Claude review after refactor
+- **WHEN** an existing manifest is prepared and reviewed with the Claude launcher after the update
+- **THEN** preparation, preflight, report fields, and freshness behavior match the previous contract, with reviewer provider, external execution, and host added
+
+#### Scenario: Manifest naming the retired reviewer reference
+- **WHEN** an earlier manifest lists the retired Claude-only reviewer reference in its guidance and that file has been backed up
+- **THEN** preparation blocks with the missing guidance path identified and the documented replacement path, without silently substituting guidance
+
+#### Scenario: Reviews from both providers in one run
+- **WHEN** Claude and Codex reviews are saved under the same run identifier
+- **THEN** each attempt has a distinct report path and identifies its reviewer, and freshness queries work for both

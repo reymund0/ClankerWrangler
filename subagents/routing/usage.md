@@ -66,8 +66,10 @@ Assess `tier` from the reasoning this assignment needs, independently of model:
   when concurrent state transitions and failure ordering are still unresolved.
 
 Supply one tier and one short assignment-specific `reason`; no scorecard or extra
-assessment fields are required. Reassess each new assignment: investigation may be
-demanding while implementation of its established solution is straightforward.
+assessment fields are required. Reassess for each new workstream thread: investigation
+may be demanding while implementation of its established solution is straightforward.
+For a build workstream, `role` is its lead role and `tier` is the hardest tier expected
+in its area.
 Include applicable `risk_flags`: `security`, `data-integrity`, `recovery`,
 `cross-layer`, `uncertainty`, or `performance`. The first three impose at least
 involved, but only when that worker owns the consequential behavior. A copy change
@@ -142,6 +144,9 @@ and capability validation. Its JSON includes the selected `model`/`effort`, limi
 provenance, versions, and snapshot fingerprint. Do not recompute those decisions.
 
 - Native: dispatch only when `dispatch_allowed` is true, using the exact returned pair.
+  Resolve routes once per workstream, when its thread starts. Make no new resolver
+  request for a follow-up: a continued assignment refers to the workstream's resolver
+  JSON and still states the readable settings line from it.
 - External review: `requires_launcher_preflight` with `launcher_allowed` permits only the
   guarded launcher named in `routing/host.json` (`claude_cross_review.py` or
   `codex_cross_review.py`) with explicit resolved `--model` and `--effort`.

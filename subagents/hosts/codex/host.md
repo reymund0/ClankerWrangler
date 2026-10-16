@@ -28,11 +28,12 @@ do not extrapolate from the catalog or from a model's name.
 Limit concurrent assignments to three, or the runtime's lower limit, counting Claude
 review; run at most one Claude review per run at a time.
 
-Before spawning, inspect worker state and available capacity. Reuse a suitable idle
-worker only when its known requested model/effort matches the newly resolved route;
-refresh its role, ownership, and context. Otherwise sequence the work or handle it
-directly within the parent's scope. After a capacity rejection, do not repeat the same
-spawn until capacity changes, and never count the rejected assignment as running.
+The coordinator decides when a workstream's thread continues. To continue one, send the
+continued assignment to the workstream's idle worker through the collaboration tools; it
+keeps the model and effort it was started with. If that worker is no longer available,
+start a new worker on the workstream's route with a parent-written summary, as the
+coordinator describes. After a capacity rejection, do not repeat the same spawn until
+capacity changes, and never count the rejected assignment as running.
 
 ## Observed settings
 

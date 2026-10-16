@@ -76,10 +76,16 @@ shadowing.
 
 Limit concurrent assignments to three, or the runtime's lower limit, counting any
 external review; run at most one external review per run at a time. Start independent
-workers in the same turn. Workers return their result to the parent once; resolve the
-route afresh for each new assignment and start a new worker rather than assuming an
-earlier worker's model or effort applies. After a capacity rejection, do not repeat the
-same spawn until capacity changes, and never count the rejected assignment as running.
+workers in the same turn. After a capacity rejection, do not repeat the same spawn until
+capacity changes, and never count the rejected assignment as running.
+
+The coordinator decides when a workstream's thread continues. To continue one, find the
+worker with `ListAgents` and send the continued assignment with `SendMessage` to the
+name or ID it lists; do not start a new Agent call for it. The continued worker keeps the
+model and effort it was started with, so the Agent call that started it is the
+workstream's only model and effort selection. If `ListAgents` no longer lists the worker
+or `SendMessage` cannot reach it, start a new worker on the workstream's route with a
+parent-written summary, as the coordinator describes.
 
 ## Observed settings
 
@@ -88,6 +94,17 @@ observed model and effort as unknown unless the runtime reports them for that wo
 never copy the request or a worker's self-description into observed fields. Where subagent
 transcripts expose a model field, live acceptance may record it as evidence for that
 worker only.
+
+For a workstream's retire row, read the observed values from the worker's transcript,
+`~/.claude/projects/<project>/<session-id>/subagents/agent-<id>.jsonl`:
+
+```text
+jq -sc '[.[] | select(.type == "assistant")] as $a | {model: ([$a[].message.model] | unique), effort: ([$a[].effort | select(.)] | unique), final_context: ($a[-1].message.usage | .input_tokens + .cache_read_input_tokens + .cache_creation_input_tokens), compactions: [.[] | select(.subtype == "compact_boundary") | .compactMetadata.preTokens]}' <transcript>
+```
+
+It prints the models and efforts recorded on the worker's calls, the last call's context
+size in tokens, and the context size before each compaction. These fields are observed,
+not documented; if the transcript is missing or a field is absent, record `unknown`.
 
 ## External reviewer: Codex CLI
 

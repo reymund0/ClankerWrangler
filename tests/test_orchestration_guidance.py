@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import csv
 from pathlib import Path
 import re
+import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -41,7 +44,8 @@ class WorkerDefinitionTests(unittest.TestCase):
         for forbidden in ("model", "effort", "tools"):
             self.assertNotIn(forbidden, fields)
         self.assertIn("<!-- clanker-orchestration-nation: managed worker definition -->", body)
-        for boundary in ("supplied instruction path", "Do not delegate", "shared run log", "reply contract"):
+        for boundary in ("supplied instruction path", "Do not delegate", "shared run log", "reply contract",
+                         "restated ownership and stated revisions supersede your earlier brief"):
             self.assertIn(boundary, body)
 
 
@@ -78,6 +82,26 @@ class HostConfigurationTests(unittest.TestCase):
                          "Never translate an exact ID", "ChatGPT", "OPENAI_API_KEY", "unknown unless the runtime reports"):
             self.assertIn(flat(fragment), flat(claude), fragment)
 
+    def test_host_references_describe_thread_continuation_mechanics(self):
+        claude = flat((SUBAGENTS / "hosts" / "claude" / "host.md").read_text(encoding="utf-8"))
+        for fragment in ("find the worker with `ListAgents`", "send the continued assignment with `SendMessage`",
+                         "keeps the model and effort it was started with", "Limit concurrent assignments to three",
+                         "After a capacity rejection, do not repeat the same spawn", "message.model",
+                         "compact_boundary", "subagents/agent-<id>.jsonl", "record `unknown`"):
+            self.assertIn(fragment, claude, fragment)
+        self.assertNotIn("start a new worker rather than assuming", claude)
+        codex = flat((SUBAGENTS / "hosts" / "codex" / "host.md").read_text(encoding="utf-8"))
+        for fragment in ("keeps the model and effort it was started with", "Limit concurrent assignments to three",
+                         "Never copy requested settings into the observed fields"):
+            self.assertIn(fragment, codex, fragment)
+
+    def test_dispatch_procedure_resolves_once_per_workstream(self):
+        usage = flat((SUBAGENTS / "routing" / "usage.md").read_text(encoding="utf-8"))
+        for fragment in ("Resolve routes once per workstream, when its thread starts",
+                         "Make no new resolver request for a follow-up",
+                         "refers to the workstream's resolver JSON and still states the readable settings line"):
+            self.assertIn(fragment, usage, fragment)
+
 
 class CoordinatorTests(unittest.TestCase):
     def setUp(self):
@@ -93,19 +117,93 @@ class CoordinatorTests(unittest.TestCase):
         moved = (
             "Prefer an empty history fork with a focused assignment",
             "A full-history fork inherits parent settings and must not be",
-            "Reuse a suitable idle",
             "After a capacity rejection, do not repeat the same",
         )
         host = (SUBAGENTS / "hosts" / "codex" / "host.md").read_text(encoding="utf-8")
         for fragment in moved:
             self.assertIn(flat(fragment), flat(host), fragment)
             self.assertNotIn(flat(fragment), flat(self.text), fragment)
+        # Reuse policy lives in the coordinator; the host reference keeps only the continuation mechanics.
+        self.assertNotIn("Reuse a suitable idle", flat(host))
+        self.assertIn("send the continued assignment to the workstream's idle worker through the collaboration tools", flat(host))
+        self.assertIn("Reuse threads only through workstreams and reviewer rechecks", flat(self.text))
+
+    def test_delegation_threshold(self):
+        for fragment in ("fixes it has already diagnosed that it can finish in a few calls",
+                         "plus its own git, OpenSpec, and log work", "logs a one-line reason",
+                         "straightforward work leans to the parent and involved or demanding work to a workstream"):
+            self.assertIn(fragment, flat(self.text), fragment)
+
+    def test_workstreams_own_code_areas_and_keep_one_thread(self):
+        for fragment in ("Group build work into workstreams by code area", "recorded as its file ownership",
+                         "one lead role plus optional extra role checklists", "workstreams never own overlapping files",
+                         "write the contract between them before dispatch", "each side is substantial enough",
+                         "Each workstream has at most one thread at a time", "restates the ownership",
+                         "states every spec, design, or scope revision"):
+            self.assertIn(fragment, flat(self.text), fragment)
+
+    def test_workstream_route_is_fixed_at_thread_start(self):
+        for fragment in ("Resolve a workstream's route once, when its thread starts",
+                         "from its lead role and the hardest tier expected in its area",
+                         "Continued assignments keep the thread's model and effort",
+                         "never changes a workstream's route on its own", "requires an explicit user choice",
+                         "continue it, take the fix over under the delegation threshold, or ask the user"):
+            self.assertIn(fragment, flat(self.text), fragment)
+        self.assertNotIn("escalat", self.text.lower())
+
+    def test_workstream_retirement(self):
+        for fragment in ("Retire a thread once parent verification passes and no follow-up is pending",
+                         "as `blocked` when its unfinished work is abandoned", "the run ends blocked or interrupted",
+                         "A thread waiting on a user decision stays active",
+                         "Leave context compaction to the host default and record it when observed",
+                         "continue the retired thread if the host can still reach it", "parent-written summary"):
+            self.assertIn(fragment, flat(self.text), fragment)
+
+    def test_reviewer_recheck_and_acceptance_outside_the_parent(self):
+        for fragment in ("A native reviewer performs its own single automatic recheck in the same thread",
+                         "the finding IDs, the fix diff, and a request to check the changed lines for regressions",
+                         "Start a fresh native review", "External cross-review rechecks keep their fresh-session behavior",
+                         "run in a worker that owns the browser state", "unless the user explicitly directs the parent",
+                         "The parent keeps the evidence states"):
+            self.assertIn(fragment, flat(self.text), fragment)
 
     def test_run_log_procedure_records_settings_and_route_outcomes(self):
-        for fragment in ("Model: haiku · Reasoning: Adaptive/straightforward → medium · Observed: unknown", "route-outcome table",
-                         "`first-pass`", "`revised`", "`rerouted`", "`blocked`", "orchestration host and its preference source",
-                         "never retyped from memory"):
+        for fragment in ("Model: haiku · Reasoning: Adaptive/straightforward → medium · Observed: unknown",
+                         ".clanker/orchestration-ledger.csv`", "A `retire` row records the workstream's outcome",
+                         "`first-pass`", "`revised`", "`rerouted`", "`blocked`", "`defect_source`",
+                         "`assign-new`", "`assign-continued`", "`parent-kept`", "`followup_kind`",
+                         "or write `unknown`", "orchestration host and its preference source", "never retyped from memory",
+                         "from the host clock at write time", "never estimate, reconstruct, or copy a time"):
             self.assertIn(flat(fragment), flat(self.text), fragment)
+        self.assertNotIn("route-outcome table", flat(self.text))
+
+    def test_documented_ledger_append_quotes_values_into_fourteen_columns(self):
+        script = re.search(r"python3 -c '([^']*)' <repo>/\.clanker/orchestration-ledger\.csv", self.text).group(1)
+        detail = 'Fix R1-2, then "recheck"'
+        values = ["run-1", "api", "assign-continued", "agent-1", "clanker-backend-developer",
+                  "haiku/high/involved", detail, "defect", "native review", "", "", "", ""]
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "orchestration-ledger.csv"
+            for _ in range(2):
+                subprocess.run([sys.executable, "-c", script, str(ledger), *values], check=True)
+            with ledger.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.reader(handle))
+        self.assertEqual(rows[0], ["time", "run", "workstream", "event", "thread", "lead_role", "route", "detail",
+                                   "followup_kind", "defect_source", "observed_model", "observed_effort",
+                                   "final_context", "outcome"])
+        self.assertEqual(len(rows), 3, "the header is written only when the file is created")
+        for row in rows[1:]:
+            self.assertEqual(len(row), 14)
+            self.assertEqual(row[1:], values)
+            self.assertRegex(row[0], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d$")
+
+    def test_readme_names_workstreams_and_the_same_log_paths(self):
+        readme = flat((ROOT / "README.md").read_text(encoding="utf-8"))
+        for fragment in ("groups build work into workstreams by code area", ".clanker/YYYY-MM-DD-orchestration-nation.md",
+                         ".clanker/orchestration-ledger.csv"):
+            self.assertIn(fragment, readme, fragment)
+        for path in ("YYYY-MM-DD-orchestration-nation.md", ".clanker/orchestration-ledger.csv"):
+            self.assertIn(path, self.text, path)
 
     def test_shared_cross_review_reference_replaces_the_claude_only_one(self):
         self.assertFalse((SUBAGENTS / "clanker-claude-cross-review.md").exists())

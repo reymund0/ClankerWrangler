@@ -44,9 +44,10 @@ Keep the user's parent model and effort. Before the first assignment, read the
 snapshot and resolver commands, request fields, dispatch gates, and evidence capture.
 Read its configuration/editor sections only when those details are needed.
 
-Resolve every assignment through that procedure using the run snapshot. Disclose the
-host, the global preference source and consequential routing limitations; do not
-silently substitute settings when resolution or dispatch is blocked.
+Resolve each workstream's route, and each review or planning assignment, through that
+procedure using the run snapshot. Disclose the host, the global preference source and
+consequential routing limitations; do not silently substitute settings when resolution
+or dispatch is blocked.
 
 Use the returned `model` and `effort` as the native tool's model and reasoning-effort
 arguments, as the host reference describes. Requested settings are not proof of
@@ -57,8 +58,14 @@ observed settings.
 Choose the smallest useful team. Follow the host reference's concurrency limit, counting
 any external review; run at most one external review per run at a time.
 Parallelize independent work and serialize changes to shared files, interfaces, browser
-state, or the reviewed build. Keep useful inspection or integration work with the parent.
-Follow the host reference for worker reuse and capacity before spawning.
+state, or the reviewed build.
+
+Delegate build work. The parent keeps only fixes it has already diagnosed that it can
+finish in a few calls, plus its own git, OpenSpec, and log work, and logs a one-line
+reason for each piece of build work it keeps. When these criteria do not settle a case,
+straightforward work leans to the parent and involved or demanding work to a workstream.
+A small change that needs code the parent has not yet read goes to the workstream that
+owns that area.
 
 | Role | Instruction file | Use for |
 | --- | --- | --- |
@@ -86,13 +93,47 @@ installed packages keep them in `references/`. Shared code review is
 use retired skills or stale standalone specialist installations.
 
 Read only the selected instructions, verify their names and paths, and require each
-worker to read its absolute instruction path before domain work. Missing or unreadable
+worker to read its absolute instruction path, and each extra checklist's path, before domain work. Missing or unreadable
 instructions block that assignment; independent work may continue. Specialist guidance
 does not override the assignment's phase, ownership, repository rules, or authorization.
 
+Group build work into workstreams by code area. Each workstream owns a set of files,
+recorded as its file ownership, and has one lead role plus optional extra role
+checklists from the table; workstreams never own overlapping files. Split work across a
+stack boundary, such as API and UI, into separate workstreams only when the parent can
+write the contract between them before dispatch and each side is substantial enough to
+run in parallel. Otherwise one workstream carries both role checklists.
+
+Each workstream has at most one thread at a time. Send follow-up work in its area,
+including review fixes and defects the parent finds, to that thread as a continued
+assignment, using the host reference's mechanism for continuing a thread. A continued
+assignment restates the ownership and states every spec, design, or scope revision since
+the thread's last brief.
+
+Resolve a workstream's route once, when its thread starts, from its lead role and the
+hardest tier expected in its area. Continued assignments keep the thread's model and
+effort. The parent never changes a workstream's route on its own; a different route
+requires an explicit user choice. When a thread struggles, continue it, take the fix
+over under the delegation threshold, or ask the user.
+
+Retire a thread once parent verification passes and no follow-up is pending. Retire it
+as `blocked` when its unfinished work is abandoned, or when the run ends blocked or
+interrupted with that work unfinished. A thread waiting on a user decision stays active.
+Leave context compaction to the host default and record it when observed. When work
+later arrives in a retired workstream's area, continue the retired thread if the host
+can still reach it; otherwise start a new thread seeded with a parent-written summary of
+the workstream's state, and record it as a new thread for that workstream.
+
+Before starting a thread, inspect worker state and capacity. Reuse threads only through
+workstreams and reviewer rechecks, keeping each thread's route, role guidance, and
+ownership. When capacity is exhausted, sequence the work or keep it under the delegation
+threshold instead of repeatedly spawning or silently changing settings; follow the host
+reference after a capacity rejection. A failed dispatch never counts as running.
+
 Use one concise handoff containing:
 
-- Role/interaction, repository and instruction paths, and the requested model/effort.
+- Workstream, lead role and any extra checklists, interaction, repository and
+  instruction paths, and the requested model/effort.
 - Outcome, exact file ownership or advisory-only scope, dependencies, and exclusions.
 - Relevant user/repository constraints and OpenSpec artifacts, tasks, and scenarios.
 - Expected verification and the compact reply contract below; return the instruction
@@ -166,7 +207,11 @@ prerequisites are in the host reference. The external reviewer supplements nativ
 review and tests; it does not authorize implementation or deployment.
 
 Assign browser/test acceptance separately with an owner and evidence status; do not
-ask a static reviewer to certify a live check. Split large reviews by coherent
+ask a static reviewer to certify a live check. Browser QA and other long acceptance work
+run in a worker that owns the browser state and records evidence, not in the parent,
+unless the user explicitly directs the parent to do it; log that the parent kept it at
+the user's direction. The parent keeps the evidence states and verifies the worker's
+evidence before marking acceptance tasks complete. Split large reviews by coherent
 responsibility; the parent retains the full acceptance checklist and unresolved checks,
 including work outside a bounded recheck.
 
@@ -175,6 +220,12 @@ repository's copy; otherwise resolve the installed skill as described above.
 Supply the verified base and task-owned committed, staged, unstaged, and untracked
 scope; follow that skill's evidence collection procedure. Exclude unrelated user changes
 and record anything unreviewed.
+
+A native reviewer performs its own single automatic recheck in the same thread. Its
+brief contains the finding IDs, the fix diff, and a request to check the changed lines
+for regressions. Start a fresh native review of the affected scope instead when the
+spec or design changed after the first review, or the change grew beyond the reviewed
+scope. External cross-review rechecks keep their fresh-session behavior.
 
 For UI visual acceptance, select `clanker-ui-ux-reviewer` with `visual-review` routing
 after integration. Supply application/startup details, routes, acceptance context,
@@ -196,21 +247,23 @@ Create a distinct run ID from a timezone-bearing timestamp plus a known session 
 or checked ordinal. Retain the run ID and original file on resume or across midnight.
 
 Append complete, run-attributed timestamped blocks; never rewrite a whole-file snapshot.
-Preserve other runs. Read relevant entries on resume or when reconciling uncertain
+Preserve other runs. Take every block's and ledger row's time, with its timezone offset,
+from the host clock at write time, for example `date` in the same append command; never
+estimate, reconstruct, or copy a time from an earlier entry. Read relevant entries on resume or when reconciling uncertain
 state, rather than rereading the growing log before every append. Record:
 
 - At start: workspace, branch, request, session when known, OpenSpec context, the
   orchestration host and its preference source, parent settings, complexity/risk
   rationale, and any no-delegation decision.
-- Before dispatch: assignment ID, role/interaction, instruction path, ownership, concise
-  rationale, the readable settings line below, and routing evidence captured as
-  described in the dispatch procedure.
+- Before dispatch: assignment ID, workstream, role/interaction, instruction paths,
+  ownership, concise rationale, and the readable settings line below. Capture routing
+  evidence, as described in the dispatch procedure, when a workstream's thread starts;
+  a continued assignment refers to that evidence.
 - On meaningful changes: actual dispatch outcome, observed settings or unknown,
   verification results, review dispositions/waivers, blockers, and snapshot reloads.
   Use readable timestamped blocks that name the run and assignment, status, owned paths,
   evidence/check, and next owner.
-- At completion: completed, blocked, or interrupted outcome, the route-outcome table
-  below, and remaining checks.
+- At completion: completed, blocked, or interrupted outcome and remaining checks.
   State task completion separately from native review, external review, and runtime
   acceptance; mark each evidence state complete, partial, pending, or excluded, and
   explain exclusions without treating them as waivers.
@@ -227,17 +280,51 @@ the request or a model's self-description. The block also states the host, and t
 provider and execution kind (`native` or `external`) from the resolver output. An
 external review block names the reviewer provider and links its `report.json`.
 
-The closing entry includes a route-outcome table with one row per native worker
-assignment: assignment, role, requested model, effort and tier, and an outcome. The
-parent decides outcomes from its own verification evidence, never from worker
-readiness claims:
+Also append one CSV row per orchestration event to `<repo>/.clanker/orchestration-ledger.csv`
+for spreadsheet analysis. Create it with a header row when it is absent; never rewrite
+or reorder existing rows. If the columns change, write to a new versioned file, such as
+`orchestration-ledger-v2.csv`, rather than mixing headers. The columns, in order:
 
-- `first-pass`: accepted by parent verification without fixes.
-- `revised`: accepted after fixes on the same route.
-- `rerouted`: reassigned to a different model, effort, or role, or taken over by the
-  parent; name the replacement route. The replacement assignment gets its own row.
+`time`, `run`, `workstream`, `event`, `thread`, `lead_role`, `route`, `detail`,
+`followup_kind`, `defect_source`, `observed_model`, `observed_effort`, `final_context`,
+`outcome`
+
+Each row's `event` is one of:
+
+- `start`: the run started; `detail` summarizes the request.
+- `assign-new`: a workstream's thread started; `route` is the resolved model, effort,
+  and tier.
+- `assign-continued`: a follow-up went to an existing thread. `followup_kind` is
+  `defect` when it fixes a finding, with what found it in `defect_source`, or `scope`
+  when a requirement or the scope changed.
+- `parent-kept`: the parent kept build work; `detail` gives the reason.
+- `retire`: a thread retired; the row carries the outcome and observed columns, and
+  `detail` notes any compaction observed in the thread.
+
+Leave columns that do not apply empty. Append with Python's `csv` writer, which quotes
+commas and quotes, and take the time from the clock in the same command. Pass all 13
+values after the path, using `""` for empty ones:
+
+```text
+python3 -c 'import csv,datetime,os,sys;a=sys.argv;assert len(a)==15,"need path + 13 values";new=not os.path.exists(a[1]);f=open(a[1],"a",newline="");w=csv.writer(f);new and w.writerow("time run workstream event thread lead_role route detail followup_kind defect_source observed_model observed_effort final_context outcome".split());w.writerow([datetime.datetime.now().astimezone().isoformat(timespec="seconds")]+a[2:]);f.close()' <repo>/.clanker/orchestration-ledger.csv <run> <workstream> <event> <thread> <lead_role> <route> <detail> <followup_kind> <defect_source> <observed_model> <observed_effort> <final_context> <outcome>
+```
+
+A `retire` row records the workstream's outcome, decided from the parent's own
+verification evidence, never from worker readiness claims:
+
+- `first-pass`: accepted without fixes; `scope` follow-ups are not fixes.
+- `revised`: accepted after fixes by the same thread.
+- `rerouted`: the parent took over a fix, or the user directed the work to a different
+  route; name the replacement in `detail`.
 - `blocked`: not completed, including work a worker called ready that failed required
-  parent verification and was not completed.
+  parent verification, abandoned work, and work left unfinished when the run ended
+  blocked or interrupted.
+
+Name what found the defects in `defect_source`, such as native review, external review,
+parent verification, or acceptance. Take `observed_model`, `observed_effort`, and
+`final_context` from runtime evidence as the host reference describes, or write
+`unknown`. Follow-up counts come from the workstream's `assign-continued` rows, not from
+the retire row. Work after a retire row gets new rows; earlier rows stay unchanged.
 
 Reuse generated routing JSON and link review reports instead of restating their fields
 in narrative. Keep entries free of secrets, raw private payloads, and hidden reasoning.

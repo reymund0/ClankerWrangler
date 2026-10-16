@@ -40,6 +40,8 @@ The launcher selects the newest runnable Python 3.10+ from unversioned and versi
 
 Orchestration Nation can be led from Codex or from Claude Code. Both installers put the same coordinator, specialist guidance, and shared cross-review reference into each agent, plus that agent's own host reference (`references/host.md`) and host configuration (`routing/host.json`). The coordinator reads those two files to learn its host, its preference file, how to dispatch native workers, and which external reviewer to use.
 
+On either host the coordinator groups build work into workstreams by code area. Each workstream keeps one worker thread for its follow-ups, such as review fixes, at the route resolved when the thread started, and retires that thread once the parent has verified its work. Each run appends to the daily log `.clanker/YYYY-MM-DD-orchestration-nation.md` and adds one row per event to `.clanker/orchestration-ledger.csv` for spreadsheet analysis.
+
 | Host | Native workers | External review | Preference file |
 | --- | --- | --- | --- |
 | Codex | Codex collaboration tools | Claude Code CLI (`scripts/claude_cross_review.py`) | `~/.clanker/orchestration-routing.json` |
