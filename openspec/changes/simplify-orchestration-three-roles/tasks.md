@@ -23,22 +23,22 @@
 - [x] 3.2 Write the Reviewer role instructions and the Claude `clanker-reviewer` agent definition without Edit, Write, or NotebookEdit; verify the frontmatter tool list
 - [x] 3.3 Write the `clanker-dual-review` skill covering the parallel round, shared scope, consolidation, skeptical triage, escalation of overengineering and non-obvious fixes, user decisions, gate passage, round limits (two for plan and code, one for refactor), and run-log events; verify each dual-review spec requirement maps to a section
 - [x] 3.4 Update `skills/clanker-design-discussion.md` to run the plan gate through `clanker-dual-review` after artifacts are generated and to end its run when the gate passes, and remove its "Optional specialist references" section; verify by reading the skill
-- [ ] 3.5 Update `wrangle.sh` and `wrangle.ps1` to install `clanker-dual-review` with the launcher and `clanker_log.py`, `routes.jsonc` only when absent, and the Claude reviewer agent; verify by installing to temporary agent roots and checking the files, and that a second install leaves an edited `routes.jsonc` unchanged
+- [x] 3.5 Update `wrangle.sh` and `wrangle.ps1` to install `clanker-dual-review` with the launcher and `clanker_log.py`, `routes.jsonc` only when absent, and the Claude reviewer agent; verify by installing to temporary agent roots and checking the files, and that a second install leaves an edited `routes.jsonc` unchanged
 - [x] 3.6 Dogfood: run `clanker-dual-review` at the plan gate on this change from a fresh chat; verify both reviewers run in parallel, overengineering findings are escalated rather than accepted, and the run log and CSV rows are written
 
 ## 4. Orchestration Nation rewrite (Claude host)
 
-- [ ] 4.1 Write the Implementor role instructions with the high-risk section (security, migrations and data integrity, deploy/rollback) and the handoff contract, plus the `clanker-implementor` agent definition; verify the sections exist
-- [ ] 4.2 Write the Functional Review role instructions (exercise flows, evidence under `.clanker/functional/<run>/`, skip with reason) and the `clanker-functional-review` agent definition without edit tools; verify the frontmatter tool list
-- [ ] 4.3 Rewrite `subagents/clanker-orchestration-nation.md`:
+- [x] 4.1 Write the Implementor role instructions with the high-risk section (security, migrations and data integrity, deploy/rollback) and the handoff contract, plus the `clanker-implementor` agent definition; verify the sections exist
+- [x] 4.2 Write the Functional Review role instructions (exercise flows, evidence under `.clanker/functional/<run>/`, skip with reason) and the `clanker-functional-review` agent definition without edit tools; verify the frontmatter tool list
+- [x] 4.3 Rewrite `subagents/clanker-orchestration-nation.md`:
   - the finalized-change check, the small-job check, and the small-fix rule
   - the single Implementor thread
   - the code gate through `clanker-dual-review`, Functional Review, and fix cycles with a fresh two-round code gate (max two cycles)
   - the refactor gate and handover with no commit
   - run-log events
   - Verify each development-orchestration spec requirement maps to a section.
-- [ ] 4.4 Rewrite `subagents/hosts/claude/host.md` and `host.json` for dispatch with `model` and `effort` from `routes.jsonc`, and token capture from subagent completion usage; verify by reading them against the design
-- [ ] 4.5 Update the installers to install the rewritten coordinator, role references, and the implementor and functional agent definitions; verify by installing to temporary agent roots
+- [x] 4.4 Rewrite `subagents/hosts/claude/host.md` and `host.json` for dispatch with `model` and `effort` from `routes.jsonc`, and token capture from subagent completion usage; verify by reading them against the design
+- [x] 4.5 Update the installers to install the rewritten coordinator, role references, and the implementor and functional agent definitions; verify by installing to temporary agent roots
 
 ## 5. Remove retired pieces
 

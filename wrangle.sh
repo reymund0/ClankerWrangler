@@ -11,22 +11,12 @@ LEGACY_SKILLS_SOURCE="$SKILLS_SOURCE/legacy"
 SUBAGENTS_SOURCE="$REPO_ROOT/subagents"
 ORCHESTRATION_NAME="clanker-orchestration-nation"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
-CROSS_REVIEW_LAUNCHER_SOURCE="$SUBAGENTS_SOURCE/scripts/claude_cross_review.py"
-CROSS_REVIEW_CORE_SOURCE="$SUBAGENTS_SOURCE/scripts/cross_review_core.py"
-CODEX_REVIEW_LAUNCHER_SOURCE="$SUBAGENTS_SOURCE/scripts/codex_cross_review.py"
 HOSTS_SOURCE="$SUBAGENTS_SOURCE/hosts"
-CLAUDE_WORKER_NAME="clanker-orchestration-worker"
-CLAUDE_WORKER_SOURCE="$SUBAGENTS_SOURCE/claude/$CLAUDE_WORKER_NAME.md"
-CLAUDE_WORKER_MARKER="<!-- clanker-orchestration-nation: managed worker definition -->"
-ROUTING_POLICY_SOURCE="$SUBAGENTS_SOURCE/scripts/routing_policy.py"
-ROUTING_EDITOR_SOURCE="$REPO_ROOT/routing-editor/scripts/routing_editor.py"
-MODEL_DISCOVERY_SOURCE="$REPO_ROOT/routing-editor/scripts/model_discovery.py"
-ROUTING_DATA_SOURCE="$SUBAGENTS_SOURCE/routing"
-ROUTING_EDITOR_DIST_SOURCE="$REPO_ROOT/routing-editor/dist"
 DUAL_REVIEW_NAME="clanker-dual-review"
+# The three role references; on Claude each also has an agent definition in subagents/claude/.
+ROLE_NAMES=(clanker-implementor clanker-reviewer clanker-functional-review)
 DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py clanker_log.py)
 REVIEWER_ROLE_SOURCE="$SUBAGENTS_SOURCE/clanker-reviewer.md"
-CLAUDE_REVIEWER_SOURCE="$SUBAGENTS_SOURCE/claude/clanker-reviewer.md"
 RETIRED_SPECIALISTS=(clanker-ux-designer clanker-documentation-writer clanker-product-engineer)
 # References replaced by another file; only the installed reference is retired, never a standalone skill.
 RETIRED_REFERENCES=(clanker-claude-cross-review)
@@ -69,31 +59,6 @@ assert_safe_bundle_path() {
         [[ ! -L "$current" ]] || { echo "Error: Cannot install through linked $description path: $current" >&2; exit 1; }
     done
     printf '%s\n' "$path_abs"
-}
-
-remove_routing_editor_assets() {
-    local editor_dir="$1"
-    local bundle_dir="$2"
-    local name asset
-    for name in index.html compatibility.json assets; do
-        asset="$(assert_safe_bundle_path "$bundle_dir" "$editor_dir/$name" "routing editor")"
-        [[ -e "$asset" || -L "$asset" ]] || continue
-        rm -rf -- "$asset"
-        echo "Removed packaged routing editor asset: $asset"
-    done
-}
-
-copy_routing_directory() {
-    local source_dir="$1"
-    local destination_dir="$2"
-    local bundle_dir="$3"
-    local description="$4"
-    local source relative destination
-    while IFS= read -r -d '' source; do
-        relative="${source#"$source_dir"/}"
-        destination="$(assert_safe_bundle_path "$bundle_dir" "$destination_dir/$relative" "$description")"
-        copy_safe_file "$destination" "$source"
-    done < <(find "$source_dir" -type f ! -name "*.pyc" ! -path "*/__pycache__/*" -print0 | sort -z)
 }
 
 to_skill_display_name() {
@@ -273,50 +238,6 @@ retire_specialists() {
     done
 }
 
-# The generic Claude worker lives in <claude-root>/agents. Preflight it before any write so a
-# linked agents directory or an unexpected entry stops the install untouched.
-preflight_claude_worker() {
-    local agent_root="$1"
-    local agents_dir="$agent_root/agents"
-    local destination="$agents_dir/$CLAUDE_WORKER_NAME.md"
-    local backup
-    assert_safe_bundle_path "$agent_root" "$agents_dir" "agent definitions" >/dev/null
-    assert_safe_bundle_path "$agent_root" "$destination" "worker definition" >/dev/null
-    [[ ! -e "$agents_dir" || -d "$agents_dir" ]] || { echo "Error: Agent definitions path is not a directory: $agents_dir" >&2; exit 1; }
-    [[ -e "$destination" ]] || return 0
-    [[ -f "$destination" ]] || { echo "Error: Unexpected worker definition entry type: $destination" >&2; exit 1; }
-    if ! grep -qF -- "$CLAUDE_WORKER_MARKER" "$destination"; then
-        for backup in "$agent_root/backups" "$agent_root/backups/orchestration-nation"; do
-            assert_safe_bundle_path "$agent_root" "$backup" "worker definition backup" >/dev/null
-            [[ ! -e "$backup" || -d "$backup" ]] || { echo "Error: Backup destination is not a directory: $backup" >&2; exit 1; }
-        done
-    fi
-}
-
-install_claude_worker() {
-    local agent_root="$1"
-    local agents_dir="$agent_root/agents"
-    local destination="$agents_dir/$CLAUDE_WORKER_NAME.md"
-    local backup_root="$agent_root/backups/orchestration-nation"
-    local backup suffix
-    preflight_claude_worker "$agent_root"
-    mkdir -p "$agents_dir"
-    if [[ -f "$destination" ]] && ! grep -qF -- "$CLAUDE_WORKER_MARKER" "$destination"; then
-        mkdir -p "$backup_root"
-        backup="$backup_root/$CLAUDE_WORKER_NAME.md"
-        suffix=2
-        while [[ -e "$backup" || -L "$backup" ]]; do
-            backup="$backup_root/$CLAUDE_WORKER_NAME-$suffix.md"
-            suffix=$((suffix + 1))
-        done
-        assert_safe_bundle_path "$agent_root" "$backup" "worker definition backup" >/dev/null
-        mv -n "$destination" "$backup"
-        [[ ! -e "$destination" ]] || { echo "Error: Worker definition backup did not complete: $destination -> $backup" >&2; exit 1; }
-        echo "Moved unmanaged worker definition to backup: $destination -> $backup"
-    fi
-    copy_safe_file "$destination" "$CLAUDE_WORKER_SOURCE"
-}
-
 host_directory_for() {
     case "$1" in
         "Claude Code") echo "claude" ;;
@@ -336,52 +257,26 @@ install_orchestration_bundle() {
     host_name="$(host_directory_for "$agent_name")"
     assert_safe_bundle_path "$agent_root" "$bundle_dir" "orchestration bundle" >/dev/null
     preflight_retired_specialists "$agent_root"
-    if [[ "$agent_name" == "Claude Code" ]]; then
-        preflight_claude_worker "$agent_root"
-    fi
 
     copy_safe_file "$bundle_dir/SKILL.md" "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md"
-    while IFS= read -r -d '' specialist; do
-        local base
-        base="$(basename "$specialist")"
-        [[ "$base" == "$ORCHESTRATION_NAME.md" ]] && continue
-        copy_safe_file "$references_dir/$base" "$specialist"
-    done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
-    copy_safe_file "$references_dir/host.md" "$HOSTS_SOURCE/$host_name/host.md"
-    if [[ -L "$bundle_dir/scripts" ]]; then
-        echo "Error: Cannot install through a linked scripts directory: $bundle_dir/scripts" >&2
-        exit 1
-    fi
-    copy_safe_file "$bundle_dir/scripts/cross_review_core.py" "$CROSS_REVIEW_CORE_SOURCE"
-    copy_safe_file "$bundle_dir/scripts/claude_cross_review.py" "$CROSS_REVIEW_LAUNCHER_SOURCE"
-    copy_safe_file "$bundle_dir/scripts/codex_cross_review.py" "$CODEX_REVIEW_LAUNCHER_SOURCE"
-    local policy_destination editor_destination discovery_destination
-    policy_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/routing_policy.py" "routing scripts")"
-    editor_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/routing_editor.py" "routing scripts")"
-    copy_safe_file "$policy_destination" "$ROUTING_POLICY_SOURCE"
-    copy_safe_file "$editor_destination" "$ROUTING_EDITOR_SOURCE"
-    discovery_destination="$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/model_discovery.py" "routing scripts")"
-    copy_safe_file "$discovery_destination" "$MODEL_DISCOVERY_SOURCE"
-    copy_routing_directory "$ROUTING_DATA_SOURCE" "$bundle_dir/routing" "$bundle_dir" "routing data"
-    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/routing/host.json" "host configuration")" "$HOSTS_SOURCE/$host_name/host.json"
-
-    local editor_dir="$bundle_dir/editor"
-    remove_routing_editor_assets "$editor_dir" "$bundle_dir"
-    if [[ -d "$ROUTING_EDITOR_DIST_SOURCE" ]]; then
-        if [[ ! -f "$ROUTING_EDITOR_DIST_SOURCE/compatibility.json" ]]; then
-            echo "Error: Routing editor build is missing compatibility.json: $ROUTING_EDITOR_DIST_SOURCE" >&2
-            exit 1
-        fi
-        copy_routing_directory "$ROUTING_EDITOR_DIST_SOURCE" "$editor_dir" "$bundle_dir" "routing editor"
-    else
-        echo "Routing editor build unavailable; installed routing helpers without editor assets."
-    fi
+    local role
+    for role in "${ROLE_NAMES[@]}"; do
+        copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$references_dir/$role.md" "role references")" \
+            "$SUBAGENTS_SOURCE/$role.md"
+    done
+    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$references_dir/host.md" "host reference")" \
+        "$HOSTS_SOURCE/$host_name/host.md"
+    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/host.json" "host configuration")" \
+        "$HOSTS_SOURCE/$host_name/host.json"
     if [[ "$agent_name" == "Codex" ]]; then
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
     retire_specialists "$agent_root"
     if [[ "$agent_name" == "Claude Code" ]]; then
-        install_claude_worker "$agent_root"
+        for role in "${ROLE_NAMES[@]}"; do
+            copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/$role.md" "agent definitions")" \
+                "$SUBAGENTS_SOURCE/claude/$role.md"
+        done
     fi
 
     # Preserve old standalone entries outside skill discovery after the bundle is ready.
@@ -417,7 +312,7 @@ install_orchestration_bundle() {
 }
 
 # The dual-review skill's SKILL.md comes from skills/; add its scripts, the Reviewer role,
-# routes.jsonc (only when absent), and on Claude the reviewer agent definition.
+# and routes.jsonc (only when absent).
 install_dual_review_bundle() {
     local agent_name="$1"
     local agent_root="$2"
@@ -442,10 +337,6 @@ install_dual_review_bundle() {
         copy_safe_file "$routes_destination" "$routes_source"
     fi
 
-    if [[ "$agent_name" == "Claude Code" ]]; then
-        copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/clanker-reviewer.md" "agent definitions")" \
-            "$CLAUDE_REVIEWER_SOURCE"
-    fi
 }
 
 install_agent_links() {
@@ -463,9 +354,6 @@ install_agent_links() {
     agent_skills_root="$agent_root/skills"
     rules_link="$agent_root/$rules_file_name"
     preflight_retired_specialists "$agent_root"
-    if [[ "$agent_name" == "Claude Code" ]]; then
-        preflight_claude_worker "$agent_root"
-    fi
     mkdir -p "$agent_skills_root"
 
     remove_legacy_skills "$agent_skills_root"
@@ -516,37 +404,24 @@ if [[ ! -f "$GLOBAL_RULES_SOURCE" ]]; then
     exit 1
 fi
 
-if [[ ! -f "$CROSS_REVIEW_LAUNCHER_SOURCE" ]]; then
-    echo "Error: Claude cross-review launcher not found: $CROSS_REVIEW_LAUNCHER_SOURCE" >&2
-    exit 1
-fi
-
-for review_source in "$CROSS_REVIEW_CORE_SOURCE" "$CODEX_REVIEW_LAUNCHER_SOURCE" "$CLAUDE_WORKER_SOURCE" \
-    "$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json"; do
-    if [[ ! -f "$review_source" ]]; then
-        echo "Error: Orchestration host or review source file not found: $review_source" >&2
+orchestration_sources=("$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json")
+for role in "${ROLE_NAMES[@]}"; do
+    orchestration_sources+=("$SUBAGENTS_SOURCE/$role.md" "$SUBAGENTS_SOURCE/claude/$role.md")
+done
+for orchestration_source in "${orchestration_sources[@]}"; do
+    if [[ ! -f "$orchestration_source" ]]; then
+        echo "Error: Orchestration role or host source file not found: $orchestration_source" >&2
         exit 1
     fi
 done
 
-for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$REVIEWER_ROLE_SOURCE" "$CLAUDE_REVIEWER_SOURCE" \
-    "$HOSTS_SOURCE/claude/routes.jsonc" "${DUAL_REVIEW_SCRIPTS[@]/#/$SUBAGENTS_SOURCE/scripts/}"; do
+for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$HOSTS_SOURCE/claude/routes.jsonc" \
+    "${DUAL_REVIEW_SCRIPTS[@]/#/$SUBAGENTS_SOURCE/scripts/}"; do
     if [[ ! -f "$dual_review_source" ]]; then
         echo "Error: Dual-review source file not found: $dual_review_source" >&2
         exit 1
     fi
 done
-
-for routing_source in "$ROUTING_POLICY_SOURCE" "$ROUTING_EDITOR_SOURCE" "$MODEL_DISCOVERY_SOURCE"; do
-    if [[ ! -f "$routing_source" ]]; then
-        echo "Error: Routing helper source file not found: $routing_source" >&2
-        exit 1
-    fi
-done
-if [[ ! -d "$ROUTING_DATA_SOURCE" ]]; then
-    echo "Error: Routing data source directory not found: $ROUTING_DATA_SOURCE" >&2
-    exit 1
-fi
 
 install_agent_links "Claude Code" "$CLAUDE_ROOT" "CLAUDE.md"
 install_agent_links "Codex" "$CODEX_ROOT" "AGENTS.md"

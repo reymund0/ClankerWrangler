@@ -1,334 +1,142 @@
 ---
 name: clanker-orchestration-nation
-description: Coordinate a bounded set of specialists for software work with explicit model routing, OpenSpec continuity, and an append-only run log. Use for multi-role changes, not ordinary single-owner edits.
+description: Implement a finalized OpenSpec change with one Implementor subagent, a dual review at the code and refactor gates, Functional Review of the running app, and a handover to the user. Use in an implementation chat after the design chat's plan gate passed; not for small edits.
 ---
 
 # Clanker Orchestration Nation
 
-Coordinate only the specialists the task needs. The parent owns scope,
-integration, OpenSpec artifacts/task state, and the run log. Workers own bounded
-assignments and return evidence; they do not recursively delegate.
+You are the orchestrator. You keep scope, OpenSpec artifacts and task state, the run log,
+review consolidation, and small fixes. You delegate to three roles only:
 
-Use the host's native delegation mechanism, described in the host reference below.
-Do not substitute a local model CLI or custom agent framework when native delegation
-is unavailable.
+- **Implementor:** the only subagent that writes code; one thread per run.
+- **Reviewer:** read-only; started by `clanker-dual-review` at the code and refactor gates.
+- **Functional Review:** read-only toward source; exercises the running app, CLI, or API.
 
-## Read the host configuration
+No other specialist is dispatched, and subagents never start subagents. Subagents exist to keep
+your context clean and move bulk work to cheaper models, not to add hands.
 
-Before resolving any route, read `references/host.md` and `routing/host.json` relative
-to this coordinator's package. They identify the orchestration host, its preference
-file, its native dispatch and capability procedure, and its external reviewer. If
-either file is missing or invalid, stop, report the missing prerequisite, and dispatch
-no worker. Do not infer the host from the environment. When running from the source
-checkout, where host files live under `subagents/hosts/<host>/`, the user must name the
-host; read that host's files and pass `--host` to the snapshot command.
+## Files
 
-## Establish scope
+- Role instructions: `references/clanker-implementor.md`, `references/clanker-functional-review.md`
+  in this skill's directory (the Reviewer's are in `clanker-dual-review`).
+- Host reference: `references/host.md` (native dispatch, model and effort, token capture) and
+  `host.json` in this skill's directory (the host name and cross-review provider).
+- Review procedure: the `clanker-dual-review` skill.
+- Run log helper: `scripts/clanker_log.py` in the `clanker-dual-review` skill's directory.
+- Routes: `<agent-root>/clanker/routes.jsonc`. Each role uses the model and effort recorded in
+  the run's start event for the whole run; only an explicit user request changes a route.
 
-Read the request, repository instructions, relevant code, git state, and existing
-OpenSpec state. Identify the requested outcome, risks, dependencies, and authorization.
-Handle localized low-risk work directly and record why delegation is unnecessary.
+Read `references/host.md` before dispatching anything.
 
-For meaningful features, cross-cutting behavior, uncertain acceptance criteria, or
-an existing selected change, use the installed OpenSpec workflows and actual artifact
-paths. Ask when the intended change is missing or ambiguous; report unavailable
-OpenSpec tooling rather than inventing state or silently creating a competing plan.
-Preserve planning-only scope. Mark implementation tasks complete only after integrated
-verification; synchronize or archive only when requested or authorized by that workflow.
+## 1. Check the change is finalized
 
-## Resolve worker settings
+The change must have `tasks.md` and pass `openspec validate <change> --strict`. If either is
+missing or failing, stop, name what is missing, and point the user to the design chat
+(`clanker-design-discussion`), unless the user explicitly tells you to proceed.
 
-Keep the user's parent model and effort. Before the first assignment, read the
-**Dispatch procedure** in `routing/usage.md` relative to this coordinator's package
-(source checkout: `subagents/routing/usage.md`). It defines the Python 3.10+ prerequisite,
-snapshot and resolver commands, request fields, dispatch gates, and evidence capture.
-Read its configuration/editor sections only when those details are needed.
+## 2. Start or resume the run
 
-Resolve each workstream's route, and each review or planning assignment, through that
-procedure using the run snapshot. Disclose the host, the global preference source and
-consequential routing limitations; do not silently substitute settings when resolution
-or dispatch is blocked.
+- **New run:** `python3 <dual-review dir>/scripts/clanker_log.py start --chat implementation
+  --host <claude|codex> --change <change> --routes <agent-root>/clanker/routes.jsonc
+  --orchestrator-model <your model/effort>`. If it reports an invalid route, show the message
+  (it names the file and key) and stop; never substitute a model.
+- **Resume:** `clanker_log.py replay --run <run>` rebuilds the gate, round, open findings,
+  pending user decisions, functional cycles, and routes. Ask any pending user decision first,
+  then continue from that point.
 
-Use the returned `model` and `effort` as the native tool's model and reasoning-effort
-arguments, as the host reference describes. Requested settings are not proof of
-observed settings.
+## 3. Small-job check
 
-## Select roles and hand off
+Before dispatching the Implementor, estimate the whole job. If you could finish it directly
+without filling your context (a handful of lines in one area), stop, recommend doing it without
+orchestration, and end the run with outcome `small-job-declined`. Continue only if the user
+explicitly asks.
 
-Choose the smallest useful team. Follow the host reference's concurrency limit, counting
-any external review; run at most one external review per run at a time.
-Parallelize independent work and serialize changes to shared files, interfaces, browser
-state, or the reviewed build.
+## 4. Implement
 
-Delegate build work. The parent keeps only fixes it has already diagnosed that it can
-finish in a few calls, plus its own git, OpenSpec, and log work, and logs a one-line
-reason for each piece of build work it keeps. When these criteria do not settle a case,
-straightforward work leans to the parent and involved or demanding work to a workstream.
-A small change that needs code the parent has not yet read goes to the workstream that
-owns that area.
+Start one Implementor thread with the routed model and effort (see the host reference). The
+assignment gives:
 
-| Role | Instruction file | Use for |
-| --- | --- | --- |
-| Architect | `clanker-architect.md` | Boundaries, interfaces, design tradeoffs |
-| UI/UX reviewer | `clanker-ui-ux-reviewer.md` | Rendered visuals and interaction evidence |
-| Backend | `clanker-backend-developer.md` | APIs, services, integrations, domain logic |
-| Data | `clanker-data-engineer.md` | Contracts, queries, integrity, migrations |
-| UI implementation | `clanker-ui-developer.md` | Components, forms, client state, layouts |
-| QA planning | `clanker-qa-engineer.md` | Acceptance scenarios and verification strategy |
-| Test engineer | `clanker-test-engineer.md` | Test implementation and execution |
-| Code/security reviewer | Shared `clanker-code-review` skill | Correctness, regressions, spec coverage |
-| DevOps | `clanker-devops-engineer.md` | Build, CI, delivery, recovery |
-| Performance | `clanker-performance-engineer.md` | Measured bottlenecks and improvements |
+- the change name and the tasks to implement, with their requirements and scenarios
+- the files or area to work in and repository conventions that matter
+- the checks to run
+- the role file path, and the handoff it must return
 
-The parent owns product outcomes, scope, acceptance criteria, and routine documentation.
-Use supplied Claude Design handoffs as UX design context for bounded UI implementation
-and independent UI/UX review. Resolve missing material design decisions with the user;
-do not automatically invoke Claude Design or assign retired product, documentation,
-or UX designer profiles. Retain the shared documentation-update and review skills.
+Send every later fix (review findings, functional defects) to the same thread while it is
+reachable. If a resumed chat cannot reach it, start one new Implementor seeded with a summary
+from the run log; never run two writers.
 
-In the source checkout, specialist files sit beside this coordinator in `subagents/`;
-installed packages keep them in `references/`. Shared code review is
-`skills/clanker-code-review.md` in the checkout or the separate installed skill
-(`../clanker-code-review/SKILL.md`). Resolve from the package actually loaded; do not
-use retired skills or stale standalone specialist installations.
+When the Implementor reports:
 
-Read only the selected instructions, verify their names and paths, and require each
-worker to read its absolute instruction path, and each extra checklist's path, before domain work. Missing or unreadable
-instructions block that assignment; independent work may continue. Specialist guidance
-does not override the assignment's phase, ownership, repository rules, or authorization.
+- Read the handoff: changed paths, checks and results, unrun checks, open concerns.
+- Verify it yourself: look at the diff and rerun the key checks. Do not mark an OpenSpec task
+  complete from a worker claim alone; a failed or unrun required check keeps the task open and
+  the gap goes in your notes.
+- Log usage from runtime evidence:
+  `{"type": "usage", "role": "implementor", "tokens": N}` (model and effort only if reported).
 
-Group build work into workstreams by code area. Each workstream owns a set of files,
-recorded as its file ownership, and has one lead role plus optional extra role
-checklists from the table; workstreams never own overlapping files. Split work across a
-stack boundary, such as API and UI, into separate workstreams only when the parent can
-write the contract between them before dispatch and each side is substantial enough to
-run in parallel. Otherwise one workstream carries both role checklists.
+**Small fixes:** apply a fix yourself when it is small and already understood, such as a
+five-line review fix, and log `fixed` with `by: "orchestrator"`. Delegate anything that would
+fill your context: wide code reading, long test/fix loops, browser sessions.
 
-Each workstream has at most one thread at a time. Send follow-up work in its area,
-including review fixes and defects the parent finds, to that thread as a continued
-assignment, using the host reference's mechanism for continuing a thread. A continued
-assignment restates the ownership and states every spec, design, or scope revision since
-the thread's last brief.
+## 5. Code gate
 
-Resolve a workstream's route once, when its thread starts, from its lead role and the
-hardest tier expected in its area. Continued assignments keep the thread's model and
-effort. The parent never changes a workstream's route on its own; a different route
-requires an explicit user choice. When a thread struggles, continue it, take the fix
-over under the delegation threshold, or ask the user.
+Run `clanker-dual-review` with gate `code`, the run ID, and the base
+(`git merge-base <default branch> HEAD`). The scope is committed, staged, unstaged, and
+untracked work against that base. Accepted findings go to the Implementor, or to you when small.
+At most two rounds; if findings stay open after round two, the run ends `stopped-at-limit`
+unless the user authorizes proceeding.
 
-Retire a thread once parent verification passes and no follow-up is pending. Retire it
-as `blocked` when its unfinished work is abandoned, or when the run ends blocked or
-interrupted with that work unfinished. A thread waiting on a user decision stays active.
-Leave context compaction to the host default and record it when observed. When work
-later arrives in a retired workstream's area, continue the retired thread if the host
-can still reach it; otherwise start a new thread seeded with a parent-written summary of
-the workstream's state, and record it as a new thread for that workstream.
+## 6. Functional Review
 
-Before starting a thread, inspect worker state and capacity. Reuse threads only through
-workstreams and reviewer rechecks, keeping each thread's route, role guidance, and
-ownership. When capacity is exhausted, sequence the work or keep it under the delegation
-threshold instead of repeatedly spawning or silently changing settings; follow the host
-reference after a capacity rejection. A failed dispatch never counts as running.
+After the code gate passes:
 
-Use one concise handoff containing:
+- **Skip** when the change cannot be exercised through a browser, a CLI, or an API, and say why.
+- Otherwise start Functional Review with the routed model and effort. The assignment gives the
+  run ID, the requirements and scenarios to exercise, how to start the app, and the role file
+  path. Log `round-start` and `round-end` with gate `functional` (round 1 is the first check),
+  one `finding` per reported defect with source `functional`, and its usage.
 
-- Workstream, lead role and any extra checklists, interaction, repository and
-  instruction paths, and the requested model/effort.
-- Outcome, exact file ownership or advisory-only scope, dependencies, and exclusions.
-- Relevant user/repository constraints and OpenSpec artifacts, tasks, and scenarios.
-- Expected verification and the compact reply contract below; return the instruction
-  path actually read. Report effective settings only when the runtime supplies them.
-- Worker boundaries: no recursive delegation, shared-log writes, or OpenSpec updates.
+Triage functional findings like review findings (`clanker-dual-review` step 4): accept only
+confirmed defects with the smallest obvious fix; escalate the rest as `user-decision`; reject
+unconfirmed ones with a reason.
 
-Require a handoff status: **draft** (unverified or blocked), **locally checked** (named
-checks passed, integration remains), or **ready for integration** (assigned acceptance
-checks passed and no known blocker). For executable changes, run the smallest relevant
-authorized compile or contract check before claiming readiness. If execution is outside
-the assignment or unavailable, return a draft with the unrun command and reason.
-Include exact results and remaining gaps; none of these labels replaces parent verification.
-For test assignments, confirm fixture/API signatures against an analogous working test
-and complete the smallest authorized compile or representative setup check before the
-combined acceptance selection. If the worker cannot execute it, keep the handoff at draft
-and name a parent-owned integration check before selecting the combined suite.
+**Fix cycles:** each cycle sends accepted defects to the Implementor, then runs a fresh code
+gate (up to two rounds; round numbers keep counting), then a Functional Review recheck of the
+failed and affected flows (the next functional round). At most two cycles per run. If defects
+remain after the second recheck, stop, list them, and end the run `stopped-at-limit`.
 
-Advisory workers that cannot access required evidence should promptly report the exact
-gap, continue useful accessible inspection, and state the resulting coverage limit. The
-parent resolves access or keeps the review at draft; missing evidence does not require
-unrelated project execution.
+## 7. Refactor gate
 
-Coordinate writes through assignment ownership and dependencies. Before integration,
-reconcile changed paths with assigned ownership and resolve any unowned or conflicting change.
+After Functional Review passes or is skipped, run `clanker-dual-review` with gate `refactor`
+for one round. Present the consolidated proposals; the user accepts (`take`) or skips each, and
+every choice is logged. Do not implement accepted proposals.
 
-## Worker communication
+## 8. Handover
 
-Supply a compact reply contract in each assignment. Target about 200 words for a
-routine completion; this is a soft target, not truncation or a reason to omit
-material findings, failed/unrun checks, coverage gaps, blockers, or required decisions.
-Retain the existing readiness statuses and the instruction path actually read.
+- Check off the OpenSpec tasks you verified.
+- End the run: `clanker_log.py finish --run <run> --outcome done --notes "<short notes>"`. If a
+  write fails, say so.
+- Tell the user what changed, the checks and their results, anything left open, and the
+  accepted refactor proposals for them to act on.
 
-- Implementers: outcome, changed paths, exact checks/results, material gaps/concerns,
-  next action/owner, and evidence references.
-- Reviewers: scoped verdict, actionable findings with stable IDs and locations,
-  coverage gaps or failed/unrun checks, and evidence references.
-- Planners/advisors: recommendation, consequential tradeoff, unresolved decisions,
-  verification needs, and supporting references.
+Do not commit, push, or open a pull request; the thread is the user's from here.
 
-When substantial detail is expected, assign a worker-owned evidence path separately
-from application-file ownership. Keep full matrices, reproduction details, logs, and
-captures there; return the real path and relevant section. Small complete inline
-results do not need a report file. If artifact storage is unavailable or outside
-ownership, preserve necessary evidence inline and report the limitation; do not
-invent a saved report or discard required detail to meet the target.
+## Run log
 
-Send interim messages to the parent only for blockers, ownership conflicts, required
-decisions, or consequential changes to an earlier result. Deliver completion once;
-do not send the same final handoff through both a message and the final response.
-On follow-up, report changed results and still-open finding IDs/blockers, referring
-to earlier evidence instead of repeating the original report.
+The run log is `.clanker/runs/<run>.jsonl`, append-only, through `clanker_log.py`.
+`clanker-dual-review` logs its own rounds, findings, triage, fixes, and decisions. You log:
 
-Prefer completion notifications or bounded waits for native workers. Inspect state
-when it informs a next action; do not repeatedly request progress or dump unchanged
-messages/logs. Read returned digests first, then retrieve the specific artifacts and
-evidence needed for acceptance. A short reply never replaces parent verification.
+- `start` (step 2) and `end` with the outcome: `done`, `stopped-at-limit`, `blocked`, or
+  `small-job-declined` (through `finish`)
+- `usage` for the Implementor and Functional Review, and for yourself if your runtime reports it
+- functional rounds, findings, triage, and decisions (step 6)
+- `fixed` for every fix, with `by: "implementor"` or `"orchestrator"`
 
-## Review and integrate
+Record only values from runtime evidence; leave the rest out. Never log secrets, private
+payloads, or hidden reasoning.
 
-For substantial plans, select external cross-review before implementation; for substantial
-integrated changes, select it before completion. This includes UI/API/data contracts,
-consequential architecture, auth, migrations/data integrity, deployment, and measured
-performance risk. Honor explicit requests and opt-outs, skip small low-risk edits,
-and record the reason. Planning-only authorization permits only the planning checkpoint.
+## Host differences
 
-Before preparing or launching a selected external review, read
-`clanker-cross-review.md` from the same source/reference layout as the specialists.
-It owns packet preparation, routing to the launcher named in `routing/host.json`,
-source-change reconciliation, and the one-automatic-recheck limit; the reviewer's
-prerequisites are in the host reference. The external reviewer supplements native
-review and tests; it does not authorize implementation or deployment.
-
-Assign browser/test acceptance separately with an owner and evidence status; do not
-ask a static reviewer to certify a live check. Browser QA and other long acceptance work
-run in a worker that owns the browser state and records evidence, not in the parent,
-unless the user explicitly directs the parent to do it; log that the parent kept it at
-the user's direction. The parent keeps the evidence states and verifies the worker's
-evidence before marking acceptance tasks complete. Split large reviews by coherent
-responsibility; the parent retains the full acceptance checklist and unresolved checks,
-including work outside a bounded recheck.
-
-For native correctness review, reuse `clanker-code-review`, preferring the current
-repository's copy; otherwise resolve the installed skill as described above.
-Supply the verified base and task-owned committed, staged, unstaged, and untracked
-scope; follow that skill's evidence collection procedure. Exclude unrelated user changes
-and record anything unreviewed.
-
-A native reviewer performs its own single automatic recheck in the same thread. Its
-brief contains the finding IDs, the fix diff, and a request to check the changed lines
-for regressions. Start a fresh native review of the affected scope instead when the
-spec or design changed after the first review, or the change grew beyond the reviewed
-scope. External cross-review rechecks keep their fresh-session behavior.
-
-For UI visual acceptance, select `clanker-ui-ux-reviewer` with `visual-review` routing
-after integration. Supply application/startup details, routes, acceptance context,
-viewports, and artifact locations. Require rendered evidence; unavailable access means
-incomplete coverage. Assign browser ownership and recheck affected states after fixes.
-
-Verify worker findings and integrated results against actual artifacts and proportionate
-checks. Keep failed or unrun required validation visible and affected tasks incomplete.
-Before accepting inventory, bytecode, hash, or smoke checks that consume build or staging
-output, wait for the owned producer to finish successfully and record the artifact or
-revision consumed.
-Use `clanker-refactor-review` only for requested improvement proposals and
-`clanker-sync-your-docs` when the task affects durable guidance.
-
-## Keep a concise run log
-
-Use `<repo>/.clanker/YYYY-MM-DD-orchestration-nation.md` with the local start date.
-Create a distinct run ID from a timezone-bearing timestamp plus a known session ID
-or checked ordinal. Retain the run ID and original file on resume or across midnight.
-
-Append complete, run-attributed timestamped blocks; never rewrite a whole-file snapshot.
-Preserve other runs. Take every block's and ledger row's time, with its timezone offset,
-from the host clock at write time, for example `date` in the same append command; never
-estimate, reconstruct, or copy a time from an earlier entry. Read relevant entries on resume or when reconciling uncertain
-state, rather than rereading the growing log before every append. Record:
-
-- At start: workspace, branch, request, session when known, OpenSpec context, the
-  orchestration host and its preference source, parent settings, complexity/risk
-  rationale, and any no-delegation decision.
-- Before dispatch: assignment ID, workstream, role/interaction, instruction paths,
-  ownership, concise rationale, and the readable settings line below. Capture routing
-  evidence, as described in the dispatch procedure, when a workstream's thread starts;
-  a continued assignment refers to that evidence.
-- On meaningful changes: actual dispatch outcome, observed settings or unknown,
-  verification results, review dispositions/waivers, blockers, and snapshot reloads.
-  Use readable timestamped blocks that name the run and assignment, status, owned paths,
-  evidence/check, and next owner.
-- At completion: completed, blocked, or interrupted outcome and remaining checks.
-  State task completion separately from native review, external review, and runtime
-  acceptance; mark each evidence state complete, partial, pending, or excluded, and
-  explain exclusions without treating them as waivers.
-  Reconcile pending events from observed state after an abrupt interruption.
-
-Every worker dispatch and external review block opens with one readable settings line
-built from the resolver JSON or the launcher's `report.json`, never retyped from
-memory, for example
-`Model: haiku · Reasoning: Adaptive/straightforward → medium · Observed: unknown`.
-It states the requested model and reasoning effort, including fixed or Adaptive mode and
-the assessed tier, and the observed model and effort only when the runtime or reviewer
-report supplies them. Unreported observed values read `unknown`; never infer them from
-the request or a model's self-description. The block also states the host, and the
-provider and execution kind (`native` or `external`) from the resolver output. An
-external review block names the reviewer provider and links its `report.json`.
-
-Also append one CSV row per orchestration event to `<repo>/.clanker/orchestration-ledger.csv`
-for spreadsheet analysis. Create it with a header row when it is absent; never rewrite
-or reorder existing rows. If the columns change, write to a new versioned file, such as
-`orchestration-ledger-v2.csv`, rather than mixing headers. The columns, in order:
-
-`time`, `run`, `workstream`, `event`, `thread`, `lead_role`, `route`, `detail`,
-`followup_kind`, `defect_source`, `observed_model`, `observed_effort`, `final_context`,
-`outcome`
-
-Each row's `event` is one of:
-
-- `start`: the run started; `detail` summarizes the request.
-- `assign-new`: a workstream's thread started; `route` is the resolved model, effort,
-  and tier.
-- `assign-continued`: a follow-up went to an existing thread. `followup_kind` is
-  `defect` when it fixes a finding, with what found it in `defect_source`, or `scope`
-  when a requirement or the scope changed.
-- `parent-kept`: the parent kept build work; `detail` gives the reason.
-- `retire`: a thread retired; the row carries the outcome and observed columns, and
-  `detail` notes any compaction observed in the thread.
-
-Leave columns that do not apply empty. Append with Python's `csv` writer, which quotes
-commas and quotes, and take the time from the clock in the same command. Pass all 13
-values after the path, using `""` for empty ones:
-
-```text
-python3 -c 'import csv,datetime,os,sys;a=sys.argv;assert len(a)==15,"need path + 13 values";new=not os.path.exists(a[1]);f=open(a[1],"a",newline="");w=csv.writer(f);new and w.writerow("time run workstream event thread lead_role route detail followup_kind defect_source observed_model observed_effort final_context outcome".split());w.writerow([datetime.datetime.now().astimezone().isoformat(timespec="seconds")]+a[2:]);f.close()' <repo>/.clanker/orchestration-ledger.csv <run> <workstream> <event> <thread> <lead_role> <route> <detail> <followup_kind> <defect_source> <observed_model> <observed_effort> <final_context> <outcome>
-```
-
-A `retire` row records the workstream's outcome, decided from the parent's own
-verification evidence, never from worker readiness claims:
-
-- `first-pass`: accepted without fixes; `scope` follow-ups are not fixes.
-- `revised`: accepted after fixes by the same thread.
-- `rerouted`: the parent took over a fix, or the user directed the work to a different
-  route; name the replacement in `detail`.
-- `blocked`: not completed, including work a worker called ready that failed required
-  parent verification, abandoned work, and work left unfinished when the run ended
-  blocked or interrupted.
-
-Name what found the defects in `defect_source`, such as native review, external review,
-parent verification, or acceptance. Take `observed_model`, `observed_effort`, and
-`final_context` from runtime evidence as the host reference describes, or write
-`unknown`. Follow-up counts come from the workstream's `assign-continued` rows, not from
-the retire row. Work after a retire row gets new rows; earlier rows stay unchanged.
-
-Reuse generated routing JSON and link review reports instead of restating their fields
-in narrative. Keep entries free of secrets, raw private payloads, and hidden reasoning.
-Disclose failed saves and do not claim a log exists when writing failed.
-
-Tell the user what completed, what was verified, remaining limitations, and the saved
-log path. Do not infer successful execution from a routing preview or worker claim.
+The Claude and Codex hosts use this same procedure and the same role files. Only native
+dispatch and the external reviewer differ; `references/host.md` covers them. If the host cannot
+apply a routed model or effort, say so at run start instead of claiming the setting.
