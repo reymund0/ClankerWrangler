@@ -53,10 +53,10 @@
 
 ## 6. Codex host
 
-- [ ] 6.1 Add the Claude Code CLI adapter to the launcher, passing `--add-dir` for the installed skills directory so the reviewer can read the role file and criteria; verify with unit tests using a stubbed CLI, then one real review
-- [ ] 6.2 Confirm the current Codex collaboration-tool parameters for per-subagent model and effort and for thread continuation (the design's open question); record the answer in `subagents/hosts/codex/host.md`
-- [ ] 6.3 Rewrite `subagents/hosts/codex/host.md` and `host.json` for the three roles, and add the Codex `routes.jsonc` template; verify by reading them against the design
-- [ ] 6.4 Update the installers' Codex path to install both skills, the role references, and the Codex `routes.jsonc`; verify by installing to a temporary Codex root
+- [x] 6.1 Add the Claude Code CLI adapter to the launcher, passing `--add-dir` for the installed skills directory so the reviewer can read the role file and criteria; verify with unit tests using a stubbed CLI, then one real review
+- [x] 6.2 Confirm the current Codex collaboration-tool parameters for per-subagent model and effort and for thread continuation (the design's open question); record the answer in `subagents/hosts/codex/host.md`
+- [x] 6.3 Rewrite `subagents/hosts/codex/host.md` and `host.json` for the three roles, and add the Codex `routes.jsonc` template; verify by reading them against the design
+- [x] 6.4 Update the installers' Codex path to install both skills, the role references, and the Codex `routes.jsonc`; verify by installing to a temporary Codex root
 
 ## 7. Integration
 

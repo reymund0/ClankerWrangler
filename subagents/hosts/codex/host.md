@@ -1,59 +1,58 @@
 # Codex Host Reference
 
-Loaded by the coordinator for Codex-led runs, alongside `routing/host.json`
-(`host: codex`, preference file `orchestration-routing.json`, external review
-`claude-review` through `scripts/claude_cross_review.py`). It holds the Codex-specific
-procedure; the coordinator and specialist guidance are shared with the Claude host.
+How the orchestrator and `clanker-dual-review` dispatch on Codex. `host.json` names the host
+(`codex`) and the cross-review provider (`claude`).
 
 ## Native dispatch
 
-Use native Codex collaboration tools. Do not substitute a local Codex CLI or custom
-agent framework when native delegation is unavailable.
+Use Codex's multi-agent tools. Start each role with `spawn_agent`, giving it:
 
-Use the returned `model` and `effort` as the native tool's model and reasoning-effort
-arguments. Prefer an empty history fork with a focused assignment; a bounded history
-is allowed when needed. A full-history fork inherits parent settings and must not be
-used to select worker settings. Requested settings are not proof of observed settings.
+- the assignment as the message, starting with the absolute path of the role file to read:
+  `references/clanker-implementor.md` or `references/clanker-functional-review.md` in the installed
+  `clanker-orchestration-nation` skill (`~/.codex/skills/clanker-orchestration-nation/`), or for
+  the Reviewer only the path of the round's handoff file
+- `model` and `reasoning_effort` from the role's route, as recorded in the run's start event,
+  always explicitly; the routes file is the user's explicit model choice
+- `fork_context: false`, so the subagent starts from the assignment instead of this chat's history
 
-## Capability evidence
+Codex checks each spawn: an unknown model or an effort the model does not support is rejected.
+Report that rejection and stop; never retry on another model.
 
-Native capability evidence comes from the active collaboration tool, not the saved
-model catalog. Transcribe the advertised model and reasoning-effort combinations into
-`capabilities` with `provider: codex`, a `source` naming the tool description, and a
-`models` map of model to supported efforts. Supply only what the tool actually lists;
-do not extrapolate from the catalog or from a model's name.
+Limits on Codex:
 
-## Capacity and worker reuse
+- There are no per-role agent definitions or per-agent sandboxes, so Reviewer and Functional Review
+  are read-only by their instructions only. Check `git status` after each read-only role returns
+  and report any file it changed.
+- Spawned agents can spawn their own agents; the role files forbid it.
 
-Limit concurrent assignments to three, or the runtime's lower limit, counting Claude
-review; run at most one Claude review per run at a time.
+## Continuing the Implementor
 
-The coordinator decides when a workstream's thread continues. To continue one, send the
-continued assignment to the workstream's idle worker through the collaboration tools; it
-keeps the model and effort it was started with. If that worker is no longer available,
-start a new worker on the workstream's route with a parent-written summary, as the
-coordinator describes. After a capacity rejection, do not repeat the same spawn until
-capacity changes, and never count the rejected assignment as running.
+Send follow-up fixes to the same Implementor with `send_input` and its agent ID, then `wait_agent`
+for the reply. If it was closed, `resume_agent` it first. If it cannot be resumed, start one new
+Implementor on the same route, seeded with a summary from the run log. Close read-only agents with
+`close_agent` once their reply is in; keep the Implementor open until handover.
 
-## Observed settings
+## Tokens and observed settings
 
-Record observed worker model and effort only when the runtime reports them; otherwise
-record them as unknown. Never copy requested settings into the observed fields.
+Codex returns a subagent's final answer, not its token usage or the model it ran on. Leave those
+out of the usage events; `runs.csv` then shows the routed values with `(req)` and empty tokens.
 
-## External reviewer: Claude Code
+## External reviewer: Claude Code CLI
 
-External cross-review under this host uses the Claude Code CLI through
-`scripts/claude_cross_review.py`. The launcher requires an installed Claude Code CLI
-and confirmed subscription login.
+Cross-review runs the `clanker-dual-review` launcher with `--provider claude` as a background
+shell command, with the `cross-review` route's model and effort. The command needs network access
+and write access to `~/.claude`, which Codex's default sandbox blocks, so run it with escalated
+permissions (asking the user to approve if needed). Read its `report.json` when it exits.
 
-Model selection is independent of the Codex parent and native worker defaults. Resolve
-the packet's `claude-review` route using the coordinator run snapshot and dispatch
-procedure in `routing/usage.md`; reassess remaining risk for each recheck. Pass the
-resolved model and effort explicitly. Keep persistent Claude settings unchanged and
-unknown effective settings unknown. Do not silently switch to API billing, install
-software, edit persistent configuration, or initiate login. If preflight blocks, report
-the specific prerequisite.
+The Claude Code CLI must be installed and logged in (`claude auth login`); the launcher never logs
+in for you. The reviewer reads the role file and criteria from `~/.claude/skills`, so the Claude
+package must be installed too. It runs with read tools and read-only git commands only, so it
+cannot run tests; it reports that as a limitation.
 
-The launcher checks subscription authentication and invocation capabilities. Normal CLI
-and managed permissions apply. Do not add permission-bypass flags or send a resume
-argument by default; each initial review forms its own judgment.
+## Confirmed tool parameters
+
+Checked against Codex CLI 0.162.1 with the `multi_agent` feature on (the default) and
+`multi_agent_v2` off. `spawn_agent` takes the message, `agent_type`, `fork_context`, `model`, and
+`reasoning_effort`; follow-ups use `send_input`, `wait_agent`, `close_agent`, and `resume_agent`.
+With `multi_agent_v2` on, follow-ups use `followup_task` and `send_message` instead, and spawns
+take `task_name` and `fork_turns` (`"none"` in place of `fork_context: false`).

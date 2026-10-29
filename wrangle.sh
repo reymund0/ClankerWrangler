@@ -14,7 +14,7 @@ HOSTS_SOURCE="$SUBAGENTS_SOURCE/hosts"
 DUAL_REVIEW_NAME="clanker-dual-review"
 # The three role references; on Claude each also has an agent definition in subagents/claude/.
 ROLE_NAMES=(clanker-implementor clanker-reviewer clanker-functional-review)
-DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py clanker_log.py)
+DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py cross_review_claude.py clanker_log.py)
 REVIEWER_ROLE_SOURCE="$SUBAGENTS_SOURCE/clanker-reviewer.md"
 # Installed names from earlier versions. The installer deletes each one that exists under an agent
 # root, without backups, and prints it.
@@ -236,9 +236,7 @@ install_dual_review_bundle() {
 
     routes_source="$HOSTS_SOURCE/$host_name/routes.jsonc"
     routes_destination="$(assert_safe_bundle_path "$agent_root" "$agent_root/clanker/routes.jsonc" "routes file")"
-    if [[ ! -f "$routes_source" ]]; then
-        echo "No routes template for $agent_name yet; skipped $routes_destination"
-    elif [[ -e "$routes_destination" || -L "$routes_destination" ]]; then
+    if [[ -e "$routes_destination" || -L "$routes_destination" ]]; then
         echo "Kept existing routes file: $routes_destination"
     else
         copy_safe_file "$routes_destination" "$routes_source"
@@ -320,7 +318,7 @@ for orchestration_source in "${orchestration_sources[@]}"; do
     fi
 done
 
-for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$HOSTS_SOURCE/claude/routes.jsonc" \
+for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$HOSTS_SOURCE/claude/routes.jsonc" "$HOSTS_SOURCE/codex/routes.jsonc" \
     "${DUAL_REVIEW_SCRIPTS[@]/#/$SUBAGENTS_SOURCE/scripts/}"; do
     if [[ ! -f "$dual_review_source" ]]; then
         echo "Error: Dual-review source file not found: $dual_review_source" >&2

@@ -8,7 +8,7 @@ report. Adapters live in `cross_review_<provider>.py` and supply CLI lookup, pre
 command, and event parsing.
 
 Usage:
-    cross_review.py --provider codex --phase plan|implementation|refactor --handoff handoff.md
+    cross_review.py --provider codex|claude --phase plan|implementation|refactor --handoff handoff.md
                     --out DIR --model M --effort E [--repo DIR] [--cli PATH] [--timeout-minutes 45]
 """
 
@@ -31,7 +31,7 @@ if _SCRIPTS not in sys.path:
     sys.path.insert(0, _SCRIPTS)
 
 DEFAULT_TIMEOUT_MINUTES = 45
-PROVIDERS = ("codex",)
+PROVIDERS = ("codex", "claude")
 SEVERITIES = ("blocking", "major", "minor", "info", "proposal")
 FINDING_FIELDS = ("id", "severity", "location", "summary", "remedy")
 
@@ -222,8 +222,13 @@ def run_review(provider: str, phase: str, handoff: pathlib.Path, out: pathlib.Pa
         (out / "stdout.log").write_text(stdout, encoding="utf-8")
         (out / "stderr.log").write_text(stderr, encoding="utf-8")
         if returncode:
-            tail = stderr.strip()[-500:] or stdout.strip()[-500:]
-            raise ReviewError(f"{adapter.NAME} exited with code {returncode}; no retry. Last output: {tail}")
+            # The adapter's reading of the output usually names the cause; stderr adds the CLI's own message.
+            detail = stderr.strip()[-500:]
+            try:
+                adapter.read_result(stdout, output_path)
+            except ReviewError as error:
+                detail = f"{error} {detail}".strip()
+            raise ReviewError(f"{adapter.NAME} exited with code {returncode}; no retry. {detail or stdout.strip()[-500:]}")
         result = adapter.read_result(stdout, output_path)
         report["observed"].update({k: v for k, v in result["observed"].items() if v})
         report["usage"] = result["usage"]

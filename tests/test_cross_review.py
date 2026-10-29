@@ -38,6 +38,7 @@ SCRIPTS = pathlib.Path(__file__).resolve().parents[1] / "subagents" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 import cross_review  # noqa: E402
+import cross_review_claude  # noqa: E402
 
 FAKE_CODEX = textwrap.dedent('''\
     #!{python}
@@ -63,6 +64,25 @@ FAKE_CODEX = textwrap.dedent('''\
     sys.exit(scenario.get("exit_code", 0))
 ''')
 
+FAKE_CLAUDE = textwrap.dedent('''\
+    #!{python}
+    import json, os, sys
+    scenario = json.load(open(os.environ["FAKE_CODEX_SCENARIO"]))
+    argv = sys.argv[1:]
+    with open(os.environ["FAKE_CODEX_LOG"], "a") as log:
+        log.write(json.dumps(argv) + "\\n")
+    if argv[:2] == ["auth", "status"]:
+        print(json.dumps({{"loggedIn": scenario.get("logged_in", True), "authMethod": "claude.ai"}}))
+        sys.exit(0)
+    sys.stdin.read()
+    envelope = {{"type": "result", "subtype": "success", "is_error": False, "result": "",
+                "usage": {{"input_tokens": 50, "output_tokens": 10, "service_tier": "standard"}},
+                "modelUsage": {{"claude-opus-test": {{}}}}}}
+    envelope.update(scenario.get("envelope", {{}}))
+    print(json.dumps(envelope))
+    sys.exit(scenario.get("exit_code", 0))
+''')
+
 COMPLETED = [{"type": "thread.started", "thread_id": "t1"},
              {"type": "turn.completed", "usage": {"input_tokens": 100, "cached_input_tokens": 40, "output_tokens": 20}}]
 CLEAN = {"coverage": "complete", "findings": [], "limitations": []}
@@ -77,6 +97,8 @@ def git(repo, *args):
 
 
 class ReviewTestCase(unittest.TestCase):
+    provider, fake_cli = "codex", FAKE_CODEX
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -90,8 +112,8 @@ class ReviewTestCase(unittest.TestCase):
         (self.repo / "app.py").write_text("x = 1\n")
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-q", "-m", "base")
-        self.cli = self.root / "codex"
-        self.cli.write_text(FAKE_CODEX.format(python=sys.executable))
+        self.cli = self.root / self.provider
+        self.cli.write_text(self.fake_cli.format(python=sys.executable))
         self.cli.chmod(0o755)
         self.log = self.root / "calls.jsonl"
         self.scenario_path = self.root / "scenario.json"
@@ -106,7 +128,7 @@ class ReviewTestCase(unittest.TestCase):
 
     def review(self, scenario, phase="plan", handoff=None, timeout_seconds=60):
         self.scenario_path.write_text(json.dumps(scenario))
-        report = cross_review.run_review("codex", phase, handoff or self.handoff, self.out, "gpt-test", "high",
+        report = cross_review.run_review(self.provider, phase, handoff or self.handoff, self.out, "gpt-test", "high",
                                          self.repo, str(self.cli), timeout_seconds)
         self.assertEqual(json.loads((self.out / "report.json").read_text()), report)
         return report
@@ -272,6 +294,46 @@ class CodexReviewTests(ReviewTestCase):
             time.sleep(0.1)
         else:
             self.fail("reviewer child process is still running")
+
+
+
+class ClaudeReviewTests(ReviewTestCase):
+    provider, fake_cli = "claude", FAKE_CLAUDE
+
+    def test_review_passes_settings_and_read_only_tools_and_reports_usage(self):
+        # Failure mode 3.
+        report = self.review({"envelope": {"structured_output": {**CLEAN, "findings": [finding()]}}})
+        self.assertEqual(report["status"], "changes_requested")
+        self.assertEqual(report["observed"], {"model": "claude-opus-test", "effort": "unknown"})
+        self.assertEqual(report["usage"], {"input_tokens": 50, "output_tokens": 10})
+        [argv] = [argv for argv in self.calls() if "-p" in argv]
+        pairs = [argv[i:i + 2] for i in range(len(argv))]
+        for flags in (["--model", "gpt-test"], ["--effort", "high"], ["--tools", "Read,Grep,Glob,Bash"],
+                      ["--permission-mode", "dontAsk"], ["--output-format", "json"]):
+            self.assertIn(flags, pairs)
+        self.assertIn(str(cross_review_claude.skills_directory()), argv[argv.index("--add-dir") + 1:])
+        self.assertNotIn("Edit", argv[argv.index("--tools") + 1])
+        self.assertNotIn("--dangerously-skip-permissions", argv)
+
+    def test_not_logged_in_fails_before_review_and_never_logs_in(self):
+        # Failure mode 4.
+        report = self.review({"logged_in": False})
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("not logged in", report["diagnostic"])
+        self.assertEqual(self.calls(), [["auth", "status", "--json"]])
+
+    def test_error_envelope_fails_with_its_message(self):
+        # Failure mode 6.
+        report = self.review({"envelope": {"is_error": True, "result": "API Error: usage limit reached"}, "exit_code": 1})
+        self.assertEqual(report["status"], "failed")
+        self.assertIn("usage limit", report["diagnostic"])
+
+    def test_missing_or_invalid_structured_output_is_incomplete(self):
+        # Failure mode 1.
+        for envelope in ({}, {"structured_output": {"findings": "none"}}):
+            report = self.review({"envelope": envelope})
+            self.assertEqual(report["status"], "incomplete")
+            self.assertEqual(report["findings"], [])
 
 
 if __name__ == "__main__":

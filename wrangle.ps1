@@ -17,7 +17,7 @@ $HostsSource = Join-Path $SubagentsSource "hosts"
 $DualReviewSkillName = "clanker-dual-review"
 # The three role references; on Claude each also has an agent definition in subagents\claude\.
 $RoleNames = @("clanker-implementor", "clanker-reviewer", "clanker-functional-review")
-$DualReviewScripts = @("cross_review.py", "cross_review_codex.py", "clanker_log.py")
+$DualReviewScripts = @("cross_review.py", "cross_review_codex.py", "cross_review_claude.py", "clanker_log.py")
 $ReviewerRoleSource = Join-Path $SubagentsSource "clanker-reviewer.md"
 # Installed names from earlier versions. The installer deletes each one that exists under an agent
 # root, without backups, and prints it.
@@ -252,9 +252,7 @@ function Install-DualReviewBundle {
 
     $routesSource = Join-Path $HostsSource "$hostName\routes.jsonc"
     $routesDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "clanker\routes.jsonc") -Root $AgentRoot -Description "routes file"
-    if (-not (Test-Path -LiteralPath $routesSource -PathType Leaf)) {
-        Write-Host "No routes template for $AgentName yet; skipped $routesDestination"
-    } elseif ($null -ne (Get-Item -LiteralPath $routesDestination -Force -ErrorAction SilentlyContinue)) {
+    if ($null -ne (Get-Item -LiteralPath $routesDestination -Force -ErrorAction SilentlyContinue)) {
         Write-Host "Kept existing routes file: $routesDestination"
     } else {
         Copy-SafeFile -DestinationPath $routesDestination -SourcePath $routesSource
@@ -336,7 +334,7 @@ foreach ($orchestrationSource in $orchestrationSources) {
     }
 }
 
-$dualReviewSources = @((Join-Path $SkillsSource "$DualReviewSkillName.md"), (Join-Path $HostsSource "claude\routes.jsonc")) +
+$dualReviewSources = @((Join-Path $SkillsSource "$DualReviewSkillName.md"), (Join-Path $HostsSource "claude\routes.jsonc"), (Join-Path $HostsSource "codex\routes.jsonc")) +
     @($DualReviewScripts | ForEach-Object { Join-Path $SubagentsSource "scripts\$_" })
 foreach ($dualReviewSource in $dualReviewSources) {
     if (-not (Test-Path -LiteralPath $dualReviewSource -PathType Leaf)) {
