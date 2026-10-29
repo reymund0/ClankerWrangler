@@ -7,7 +7,6 @@ WINDSURF_MEMORIES_ROOT="${WINDSURF_MEMORIES_ROOT:-$HOME/.codeium/windsurf/memori
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SKILLS_SOURCE="$REPO_ROOT/skills"
-LEGACY_SKILLS_SOURCE="$SKILLS_SOURCE/legacy"
 SUBAGENTS_SOURCE="$REPO_ROOT/subagents"
 ORCHESTRATION_NAME="clanker-orchestration-nation"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
@@ -17,9 +16,16 @@ DUAL_REVIEW_NAME="clanker-dual-review"
 ROLE_NAMES=(clanker-implementor clanker-reviewer clanker-functional-review)
 DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py clanker_log.py)
 REVIEWER_ROLE_SOURCE="$SUBAGENTS_SOURCE/clanker-reviewer.md"
-RETIRED_SPECIALISTS=(clanker-ux-designer clanker-documentation-writer clanker-product-engineer)
-# References replaced by another file; only the installed reference is retired, never a standalone skill.
-RETIRED_REFERENCES=(clanker-claude-cross-review)
+# Installed names from earlier versions. The installer deletes each one that exists under an agent
+# root, without backups, and prints it.
+RETIRED_SKILLS=(clanker-plan-with-codex clanker-refactor-sisyphus clanker-refine-ticket-with-codex clanker-refine-ticket codex-review)
+RETIRED_ROLE_NAMES=(clanker-architect clanker-backend-developer clanker-data-engineer clanker-devops-engineer
+    clanker-performance-engineer clanker-qa-engineer clanker-test-engineer clanker-ui-developer clanker-ui-ux-reviewer
+    clanker-ux-designer clanker-documentation-writer clanker-product-engineer clanker-cross-review clanker-claude-cross-review)
+RETIRED_PATHS=(
+    "skills/$ORCHESTRATION_NAME/scripts" "skills/$ORCHESTRATION_NAME/routing" "skills/$ORCHESTRATION_NAME/editor"
+    agents/clanker-orchestration-worker.md backups/orchestration-nation
+)
 
 copy_safe_file() {
     local dest="$1"
@@ -150,92 +156,26 @@ EOF
     echo "Generated: $openai_yaml"
 }
 
-remove_legacy_skills() {
-    local agent_skills_root="$1"
-
-    if [[ ! -d "$LEGACY_SKILLS_SOURCE" ]]; then
-        return
-    fi
-
-    while IFS= read -r -d '' legacy_file; do
-        local base
-        base="$(basename "$legacy_file")"
-        local skill_name="${base%.md}"
-        local skill_dir="$agent_skills_root/$skill_name"
-
-        if [[ -d "$skill_dir" ]]; then
-            rm -rf "$skill_dir"
-            echo "Removed legacy skill: $skill_dir"
-        fi
-    done < <(find "$LEGACY_SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
-}
-
-preflight_retired_specialists() {
+remove_retired_paths() {
     local agent_root="$1"
-    local references="$agent_root/skills/$ORCHESTRATION_NAME/references"
-    local name source backup have_entries=false
-    assert_safe_bundle_path "$agent_root" "$references" "specialist references" >/dev/null
-    for name in "${RETIRED_SPECIALISTS[@]}"; do
-        for source in "$references/$name.md" "$agent_root/skills/$name"; do
-            assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
-            [[ -e "$source" ]] || continue
-            if [[ "$source" == "$references/"* ]]; then
-                [[ -f "$source" ]] || { echo "Error: Unexpected retired specialist entry type: $source" >&2; exit 1; }
-            else
-                [[ -d "$source" ]] || { echo "Error: Unexpected retired specialist entry type: $source" >&2; exit 1; }
-            fi
-            have_entries=true
-        done
+    local name relative path
+    local paths=("${RETIRED_PATHS[@]}")
+    for name in "${RETIRED_SKILLS[@]}" "${RETIRED_ROLE_NAMES[@]}"; do
+        paths+=("skills/$name")
     done
-    for name in "${RETIRED_REFERENCES[@]}"; do
-        source="$references/$name.md"
-        assert_safe_bundle_path "$agent_root" "$source" "retired reference" >/dev/null
-        [[ -e "$source" ]] || continue
-        [[ -f "$source" ]] || { echo "Error: Unexpected retired reference entry type: $source" >&2; exit 1; }
-        have_entries=true
+    for name in "${RETIRED_ROLE_NAMES[@]}"; do
+        paths+=("skills/$ORCHESTRATION_NAME/references/$name.md")
     done
-    if "$have_entries"; then
-        for backup in "$agent_root/backups" "$agent_root/backups/orchestration-nation"; do
-            assert_safe_bundle_path "$agent_root" "$backup" "retirement backup" >/dev/null
-            [[ ! -e "$backup" || -d "$backup" ]] || { echo "Error: Backup destination is not a directory: $backup" >&2; exit 1; }
-        done
-    fi
-}
-
-move_retired_entry() {
-    local agent_root="$1"
-    local source="$2"
-    local name="$3"
-    local extension="$4"
-    local backup_root="$agent_root/backups/orchestration-nation"
-    local destination suffix
-    assert_safe_bundle_path "$agent_root" "$source" "retired specialist" >/dev/null
-    [[ -e "$source" ]] || return 0
-    assert_safe_bundle_path "$agent_root" "$backup_root" "retirement backup" >/dev/null
-    mkdir -p "$backup_root"
-    destination="$backup_root/$name$extension"
-    suffix=2
-    while [[ -e "$destination" || -L "$destination" ]]; do
-        destination="$backup_root/$name-$suffix$extension"
-        suffix=$((suffix + 1))
+    for relative in "${paths[@]}"; do
+        path="$agent_root/$relative"
+        # Check the parent so a linked retired entry is removed as a link, never followed.
+        assert_safe_bundle_path "$agent_root" "$(dirname "$path")" "retired path" >/dev/null
+        [[ -e "$path" || -L "$path" ]] || continue
+        rm -rf -- "$path"
+        echo "Removed retired path: $path"
     done
-    assert_safe_bundle_path "$agent_root" "$destination" "retirement backup" >/dev/null
-    mv -n "$source" "$destination"
-    [[ ! -e "$source" ]] || { echo "Error: Retirement move did not complete: $source -> $destination" >&2; exit 1; }
-    echo "Moved retired specialist to backup: $source -> $destination"
-}
-
-retire_specialists() {
-    local agent_root="$1"
-    local references="$agent_root/skills/$ORCHESTRATION_NAME/references"
-    local name
-    for name in "${RETIRED_SPECIALISTS[@]}"; do
-        move_retired_entry "$agent_root" "$references/$name.md" "$name" ".md"
-        move_retired_entry "$agent_root" "$agent_root/skills/$name" "$name" ""
-    done
-    for name in "${RETIRED_REFERENCES[@]}"; do
-        move_retired_entry "$agent_root" "$references/$name.md" "$name" ".md"
-    done
+    # The old installer's backups folder goes too once it is empty.
+    rmdir "$agent_root/backups" 2>/dev/null || true
 }
 
 host_directory_for() {
@@ -256,7 +196,6 @@ install_orchestration_bundle() {
     local host_name
     host_name="$(host_directory_for "$agent_name")"
     assert_safe_bundle_path "$agent_root" "$bundle_dir" "orchestration bundle" >/dev/null
-    preflight_retired_specialists "$agent_root"
 
     copy_safe_file "$bundle_dir/SKILL.md" "$SUBAGENTS_SOURCE/$ORCHESTRATION_NAME.md"
     local role
@@ -271,44 +210,12 @@ install_orchestration_bundle() {
     if [[ "$agent_name" == "Codex" ]]; then
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
-    retire_specialists "$agent_root"
     if [[ "$agent_name" == "Claude Code" ]]; then
         for role in "${ROLE_NAMES[@]}"; do
             copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/$role.md" "agent definitions")" \
                 "$SUBAGENTS_SOURCE/claude/$role.md"
         done
     fi
-
-    # Preserve old standalone entries outside skill discovery after the bundle is ready.
-    local backup_base="$agent_root/backups"
-    local backup_root="$backup_base/orchestration-nation"
-    while IFS= read -r -d '' specialist; do
-        local base
-        base="$(basename "$specialist")"
-        [[ "$base" == "$ORCHESTRATION_NAME.md" ]] && continue
-        local name="${base%.md}"
-        local standalone_dir="$agent_skills_root/$name"
-        [[ -e "$standalone_dir" || -L "$standalone_dir" ]] || continue
-        if [[ ! -d "$standalone_dir" && ! -L "$standalone_dir" ]]; then
-            echo "Error: Cannot migrate non-directory specialist entry: $standalone_dir" >&2
-            exit 1
-        fi
-        if [[ -L "$backup_base" || -L "$backup_root" ]]; then
-            echo "Error: Cannot migrate through a linked backup directory: $backup_root" >&2
-            exit 1
-        fi
-        mkdir -p "$backup_root"
-        local backup_dir="$backup_root/$name"
-        local suffix=2
-        while [[ -e "$backup_dir" || -L "$backup_dir" ]]; do
-            backup_dir="$backup_root/$name-$suffix"
-            suffix=$((suffix + 1))
-        done
-        case "$standalone_dir" in "$agent_skills_root/"*) ;; *) exit 1 ;; esac
-        case "$backup_dir" in "$backup_root/"*) ;; *) exit 1 ;; esac
-        mv "$standalone_dir" "$backup_dir"
-        echo "Moved standalone specialist skill to backup: $standalone_dir -> $backup_dir"
-    done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 }
 
 # The dual-review skill's SKILL.md comes from skills/; add its scripts, the Reviewer role,
@@ -353,10 +260,8 @@ install_agent_links() {
     agent_root="$(cd "$agent_root" && pwd -P)"
     agent_skills_root="$agent_root/skills"
     rules_link="$agent_root/$rules_file_name"
-    preflight_retired_specialists "$agent_root"
     mkdir -p "$agent_skills_root"
-
-    remove_legacy_skills "$agent_skills_root"
+    remove_retired_paths "$agent_root"
 
     while IFS= read -r -d '' skill_file; do
         local base

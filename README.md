@@ -22,36 +22,25 @@ I was getting tired of configuring all my different coding agents across my mach
 
 The script wires the shared rules and skills into the supported agent config locations.
 
-## Routing Editor
+## Orchestration Nation
 
-From the repo root, run `npm run dev` and open the printed local URL.
+Work on a change happens in two chats:
 
-First time? You'll need Python 3.10+ and Node 20.19+ (or 22.12+), then:
+1. **Design chat** (`clanker-design-discussion`): explore the approach, write the OpenSpec artifacts, then pass the plan gate through `clanker-dual-review`.
+2. **Implementation chat** (`clanker-orchestration-nation`): implement the finalized change with one Implementor subagent, pass the code gate, run Functional Review against the running app when there is one, and finish with a refactor gate. It hands the thread back to you without committing.
 
-```bash
-npm --prefix routing-editor ci
-npm run build
-npm run dev
-```
+The orchestrator delegates to three roles only: the **Implementor** (the only code writer), the **Reviewer** (read-only), and **Functional Review** (read-only toward source). At each gate the native Reviewer and an external cross-review from the other vendor's CLI run in parallel. The orchestrator then triages their findings and brings anything that would add a mechanism or isn't an obvious fix to you.
 
-The launcher selects the newest runnable Python 3.10+ from unversioned and versioned executables on `PATH`, plus `/opt/homebrew/bin` and `/usr/local/bin` on macOS. To pin an installation, run `CLANKER_PYTHON=/absolute/path/to/python3 npm run dev`. An invalid override fails without falling back.
+| Host | Native subagents | External review |
+| --- | --- | --- |
+| Claude Code | Agent tool with `clanker-implementor`, `clanker-reviewer`, `clanker-functional-review` | Codex CLI, logged in with ChatGPT |
+| Codex | Codex collaboration tools | Claude Code CLI |
 
-## Orchestration Nation Hosts
+Each subagent role's model and effort come from one hand-edited file per host, `<agent-root>/clanker/routes.jsonc` (for example `~/.claude/clanker/routes.jsonc`). The installer writes it only when it is missing and never overwrites your edits. The comments at its top hold the commands that list the models and efforts each CLI offers. The orchestrator itself runs on your session's model.
 
-Orchestration Nation can be led from Codex or from Claude Code. Both installers put the same coordinator, specialist guidance, and shared cross-review reference into each agent, plus that agent's own host reference (`references/host.md`) and host configuration (`routing/host.json`). The coordinator reads those two files to learn its host, its preference file, how to dispatch native workers, and which external reviewer to use.
+Each run appends events to `.clanker/runs/<run>.jsonl` in the project, which is replayed when a run resumes. When a run ends, it adds one row to `.clanker/runs.csv` and one row per finding to `.clanker/findings.csv`.
 
-On either host the coordinator groups build work into workstreams by code area. Each workstream keeps one worker thread for its follow-ups, such as review fixes, at the route resolved when the thread started, and retires that thread once the parent has verified its work. Each run appends to the daily log `.clanker/YYYY-MM-DD-orchestration-nation.md` and adds one row per event to `.clanker/orchestration-ledger.csv` for spreadsheet analysis.
-
-| Host | Native workers | External review | Preference file |
-| --- | --- | --- | --- |
-| Codex | Codex collaboration tools | Claude Code CLI (`scripts/claude_cross_review.py`) | `~/.clanker/orchestration-routing.json` |
-| Claude Code | Agent tool with the `clanker-orchestration-worker` agent | Codex CLI (`scripts/codex_cross_review.py`) | `~/.clanker/orchestration-routing-claude.json` |
-
-The two preference files use the same schema and are independent: neither host reads or changes the other's file, and the installers never write either one. A missing file means bundled defaults. Claude-led defaults are Sonnet for planning and reviews, Haiku for implementation, and `gpt-6.1-sol` for the Codex review, all Adaptive.
-
-To lead from Claude Code you need Python 3.10+, Claude Code with Agent-tool support, and, for external review, the Codex CLI logged in with ChatGPT. The review launcher only checks that login: it never logs in, switches billing, uses API keys, or edits Codex settings, so use the official Codex login flow yourself first. `./wrangle.sh` (or `.\wrangle.ps1`) also installs the generic worker at `<claude-root>/agents/clanker-orchestration-worker.md`. If an unmanaged file already has that name, it is moved to `<claude-root>/backups/orchestration-nation/` before the worker is written. Codex gets no agent definition.
-
-The routing editor opens with a host selector. Each host edits its own preference file with its own draft, and `--global-config-dir <temporary-directory>` redirects both files when you want to try it without touching real preferences. Routing policy 7 requires the installed helpers and editor build to match, and snapshots from policy 6 are rejected, so install the complete bundle and start new runs.
+The review launcher only checks that the reviewer CLI is installed and logged in. It never logs in, switches billing, or changes the CLI's settings, so log in yourself first. Python 3.10+ is required.
 
 ## Step 4
 

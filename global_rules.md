@@ -25,8 +25,8 @@ Do not jump into broad edits before understanding the surrounding code.
 
 ## Delegation and Coordination
 
-* When acting as the primary agent, assess whether specialist work would improve the result. Handle small, straightforward tasks directly.
-* For work that benefits from multiple specialties, use the available orchestration workflow when it supports the active client.
+* When acting as the primary agent, handle small, straightforward tasks directly. Delegate when it keeps your context clean or moves bulk work to a cheaper model, not to add more writers.
+* For larger changes, use the available orchestration workflow when it supports the active client: one code writer, with review and functional checks in read-only roles.
 * Give each worker a bounded objective, relevant instructions, acceptance criteria, explicit ownership, and verification expectations.
 * Parallelize independent work. Sequence changes to shared files, interfaces, browser state, or other shared resources.
 * The primary agent owns integration, shared planning state, decision logging, and the final response.
