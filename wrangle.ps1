@@ -26,6 +26,10 @@ $RoutingEditorSource = Join-Path $RepoRoot "routing-editor\scripts\routing_edito
 $ModelDiscoverySource = Join-Path $RepoRoot "routing-editor\scripts\model_discovery.py"
 $RoutingDataSource = Join-Path $SubagentsSource "routing"
 $RoutingEditorDistSource = Join-Path $RepoRoot "routing-editor\dist"
+$DualReviewSkillName = "clanker-dual-review"
+$DualReviewScripts = @("cross_review.py", "cross_review_codex.py", "clanker_log.py")
+$ReviewerRoleSource = Join-Path $SubagentsSource "clanker-reviewer.md"
+$ClaudeReviewerSource = Join-Path $SubagentsSource "claude\clanker-reviewer.md"
 $RetiredSpecialistNames = @("clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer")
 # References replaced by another file; only the installed reference is retired, never a standalone skill.
 $RetiredReferenceNames = @("clanker-claude-cross-review")
@@ -441,6 +445,44 @@ function Move-OrchestrationSpecialistDirectories {
     }
 }
 
+# The dual-review skill's SKILL.md comes from skills\; add its scripts, the Reviewer role,
+# routes.jsonc (only when absent), and on Claude the reviewer agent definition.
+function Install-DualReviewBundle {
+    param(
+        [Parameter(Mandatory)][string]$AgentName,
+        [Parameter(Mandatory)][string]$AgentRoot,
+        [Parameter(Mandatory)][string]$AgentSkillsRoot
+    )
+
+    $bundleDirectory = Assert-NoReparsePath -Path (Join-Path $AgentSkillsRoot $DualReviewSkillName) -Root $AgentSkillsRoot -Description "dual-review bundle"
+    $hostName = switch ($AgentName) {
+        "Claude Code" { "claude" }
+        "Codex" { "codex" }
+        default { throw "Unknown orchestration host for ${AgentName}" }
+    }
+    foreach ($script in $DualReviewScripts) {
+        $destination = Assert-NoReparsePath -Path (Join-Path $bundleDirectory "scripts\$script") -Root $bundleDirectory -Description "dual-review scripts"
+        Copy-SafeFile -DestinationPath $destination -SourcePath (Join-Path $SubagentsSource "scripts\$script")
+    }
+    $roleDestination = Assert-NoReparsePath -Path (Join-Path $bundleDirectory "references\clanker-reviewer.md") -Root $bundleDirectory -Description "dual-review references"
+    Copy-SafeFile -DestinationPath $roleDestination -SourcePath $ReviewerRoleSource
+
+    $routesSource = Join-Path $HostsSource "$hostName\routes.jsonc"
+    $routesDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "clanker\routes.jsonc") -Root $AgentRoot -Description "routes file"
+    if (-not (Test-Path -LiteralPath $routesSource -PathType Leaf)) {
+        Write-Host "No routes template for $AgentName yet; skipped $routesDestination"
+    } elseif ($null -ne (Get-Item -LiteralPath $routesDestination -Force -ErrorAction SilentlyContinue)) {
+        Write-Host "Kept existing routes file: $routesDestination"
+    } else {
+        Copy-SafeFile -DestinationPath $routesDestination -SourcePath $routesSource
+    }
+
+    if ($AgentName -eq "Claude Code") {
+        $agentDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "agents\clanker-reviewer.md") -Root $AgentRoot -Description "agent definitions"
+        Copy-SafeFile -DestinationPath $agentDestination -SourcePath $ClaudeReviewerSource
+    }
+}
+
 function Install-AgentLinks {
     param(
         [Parameter(Mandatory)][string]$AgentName,
@@ -479,6 +521,7 @@ function Install-AgentLinks {
         }
     }
 
+    Install-DualReviewBundle -AgentName $AgentName -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot
     Install-OrchestrationNationBundle -AgentName $AgentName -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
     Move-OrchestrationSpecialistDirectories -AgentRoot $AgentRoot -AgentSkillsRoot $agentSkillsRoot -SpecialistSourceFiles $SpecialistSourceFiles
 
@@ -521,6 +564,14 @@ foreach ($reviewSource in @($CrossReviewCoreSource, $CodexReviewLauncherSource, 
         (Join-Path $HostsSource "codex\host.md"), (Join-Path $HostsSource "codex\host.json"))) {
     if (-not (Test-Path -LiteralPath $reviewSource -PathType Leaf)) {
         throw "Orchestration host or review source file not found: $reviewSource"
+    }
+}
+
+$dualReviewSources = @((Join-Path $SkillsSource "$DualReviewSkillName.md"), $ReviewerRoleSource, $ClaudeReviewerSource,
+    (Join-Path $HostsSource "claude\routes.jsonc")) + @($DualReviewScripts | ForEach-Object { Join-Path $SubagentsSource "scripts\$_" })
+foreach ($dualReviewSource in $dualReviewSources) {
+    if (-not (Test-Path -LiteralPath $dualReviewSource -PathType Leaf)) {
+        throw "Dual-review source file not found: $dualReviewSource"
     }
 }
 

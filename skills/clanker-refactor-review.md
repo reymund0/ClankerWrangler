@@ -13,6 +13,17 @@ This is not a correctness review. Do not hunt for bugs, regressions, or test gap
 
 Scope discipline is the point of this skill. Every proposal must be anchored to the branch diff and the code directly related to it.
 
+## Caller-supplied scope
+
+When a calling chat such as `clanker-dual-review` supplies the scope, use this mode:
+
+- Analyze exactly the supplied scope instead of choosing one in Step 1: the committed diff
+  `<base>...HEAD`, staged and unstaged changes, untracked files, and any listed paths.
+  Uncommitted and untracked work is in scope, even when the branch also has commits.
+- Apply Steps 2–5 to that scope.
+- Return the proposals inline in the caller's finding format instead of Step 6. Do not write
+  `.clanker/refactor/*.md` or any other file.
+
 ## Step 1 — Establish the diff under review
 
 ```bash

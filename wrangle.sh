@@ -23,6 +23,10 @@ ROUTING_EDITOR_SOURCE="$REPO_ROOT/routing-editor/scripts/routing_editor.py"
 MODEL_DISCOVERY_SOURCE="$REPO_ROOT/routing-editor/scripts/model_discovery.py"
 ROUTING_DATA_SOURCE="$SUBAGENTS_SOURCE/routing"
 ROUTING_EDITOR_DIST_SOURCE="$REPO_ROOT/routing-editor/dist"
+DUAL_REVIEW_NAME="clanker-dual-review"
+DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py clanker_log.py)
+REVIEWER_ROLE_SOURCE="$SUBAGENTS_SOURCE/clanker-reviewer.md"
+CLAUDE_REVIEWER_SOURCE="$SUBAGENTS_SOURCE/claude/clanker-reviewer.md"
 RETIRED_SPECIALISTS=(clanker-ux-designer clanker-documentation-writer clanker-product-engineer)
 # References replaced by another file; only the installed reference is retired, never a standalone skill.
 RETIRED_REFERENCES=(clanker-claude-cross-review)
@@ -412,6 +416,38 @@ install_orchestration_bundle() {
     done < <(find "$SUBAGENTS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 }
 
+# The dual-review skill's SKILL.md comes from skills/; add its scripts, the Reviewer role,
+# routes.jsonc (only when absent), and on Claude the reviewer agent definition.
+install_dual_review_bundle() {
+    local agent_name="$1"
+    local agent_root="$2"
+    local bundle_dir="$agent_root/skills/$DUAL_REVIEW_NAME"
+    local host_name routes_source routes_destination script
+    host_name="$(host_directory_for "$agent_name")"
+    assert_safe_bundle_path "$agent_root" "$bundle_dir" "dual-review bundle" >/dev/null
+    for script in "${DUAL_REVIEW_SCRIPTS[@]}"; do
+        copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/scripts/$script" "dual-review scripts")" \
+            "$SUBAGENTS_SOURCE/scripts/$script"
+    done
+    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/references/clanker-reviewer.md" "dual-review references")" \
+        "$REVIEWER_ROLE_SOURCE"
+
+    routes_source="$HOSTS_SOURCE/$host_name/routes.jsonc"
+    routes_destination="$(assert_safe_bundle_path "$agent_root" "$agent_root/clanker/routes.jsonc" "routes file")"
+    if [[ ! -f "$routes_source" ]]; then
+        echo "No routes template for $agent_name yet; skipped $routes_destination"
+    elif [[ -e "$routes_destination" || -L "$routes_destination" ]]; then
+        echo "Kept existing routes file: $routes_destination"
+    else
+        copy_safe_file "$routes_destination" "$routes_source"
+    fi
+
+    if [[ "$agent_name" == "Claude Code" ]]; then
+        copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/clanker-reviewer.md" "agent definitions")" \
+            "$CLAUDE_REVIEWER_SOURCE"
+    fi
+}
+
 install_agent_links() {
     local agent_name="$1"
     local agent_root="$2"
@@ -449,6 +485,7 @@ install_agent_links() {
         fi
     done < <(find "$SKILLS_SOURCE" -maxdepth 1 -name "*.md" -type f -print0 | sort -z)
 
+    install_dual_review_bundle "$agent_name" "$agent_root"
     install_orchestration_bundle "$agent_name" "$agent_root"
 
     copy_safe_file "$rules_link" "$GLOBAL_RULES_SOURCE"
@@ -488,6 +525,14 @@ for review_source in "$CROSS_REVIEW_CORE_SOURCE" "$CODEX_REVIEW_LAUNCHER_SOURCE"
     "$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json"; do
     if [[ ! -f "$review_source" ]]; then
         echo "Error: Orchestration host or review source file not found: $review_source" >&2
+        exit 1
+    fi
+done
+
+for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$REVIEWER_ROLE_SOURCE" "$CLAUDE_REVIEWER_SOURCE" \
+    "$HOSTS_SOURCE/claude/routes.jsonc" "${DUAL_REVIEW_SCRIPTS[@]/#/$SUBAGENTS_SOURCE/scripts/}"; do
+    if [[ ! -f "$dual_review_source" ]]; then
+        echo "Error: Dual-review source file not found: $dual_review_source" >&2
         exit 1
     fi
 done

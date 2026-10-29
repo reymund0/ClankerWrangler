@@ -48,13 +48,6 @@ Relevant technical lenses:
 - **Maintainability:** conventions, complexity, dependencies, interfaces, testability,
   implementation cost, and reversibility.
 
-## Optional specialist references
-
-When useful, consult available architect, data, performance, or DevOps references
-as advisory criteria. Keep the discussion and recommendation with the parent.
-Installed profiles are in `../clanker-orchestration-nation/references/`; source
-profiles are in `../subagents/`.
-
 ## Review and capture
 
 For authorized capture, follow OpenSpec explore and its resolved artifact paths.
@@ -64,3 +57,22 @@ design artifact; behavioral requirements in the applicable specs.
 Get the user's review of the proposed design before deriving tasks or handing off to
 task planning. If captured, show the actual saved artifact for that review. Use existing
 authorization for follow-up work; design approval alone does not authorize implementation.
+
+## Plan gate
+
+After the change's proposal, design, specs, and tasks are written, review them through
+`clanker-dual-review` at the `plan` gate before handing the change to implementation.
+
+1. Start the design run:
+   `python3 <clanker-dual-review dir>/scripts/clanker_log.py start --chat design --host <claude|codex>
+   --change <change> --routes <agent-root>/clanker/routes.jsonc --orchestrator-model <model/effort>`.
+   If it reports an invalid route, show the message to the user and stop.
+2. Run `clanker-dual-review` with gate `plan`, the run ID, and the change's artifacts as scope.
+   Accepted findings are fixed by this chat as artifact edits; re-run
+   `openspec validate <change> --strict` after editing.
+3. End the run when the gate passes (`done`), stops at its round limit (`stopped-at-limit`), or
+   is blocked (`blocked`):
+   `python3 <clanker-dual-review dir>/scripts/clanker_log.py finish --run <run> --outcome <outcome>`.
+   Report a failed write to the user.
+
+The change is ready for `clanker-orchestration-nation` in a new chat once the plan gate passes.

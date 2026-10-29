@@ -22,7 +22,7 @@ Orchestration Nation grew to ten specialist roles, per-role routing, a routing e
 ### New Capabilities
 
 - `dual-review`: Parallel native and external review at the plan, code, and refactor gates, with orchestrator consolidation, finding triage, user decisions, and round limits.
-- `cross-review`: The external cross-review launcher: provider adapters, preflight, read-only review of scoped evidence, plan/implementation/refactor phases, structured findings, and honest status.
+- `cross-review`: The external cross-review launcher: provider adapters, preflight, read-only review of the scope named in the caller's handoff, plan/implementation/refactor phases, structured findings, and honest status.
 - `development-orchestration`: The three roles, the two-chat workflow, single-writer implementation, the small-work rule, Functional Review, and handover.
 - `orchestration-routing-policy`: One hand-edited routes file per host.
 - `orchestration-run-log`: The append-only run log and the `runs.csv` and `findings.csv` tables.

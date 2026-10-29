@@ -42,7 +42,7 @@ class InstallerTests(unittest.TestCase):
         if host == "claude":
             worker = base / "agents" / (WORKER + ".md")
             self.assertEqual(worker.read_bytes(), (source / "claude" / (WORKER + ".md")).read_bytes())
-            self.assertEqual([path.name for path in (base / "agents").iterdir()], [worker.name])
+            self.assertEqual(sorted(path.name for path in (base / "agents").iterdir()), sorted([worker.name, "clanker-reviewer.md"]))
         else:
             self.assertFalse((base / "agents").exists())
 
@@ -181,7 +181,7 @@ class InstallerTests(unittest.TestCase):
                         self.assertEqual((bundle / "references" / source.name).read_bytes(), source.read_bytes())
                         self.assertFalse((base / "skills" / source.stem / "SKILL.md").exists())
                     references = bundle / "references"
-                    self.assertEqual(len(list((source_repo / "subagents").glob("*.md"))), 11)
+                    self.assertEqual(len(list((source_repo / "subagents").glob("*.md"))), 12)
                     for name in RETIRED:
                         self.assertFalse((references / (name + ".md")).exists())
                         self.assertFalse((base / "skills" / name).exists())

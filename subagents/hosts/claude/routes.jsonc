@@ -1,0 +1,14 @@
+// List Codex models and reasoning efforts:
+// (printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"models","version":"1"},"capabilities":{}}}' '{"jsonrpc":"2.0","method":"initialized","params":{}}' '{"jsonrpc":"2.0","id":2,"method":"model/list","params":{"limit":100}}'; sleep 6) | codex app-server 2>/dev/null | python3 -c 'import json,sys;[print(r["model"],"->",", ".join(e["reasoningEffort"] for e in r["supportedReasoningEfforts"] or [])) for l in sys.stdin for m in [json.loads(l)] if m.get("id")==2 for r in m["result"]["data"]]'
+//
+// List Claude models and effort levels:
+// (printf '%s\n' '{"type":"control_request","request_id":"m","request":{"subtype":"initialize"}}'; sleep 8) | claude -p --input-format stream-json --output-format stream-json --verbose --tools "" --no-session-persistence 2>/dev/null | python3 -c 'import json,sys;[print(x["value"],"->",", ".join(x.get("supportedEffortLevels") or [])) for l in sys.stdin for m in [json.loads(l)] if m.get("type")=="control_response" for x in m["response"]["response"]["models"]]'
+{
+  "host": "claude",
+  "roles": {
+    "implementor":  {"model": "haiku",       "effort": "medium"},
+    "reviewer":     {"model": "sonnet",      "effort": "high"},
+    "functional":   {"model": "sonnet",      "effort": "medium"},
+    "cross-review": {"model": "gpt-6.1-sol", "effort": "high"}
+  }
+}

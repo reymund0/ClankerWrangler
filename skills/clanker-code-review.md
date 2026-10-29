@@ -22,6 +22,16 @@ artifact when useful; preserve necessary evidence inline if storage is unavailab
 On recheck, return per-ID dispositions, still-open blockers and new issues instead
 of repeating the original report. Direct invocation retains the standalone format.
 
+## Caller-supplied scope
+
+When a calling chat such as `clanker-dual-review` supplies the scope, use this mode:
+
+- Review exactly the supplied scope instead of choosing one in Step 1: the committed diff
+  `<base>...HEAD`, staged and unstaged changes, untracked files, and any listed paths.
+  Uncommitted and untracked work is in scope. Read other repository files only for context.
+- Use the OpenSpec change the caller names for Steps 2–5.
+- Return the review inline in the caller's finding format. Do not write files.
+
 ## Step 1 — Establish the diff under review
 
 Determine the baseline before reading any code.

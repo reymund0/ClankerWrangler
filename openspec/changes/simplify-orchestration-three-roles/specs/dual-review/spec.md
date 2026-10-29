@@ -12,7 +12,7 @@ Every review round SHALL start the native Reviewer subagent and the external cro
 - **THEN** the Reviewer subagent and the cross-review launcher run concurrently over the same scope, and the Reviewer's findings arrive in its reply
 
 ### Requirement: Shared review scope
-The caller SHALL give both reviewers the same scope. At the code and refactor gates this SHALL be the change's committed, staged, unstaged, and untracked work against a stated base, including work not yet committed. At the plan gate it SHALL be the change's OpenSpec artifacts.
+The caller SHALL give both reviewers the same scope through one handoff file at `.clanker/reviews/<run>/<gate>-<round>/handoff.md`, and each reviewer's prompt SHALL only point to it. The handoff SHALL name the gate, the Reviewer role file and criteria skill, the base, the files to start from, any round-two notes, and the rule to start from those files and explore further only as needed. At the code and refactor gates this SHALL be the change's committed, staged, unstaged, and untracked work against a stated base, including work not yet committed and excluding `.clanker/`. At the plan gate it SHALL be the change's OpenSpec artifacts.
 
 #### Scenario: Uncommitted implementation on a branch with commits
 - **WHEN** the branch already has commits and this run's implementation is uncommitted

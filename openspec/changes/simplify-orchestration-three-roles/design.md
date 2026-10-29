@@ -166,7 +166,7 @@ The Codex host shares the role instruction files and `clanker-dual-review`. Disp
 The launcher is a new, smaller Python core with two adapters, `codex` and `claude`, and three phases, `plan`, `implementation`, and `refactor`.
 
 - **Preflight:** the CLI is present and logged in; no login attempts or billing changes.
-- **Packet:** the committed diff from the base plus staged, unstaged, and untracked changes, and the selected paths.
+- **Handoff:** no evidence packet and no built-in criteria. The caller writes one `handoff.md` per round naming the gate, the Reviewer role file and criteria skill, the base, the files to start from, and round-two notes. Both reviewers get the same one-line prompt, "Read the handoff at <path>", and read the diff and any further files from the repository themselves, starting from the listed files and ignoring `.clanker/`. The launcher adds only the read-only note and the output schema. Codex reads the role file from its own installed copy of `clanker-dual-review`, since the installers install it on both hosts. This follows the common pattern of starting a reviewer from the change and letting it explore narrowly, rather than pasting files into the prompt or letting it crawl the repository.
 - **Invocation:** read-only, with a 45-minute default limit.
 - **Findings:** validated JSON with IDs unique per report, severity `blocking`, `major`, `minor`, `info`, or `proposal`, a location, and a remedy.
 - **Report:** `report.json` with an honest status, plus requested and observed settings and usage.
