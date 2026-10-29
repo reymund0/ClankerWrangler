@@ -77,7 +77,7 @@ After the code gate passes, the orchestrator SHALL start Functional Review when 
 - **THEN** Functional Review exercises the affected flows and returns findings with steps, observations, and evidence paths
 
 ### Requirement: Functional fix cycles
-Accepted Functional Review defects SHALL go to the Implementor, then through a fresh code gate of up to two rounds, then a Functional Review recheck. The run SHALL allow at most two such fix cycles; after the second, the orchestrator SHALL stop and report remaining defects to the user.
+Accepted Functional Review defects SHALL go to the Implementor, then through a fresh code gate of up to two rounds, then a Functional Review recheck. The run SHALL allow at most two such fix cycles; if defects remain after the second recheck, the orchestrator SHALL stop and report them to the user.
 
 #### Scenario: One fix cycle
 - **WHEN** Functional Review finds a defect after the initial code gate used two rounds

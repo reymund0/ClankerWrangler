@@ -2,10 +2,10 @@
 
 ## 1. Cross-review launcher (Codex adapter)
 
-- [ ] 1.1 Skim the old launcher tests and list the 5–6 failure modes worth keeping (malformed reviewer output, timeouts, effort handling, preflight diagnostics, and similar) at the top of the new test file; verify the list exists before any launcher code is written
-- [ ] 1.2 Write the new launcher core in `subagents/scripts/`: manifest, evidence packet (committed diff from base plus staged, unstaged, and untracked work, plus selected paths), `plan`/`implementation`/`refactor` phases with per-phase criteria, finding schema validation, `report.json` with status and requested/observed settings and usage, and a 45-minute default timeout; verify with `python3 -m unittest` on the new core tests
-- [ ] 1.3 Write the Codex adapter: preflight (CLI present and logged in, with no login or billing changes), read-only invocation, and settings passed explicitly; verify with unit tests using a stubbed CLI
-- [ ] 1.4 Run one real `plan`-phase review against this change's artifacts with the Codex adapter; verify the `report.json` status and findings parse
+- [x] 1.1 Skim the old launcher tests and list the 5–6 failure modes worth keeping (malformed reviewer output, timeouts, effort handling, preflight diagnostics, and similar) at the top of the new test file; verify the list exists before any launcher code is written
+- [x] 1.2 Write the new launcher core in `subagents/scripts/`: manifest, evidence packet (committed diff from base plus staged, unstaged, and untracked work, plus selected paths), `plan`/`implementation`/`refactor` phases with per-phase criteria, finding schema validation, `report.json` with status and requested/observed settings and usage, and a 45-minute default timeout; verify with `python3 -m unittest` on the new core tests
+- [x] 1.3 Write the Codex adapter: preflight (CLI present and logged in, with no login or billing changes), read-only invocation, and settings passed explicitly; verify with unit tests using a stubbed CLI
+- [x] 1.4 Run one real `plan`-phase review against this change's artifacts with the Codex adapter; verify the `report.json` status and findings parse
 
 ## 2. Routes file and run log helper
 
@@ -40,11 +40,11 @@
 - [ ] 5.1 Delete the old pieces and verify `git status` shows only intended deletions:
   - the nine specialist profiles, `subagents/clanker-cross-review.md`, and `subagents/claude/clanker-orchestration-worker.md`
   - `subagents/routing/`, `subagents/scripts/routing_policy.py`, and any old launcher files not replaced in group 1
-- [ ] 5.2 Delete `routing-editor/`, the root `package.json` and `package-lock.json`, the `.gitignore` routing-editor entries, and `skills/legacy/`; verify no file references them (`grep -rn routing-editor`)
+- [ ] 5.2 Delete `routing-editor/`, the root `package.json` and `package-lock.json`, the `.gitignore` routing-editor entries, and `skills/legacy/`; verify no file outside `openspec/` references them except the installers' retired-names list (`grep -rn routing-editor --exclude-dir=openspec --exclude-dir=.git .`)
 - [ ] 5.3 Delete the old tests (`test_routing_policy`, `test_routing_codex_compat`, `test_orchestration_guidance`, `test_review_reservations`, and the old launcher tests) and the fixtures `routing_codex_policy6_expected.json`, `codex_doctor.json`, and `codex_models.json`; verify `python3 -m unittest discover tests` passes on the remaining tests
 - [ ] 5.4 Delete the tracked `.clanker/` logs and reviews; verify `git ls-files .clanker` is empty
 - [ ] 5.5 Replace the installers' old retirement and backup logic with a hard-coded list of retired installed names that it deletes without backups and prints; verify by installing over a temporary root seeded with the old files
-- [ ] 5.6 Rewrite the README "Routing Editor" and "Orchestration Nation Hosts" sections for the two-chat workflow and `routes.jsonc`, and update the specialist wording in `global_rules.md` "Delegation and Coordination"; verify no retired role names remain (`grep -rni "architect\|backend-developer\|routing editor"`)
+- [ ] 5.6 Rewrite the README "Routing Editor" and "Orchestration Nation Hosts" sections for the two-chat workflow and `routes.jsonc`, and update the specialist wording in `global_rules.md` "Delegation and Coordination"; verify no retired role names remain outside `openspec/` and the installers' retired-names list (`grep -rni "architect\|backend-developer\|routing editor" --exclude-dir=openspec --exclude-dir=.git .`)
 
 ## 6. Codex host
 

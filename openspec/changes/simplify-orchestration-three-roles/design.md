@@ -123,7 +123,7 @@ Rules for passing and rounds:
 
 If the change can't be exercised through a browser, CLI, or API, Functional Review is skipped with the reason. Functional findings are triaged like review findings.
 
-Each fix cycle runs Implementor → a fresh code gate (up to two rounds) → a Functional Review recheck. At most two cycles are allowed, so the worst case is six code rounds per run. After that the orchestrator stops with `stopped-at-limit`.
+Each fix cycle runs Implementor → a fresh code gate (up to two rounds) → a Functional Review recheck. At most two cycles are allowed, so the worst case is six code rounds per run. If defects remain after the second recheck, the orchestrator stops with `stopped-at-limit`.
 
 ### Routes: one hand-edited file per host
 
