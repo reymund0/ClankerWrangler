@@ -12,9 +12,10 @@ Failure modes kept from the old launcher tests (test_cross_review_*.py, test_cod
    test_reported_model_becomes_the_observed_model_and_unreported_effort_stays_unknown).
 4. Preflight fails with the missing prerequisite (CLI absent, not logged in) before any review
    call, and never starts a login flow (old: test_not_logged_in_preflight_never_starts_a_login_flow).
-5. The evidence packet holds committed, staged, unstaged, and untracked work against the base, and
-   an invalid base fails instead of producing a silent empty diff
-   (old: test_implementation_review_with_git_baseline, test_invalid_baseline_cannot_be_silent_empty_diff).
+5. The reviewer is pointed at the caller's handoff, and a missing or unreadable handoff fails before
+   any review call instead of producing a review of nothing
+   (old: test_missing_required_evidence_blocks_before_any_codex_call,
+   test_invalid_baseline_cannot_be_silent_empty_diff).
 6. A reviewer that exits nonzero or never completes its turn (for example a usage limit) is
    `failed` with a diagnostic and is not retried
    (old: test_usage_limit_is_a_failed_attempt_with_a_usage_diagnostic_and_no_retry).
@@ -99,14 +100,13 @@ class ReviewTestCase(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
-    def manifest(self, **values):
-        path = self.root / "manifest.json"
-        path.write_text(json.dumps({"phase": "plan", "paths": ["design.md"], **values}))
-        return path
+        self.handoff = self.repo / ".clanker" / "handoff.md"
+        self.handoff.parent.mkdir()
+        self.handoff.write_text("# Review handoff\nGate: plan\nStart from: design.md\n")
 
-    def review(self, scenario, manifest=None, timeout_seconds=60):
+    def review(self, scenario, phase="plan", handoff=None, timeout_seconds=60):
         self.scenario_path.write_text(json.dumps(scenario))
-        report = cross_review.run_review("codex", manifest or self.manifest(), self.out, "gpt-test", "high",
+        report = cross_review.run_review("codex", phase, handoff or self.handoff, self.out, "gpt-test", "high",
                                          self.repo, str(self.cli), timeout_seconds)
         self.assertEqual(json.loads((self.out / "report.json").read_text()), report)
         return report
@@ -118,35 +118,27 @@ class ReviewTestCase(unittest.TestCase):
         return [argv for argv in self.calls() if argv[:1] == ["exec"]]
 
 
-class PacketTests(ReviewTestCase):
-    def test_packet_has_committed_staged_unstaged_and_untracked_work_and_selected_paths(self):
+class HandoffTests(ReviewTestCase):
+    def test_prompt_points_at_the_handoff_with_schema_and_no_file_contents(self):
         # Failure mode 5.
-        base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo, capture_output=True, text=True).stdout.strip()
-        (self.repo / "app.py").write_text("x = 2  # committed\n")
-        git(self.repo, "commit", "-qam", "change")
-        (self.repo / "staged.py").write_text("staged = True\n")
-        git(self.repo, "add", "staged.py")
-        (self.repo / "app.py").write_text("x = 3  # unstaged\n")
-        (self.repo / "new.py").write_text("untracked = True\n")
-        manifest = cross_review.load_manifest(self.manifest(phase="implementation", base=base))
-        packet = cross_review.build_packet(self.repo, manifest)
-        self.assertIn("# Design", packet)
-        for marker in ("+x = 2  # committed", "+staged = True", "+x = 3  # unstaged", "### new.py", "untracked = True"):
-            self.assertIn(marker, packet)
+        (self.repo / "design.md").write_text("SECRET DESIGN CONTENT\n")
+        report = self.review({"last_message": CLEAN, "events": COMPLETED}, phase="refactor")
+        self.assertEqual(report["status"], "clean")
+        self.assertEqual(report["handoff"], str(self.handoff))
+        prompt = (self.out / "prompt.md").read_text()
+        self.assertIn(f"Read the handoff at {self.handoff}", prompt)
+        self.assertIn('"enum": [\n', prompt)
+        self.assertIn('"proposal"', prompt)
+        self.assertNotIn("SECRET DESIGN CONTENT", prompt)
+        self.assertNotIn("Gate: plan", prompt)
 
-    def test_invalid_base_fails_before_any_review_call(self):
+    def test_unreadable_handoff_fails_before_any_review_call(self):
         # Failure mode 5.
-        report = self.review({"last_message": CLEAN, "events": COMPLETED},
-                             self.manifest(phase="implementation", base="no-such-rev"))
-        self.assertEqual(report["status"], "failed")
-        self.assertIn("rev-parse", report["diagnostic"])
-        self.assertEqual(self.exec_calls(), [])
-
-    def test_implementation_without_base_and_path_outside_repo_are_rejected(self):
-        with self.assertRaisesRegex(cross_review.ReviewError, "base is required"):
-            cross_review.load_manifest(self.manifest(phase="implementation"))
-        with self.assertRaisesRegex(cross_review.ReviewError, "outside the repository"):
-            cross_review.selected_files(self.repo, ["../calls.jsonl"])
+        for handoff in (self.root / "missing.md", self.repo):
+            report = self.review({"last_message": CLEAN, "events": COMPLETED}, handoff=handoff)
+            self.assertEqual(report["status"], "failed")
+            self.assertIn("Handoff is not a readable file", report["diagnostic"])
+        self.assertEqual(self.calls(), [])
 
 
 class ValidationTests(unittest.TestCase):
@@ -211,7 +203,7 @@ class CodexReviewTests(ReviewTestCase):
         for flag in ("--model", "--effort"):
             args = {"--model": "gpt-test", "--effort": "high", flag: "  "}
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-                cross_review.main(["--provider", "codex", "--manifest", str(self.manifest()), "--out", str(self.out),
+                cross_review.main(["--provider", "codex", "--phase", "plan", "--handoff", str(self.handoff), "--out", str(self.out),
                                    "--cli", str(self.cli), "--repo", str(self.repo), *sum(args.items(), ())])
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.out / "report.json").exists())
@@ -242,7 +234,7 @@ class CodexReviewTests(ReviewTestCase):
     def test_missing_cli_fails_naming_the_prerequisite(self):
         # Failure mode 4.
         self.scenario_path.write_text("{}")
-        report = cross_review.run_review("codex", self.manifest(), self.out, "gpt-test", "high", self.repo,
+        report = cross_review.run_review("codex", "plan", self.handoff, self.out, "gpt-test", "high", self.repo,
                                          str(self.root / "absent"))
         self.assertEqual(report["status"], "failed")
         self.assertIn("Codex CLI not found", report["diagnostic"])

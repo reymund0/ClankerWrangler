@@ -6,7 +6,7 @@
 - [x] 1.2 Write the new launcher core in `subagents/scripts/`: manifest, evidence packet (committed diff from base plus staged, unstaged, and untracked work, plus selected paths), `plan`/`implementation`/`refactor` phases with per-phase criteria, finding schema validation, `report.json` with status and requested/observed settings and usage, and a 45-minute default timeout; verify with `python3 -m unittest` on the new core tests
 - [x] 1.3 Write the Codex adapter: preflight (CLI present and logged in, with no login or billing changes), read-only invocation, and settings passed explicitly; verify with unit tests using a stubbed CLI
 - [x] 1.4 Run one real `plan`-phase review against this change's artifacts with the Codex adapter; verify the `report.json` status and findings parse
-- [ ] 1.5 Switch both reviewers to one shared handoff file:
+- [x] 1.5 Switch both reviewers to one shared handoff file:
   - launcher: replace `--manifest` with `--handoff <path>` (phase as a flag), drop `build_packet`, `packet.md`, manifest parsing, and `PHASE_CRITERIA`, and send "Read the handoff at <path>" plus the read-only note and output schema; return `failed` before any model call when the handoff path is unreadable
   - `clanker-dual-review`: step 2 writes `.clanker/reviews/<run>/<gate>-<round>/handoff.md` (gate, role file and criteria skill, base, files to start from, round-two notes, explore only as needed, ignore `.clanker/`) and gives both reviewers only its path
   - Reviewer role file and `clanker-reviewer` agent: read the handoff, then the role file and criteria it names (by the path in the handoff, not an absolute path); the role file's reply format applies to the native Reviewer, and an output schema in the prompt overrides it

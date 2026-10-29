@@ -29,16 +29,29 @@ The caller has already started a run (`clanker_log.py start`) and passes its run
 | `code` | orchestration chat | implementation against the base | `clanker-code-review`, caller-supplied scope | `implementation` | at most 2 per code gate |
 | `refactor` | orchestration chat | implementation against the base | `clanker-refactor-review`, caller-supplied scope | `refactor` | 1 |
 
-## 1. Fix the scope
+## 1. Write the handoff
 
-Both reviewers get the same scope.
+Both reviewers get the same scope through one handoff file, and each prompt only points to it.
+Write `.clanker/reviews/<run>/<gate>-<round>/handoff.md`:
 
-- **plan:** the change directory, `openspec/changes/<change>/`.
-- **code and refactor:** the committed diff from the stated base plus staged, unstaged, and
-  untracked work. State the base explicitly (for example `git merge-base main HEAD`); uncommitted
-  work is always included.
-- **round two:** the same base, with the earlier findings and a list of the fixes and the files
-  they touched, so both reviewers check the fixes and the code around them.
+```markdown
+# Review handoff: <change>, <gate> gate, round <R>
+
+- Gate: <plan | code | refactor>
+- Role file: `references/clanker-reviewer.md` in your installed `clanker-dual-review` skill
+- Criteria: <plan criteria in the role file | the `clanker-code-review` skill, caller-supplied
+  scope | the `clanker-refactor-review` skill, caller-supplied scope>
+- Base: <revision, e.g. from `git merge-base main HEAD`; none at the plan gate>
+- Changes: <plan: the artifacts in `openspec/changes/<change>/` | code and refactor:
+  `git diff <base>...HEAD`, staged and unstaged changes, and untracked files (`git status`)>
+- Start from: <the files to read first>
+- Round-two notes: <earlier findings, the fixes made, and the files they touched; omit in round one>
+
+Start from these files and read further only as needed. Ignore `.clanker/`. Do not edit files.
+```
+
+Name the role file and criteria skill by skill name and relative path, not an absolute path,
+so each reviewer reads its own installed copy. Uncommitted and untracked work is always in scope.
 
 ## 2. Start both reviewers at once
 
@@ -47,16 +60,13 @@ run for each gate, so a fresh code gate after a functional fix cycle continues t
 
 In the same turn, start both, and wait for both before going on:
 
-- **Cross-review**, as a background shell command. Write a manifest, then run the launcher with
-  the routed model and effort:
-
-  ```json
-  {"phase": "plan", "base": null, "paths": ["openspec/changes/<change>"], "focus": "round-two notes, if any"}
-  ```
+- **Cross-review**, as a background shell command with the routed model and effort. The phase
+  is `plan`, `implementation` (code gate), or `refactor`:
 
   ```bash
   python3 <skill-dir>/scripts/cross_review.py --provider <codex on Claude | claude on Codex> \
-    --manifest <manifest> --out .clanker/reviews/<run>/<gate>-<round> \
+    --phase <phase> --handoff .clanker/reviews/<run>/<gate>-<round>/handoff.md \
+    --out .clanker/reviews/<run>/<gate>-<round> \
     --model <cross-review model> --effort <cross-review effort>
   ```
 
@@ -65,9 +75,8 @@ In the same turn, start both, and wait for both before going on:
   `observed`, `usage`, and `seconds`.
 - **Native Reviewer** subagent with the routed model and effort. On Claude, start the
   `clanker-reviewer` agent with `model` and `effort` from the `reviewer` route. On Codex, use the
-  host's native dispatch. Give it the gate, the scope, the absolute path of the role file, and
-  for code or refactor the absolute path of the criteria skill. It replies inline with a JSON
-  array of findings and a coverage note, and writes no files.
+  host's native dispatch. Its prompt is only "Read the handoff at <path>". It replies inline
+  with a JSON array of findings and a coverage note, and writes no files.
 
 When both finish, log `{"type": "round-end", "gate": G, "round": R, "native": <status>,
 "cross": <report status>}`, using `clean`, `changes_requested`, `incomplete`, or `failed` for the
