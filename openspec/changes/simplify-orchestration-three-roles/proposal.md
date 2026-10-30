@@ -13,7 +13,7 @@ Orchestration Nation grew to ten specialist roles, per-role routing, a routing e
 - The orchestrator does small work itself, recommends against orchestration when the whole job is small, and ends by handing the thread to the user without committing or opening a pull request.
 - **BREAKING** Replace the routing policy, resolver, snapshots, Adaptive effort profiles, routing editor, and model discovery with a single hand-edited routes file per host that maps each role to a model and reasoning effort. No migration for existing preference files.
 - **BREAKING** Rewrite the cross-review launcher from scratch with one core and two provider adapters (Codex CLI for Claude-hosted runs, Claude Code CLI for Codex-hosted runs), adding a `refactor` phase beside `plan` and `implementation`.
-- **BREAKING** Replace the narrative run log and the event ledger with an append-only per-run event log, replayed for resume, and two CSV tables built from it when the run ends: `runs.csv` (one row per run, including the model used for each role) and `findings.csv` (one row per finding).
+- **BREAKING** Replace the narrative run log and the event ledger with an append-only per-run event log and two CSV tables built from it when the run ends: `runs.csv` (one row per run, including the model used for each role) and `findings.csv` (one row per finding).
 - The orchestrator implements only a finalized change: `tasks.md` exists and strict validation passes. Accepted refactor proposals are listed at handover, not implemented.
 - Implement the Claude host first; the Codex host follows in the same change as its final task group.
 

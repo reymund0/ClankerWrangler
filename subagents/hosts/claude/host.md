@@ -26,7 +26,7 @@ stop and tell the user to run the installer; do not substitute another agent typ
 Send follow-up fixes to the same Implementor with `SendMessage`, using the name or ID from
 `ListAgents`. A continued thread keeps the model and effort it started with. If `ListAgents` no
 longer lists it or `SendMessage` cannot reach it, start one new Implementor on the same route,
-seeded with a summary from the run log.
+seeded with a summary of the work so far.
 
 ## Tokens and observed settings
 

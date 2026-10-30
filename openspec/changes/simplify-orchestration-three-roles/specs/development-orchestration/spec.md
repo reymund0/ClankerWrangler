@@ -22,10 +22,6 @@ A run SHALL have at most one active Implementor thread, and it SHALL be the only
 - **WHEN** the code gate accepts findings that need more than a small fix
 - **THEN** the orchestrator sends them to the existing Implementor thread instead of starting another writer
 
-#### Scenario: Implementor thread unreachable after resume
-- **WHEN** a run resumes in a new chat and the earlier Implementor thread cannot be reached
-- **THEN** the orchestrator starts one new Implementor seeded with a summary from the run log, and no other writer runs
-
 ### Requirement: Finalized change required
 The orchestrator SHALL implement only an OpenSpec change that has `tasks.md` and passes `openspec validate --strict`. When either is missing, it SHALL stop and name what is missing, unless the user explicitly tells it to proceed.
 

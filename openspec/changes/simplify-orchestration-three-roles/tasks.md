@@ -15,7 +15,7 @@
 ## 2. Routes file and run log helper
 
 - [x] 2.1 Add the `routes.jsonc` template with the `host` and `roles` keys and the two model-listing comment commands; verify a reader that drops `//` lines parses it, and that both commands print model lists when run locally
-- [x] 2.2 Write `clanker_log.py`: append events to `.clanker/runs/<run>.jsonl`, replay for resume, and write the final `runs.csv` and `findings.csv` rows with the `csv` writer; verify with unit tests covering append, replay after a clean round, replay with a pending user decision, and header creation
+- [x] 2.2 Write `clanker_log.py`: append events to `.clanker/runs/<run>.jsonl` and write the final `runs.csv` and `findings.csv` rows with the `csv` writer; verify with unit tests covering append, round and finding totals, and header creation
 
 ## 3. Dual-review skill
 

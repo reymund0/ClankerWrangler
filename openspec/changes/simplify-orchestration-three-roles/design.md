@@ -73,7 +73,7 @@ CHAT 2  clanker-orchestration-nation
 The roles are:
 
 - **Orchestrator:** keeps planning, OpenSpec state, the run log, consolidation, and small fixes.
-- **Implementor:** one active thread per run. If a resumed chat cannot reach the earlier thread, a new one starts, seeded with a summary replayed from the run log.
+- **Implementor:** one active thread per run.
 - **Reviewer:** read-only; returns findings inline. It uses `clanker-code-review` criteria at the code gate, `clanker-refactor-review` criteria at the refactor gate, and an artifact review at the plan gate.
 - **Functional Review:** read-only toward source. It exercises the running app and writes evidence only under `.clanker/functional/<run>/`.
 - **No nesting:** subagents never start subagents.
@@ -185,11 +185,11 @@ Each run, design or orchestration, writes one append-only event log at `.clanker
 
 The design chat's run ends when its plan gate passes (`done`), stops at the limit, or is blocked.
 
-Resume replays the log. That rebuilds the gate, round, open findings, pending decisions, cycles, and the routes recorded at start; a `routes.jsonc` edit applies only to new runs.
+Roles use the routes recorded at start; a `routes.jsonc` edit applies only to new runs. A run that dies partway is not resumed; start a new run.
 
 Outcomes are `done`, `stopped-at-limit`, `blocked`, or `small-job-declined`.
 
-At the end, a helper script, `clanker_log.py`, replays the log and appends the final rows with Python's `csv` writer. If a write fails, it says so.
+At the end, a helper script, `clanker_log.py`, reads the log and appends the final rows with Python's `csv` writer. If a write fails, it says so.
 
 ```
 runs.csv     run, chat (design|implementation), host, change, started, ended,

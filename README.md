@@ -38,7 +38,7 @@ The orchestrator delegates to three roles only: the **Implementor** (the only co
 
 Each subagent role's model and effort come from one hand-edited file per host, `<agent-root>/clanker/routes.jsonc` (for example `~/.claude/clanker/routes.jsonc`). The installer writes it only when it is missing and never overwrites your edits. The comments at its top hold the commands that list the models and efforts each CLI offers. The orchestrator itself runs on your session's model.
 
-Each run appends events to `.clanker/runs/<run>.jsonl` in the project, which is replayed when a run resumes. When a run ends, it adds one row to `.clanker/runs.csv` and one row per finding to `.clanker/findings.csv`.
+Each run appends events to `.clanker/runs/<run>.jsonl` in the project. When a run ends, it adds one row to `.clanker/runs.csv` and one row per finding to `.clanker/findings.csv`.
 
 The review launcher only checks that the reviewer CLI is installed and logged in. It never logs in, switches billing, or changes the CLI's settings, so log in yourself first. Python 3.10+ is required.
 

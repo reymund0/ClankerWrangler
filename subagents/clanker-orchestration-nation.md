@@ -24,7 +24,7 @@ your context clean and move bulk work to cheaper models, not to add hands.
 - Review procedure: the `clanker-dual-review` skill.
 - Run log helper: `scripts/clanker_log.py` in the `clanker-dual-review` skill's directory.
 - Routes: `<agent-root>/clanker/routes.jsonc`. Each role uses the model and effort recorded in
-  the run's start event for the whole run; only an explicit user request changes a route.
+  the run's start event (the first line of `.clanker/runs/<run>.jsonl`) for the whole run; only an explicit user request changes a route.
 
 Read `references/host.md` before dispatching anything.
 
@@ -34,15 +34,12 @@ The change must have `tasks.md` and pass `openspec validate <change> --strict`. 
 missing or failing, stop, name what is missing, and point the user to the design chat
 (`clanker-design-discussion`), unless the user explicitly tells you to proceed.
 
-## 2. Start or resume the run
+## 2. Start the run
 
-- **New run:** `python3 <dual-review dir>/scripts/clanker_log.py start --chat implementation
-  --host <claude|codex> --change <change> --routes <agent-root>/clanker/routes.jsonc
-  --orchestrator-model <your model/effort>`. If it reports an invalid route, show the message
-  (it names the file and key) and stop; never substitute a model.
-- **Resume:** `clanker_log.py replay --run <run>` rebuilds the gate, round, open findings,
-  pending user decisions, functional cycles, and routes. Ask any pending user decision first,
-  then continue from that point.
+`python3 <dual-review dir>/scripts/clanker_log.py start --chat implementation
+--host <claude|codex> --change <change> --routes <agent-root>/clanker/routes.jsonc
+--orchestrator-model <your model/effort>`. If it reports an invalid route, show the message
+(it names the file and key) and stop; never substitute a model.
 
 ## 3. Small-job check
 
@@ -61,9 +58,8 @@ assignment gives:
 - the checks to run
 - the role file path, and the handoff it must return
 
-Send every later fix (review findings, functional defects) to the same thread while it is
-reachable. If a resumed chat cannot reach it, start one new Implementor seeded with a summary
-from the run log; never run two writers.
+Send every later fix (review findings, functional defects) to the same thread; never run two
+writers.
 
 When the Implementor reports:
 

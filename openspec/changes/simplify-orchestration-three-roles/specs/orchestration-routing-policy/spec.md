@@ -26,7 +26,7 @@ When the routes file is missing, unreadable, not valid JSON, has a `host` that d
 - **THEN** the review gate reports the missing key and does not start a Reviewer on a guessed model
 
 ### Requirement: Fixed route within a run
-A role SHALL keep the model and effort recorded in the run log at run start for the whole run, including after resume. Edits to the routes file SHALL apply to new runs. Within a run, only an explicit user request SHALL change a route.
+A role SHALL keep the model and effort recorded in the run log at run start for the whole run. Edits to the routes file SHALL apply to new runs. Within a run, only an explicit user request SHALL change a route.
 
 #### Scenario: Implementor struggles
 - **WHEN** the Implementor fails a review round

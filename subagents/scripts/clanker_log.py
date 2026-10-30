@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Append-only run log for design and orchestration runs, replay for resume, and final CSV rows.
+"""Append-only run log for design and orchestration runs, and final CSV rows.
 
 Each run writes `<repo>/.clanker/runs/<run>.jsonl`, one JSON event per line, never rewritten.
-When the run ends, `finish` replays the log and appends one row to `.clanker/runs.csv` and one
+When the run ends, `finish` reads the log and appends one row to `.clanker/runs.csv` and one
 row per finding to `.clanker/findings.csv`.
 
 Usage:
     clanker_log.py start  --repo R --chat design|implementation --host claude|codex --change NAME
                           --routes PATH [--orchestrator-model MODEL/EFFORT]       # prints the run ID
     clanker_log.py event  --repo R --run RUN '{"type": "finding", ...}'
-    clanker_log.py replay --repo R --run RUN                                     # prints the state as JSON
     clanker_log.py finish --repo R --run RUN --outcome OUTCOME [--notes TEXT]
 
 Events (every event also gets `at`, an ISO timestamp):
@@ -132,14 +131,13 @@ def read_events(path: pathlib.Path) -> list[dict[str, Any]]:
     return events
 
 
-def replay(events: list[dict[str, Any]]) -> dict[str, Any]:
-    """Rebuild the run state: gate, round, findings, open work, pending decisions, cycles, routes, usage."""
+def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """Total the log for the final rows: rounds, cycles, findings, routes, usage, outcome."""
     first = events[0]
     state: dict[str, Any] = {
         "run": first["run"], "chat": first["chat"], "host": first["host"], "change": first["change"],
         "routes": first["routes"], "orchestrator_model": first.get("orchestrator_model", ""),
         "started": first["at"], "ended": None, "outcome": None,
-        "gate": None, "round": None, "round_open": False, "gate_rounds": 0,
         "rounds": {gate: 0 for gate in GATES}, "functional_cycles": 0,
         "findings": {}, "usage": {}, "small_fixes": 0,
     }
@@ -147,15 +145,9 @@ def replay(events: list[dict[str, Any]]) -> dict[str, Any]:
         kind = event["type"]
         if kind == "round-start":
             gate = event["gate"]
-            if gate != state["gate"] or gate == "functional":
-                state["gate_rounds"] = 0
-            state.update(gate=gate, round=event["round"], round_open=True)
-            state["gate_rounds"] += 1
             state["rounds"][gate] += 1
             if gate == "functional":
                 state["functional_cycles"] = state["rounds"]["functional"] - 1
-        elif kind == "round-end":
-            state["round_open"] = False
         elif kind == "finding":
             key = f"{event['gate']}/{event['round']}/{event['id']}"
             state["findings"][key] = {
@@ -184,11 +176,6 @@ def replay(events: list[dict[str, Any]]) -> dict[str, Any]:
                     usage[key] = event[key]
         elif kind == "end":
             state.update(ended=event["at"], outcome=event["outcome"])
-    findings = state["findings"].values()
-    state["open_findings"] = [f for f in findings if f["fixed_by"] == "" and f["gate"] != "refactor" and (
-        f["triage"] == "accept" or f["user_decision"] == "take")]
-    state["pending_decisions"] = [f for f in findings if f["triage"] == "user-decision" and not f["user_decision"]]
-    state["untriaged"] = [f for f in findings if not f["triage"]]
     return state
 
 
@@ -245,10 +232,10 @@ def finish(repo: pathlib.Path, run: str, outcome: str, notes: str = "") -> dict[
     if outcome not in OUTCOMES:
         raise LogError(f"Outcome must be one of {', '.join(OUTCOMES)}")
     path = log_path(repo, run)
-    if replay(read_events(path))["outcome"]:
+    if summarize(read_events(path))["outcome"]:
         raise LogError(f"{path}: run already ended")
     append(path, {"type": "end", "outcome": outcome})
-    state = replay(read_events(path))
+    state = summarize(read_events(path))
     append_rows(repo / ".clanker" / "runs.csv", RUNS_COLUMNS, [run_row(state, notes)])
     append_rows(repo / ".clanker" / "findings.csv", FINDINGS_COLUMNS,
                 [{"run": run, **finding} for finding in state["findings"].values()])
@@ -258,7 +245,7 @@ def finish(repo: pathlib.Path, run: str, outcome: str, notes: str = "") -> dict[
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Append-only run log and final CSV rows.")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("start", "event", "replay", "finish"):
+    for name in ("start", "event", "finish"):
         command = commands.add_parser(name)
         command.add_argument("--repo", type=pathlib.Path, default=pathlib.Path.cwd())
         if name == "start":
@@ -289,8 +276,6 @@ def main(argv: list[str] | None = None) -> int:
             if not path.exists():
                 raise LogError(f"{path}: no such run log; start the run first")
             append(path, event)
-        elif args.command == "replay":
-            print(json.dumps(replay(read_events(log_path(args.repo, args.run))), indent=2))
         else:
             finish(args.repo, args.run, args.outcome, args.notes)
             print(f"Appended rows to {args.repo / '.clanker' / 'runs.csv'} and findings.csv")

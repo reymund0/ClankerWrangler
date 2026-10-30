@@ -16,10 +16,10 @@ owns triage, fixes, the run log, and the user conversation; the reviewers only r
 - Run log helper: `scripts/clanker_log.py` in this skill's directory.
 - Routes: `<agent-root>/clanker/routes.jsonc` (`~/.claude/clanker/routes.jsonc` on Claude,
   `~/.codex/clanker/routes.jsonc` on Codex). Use the `reviewer` and `cross-review` routes
-  recorded in the run's start event, not the file's current values.
+  recorded in the run's start event (the first line of `.clanker/runs/<run>.jsonl`), not the
+  file's current values.
 
-The caller has already started a run (`clanker_log.py start`) and passes its run ID. Use
-`clanker_log.py replay` to find the current gate and round when resuming.
+The caller has already started a run (`clanker_log.py start`) and passes its run ID.
 
 ## Gates
 

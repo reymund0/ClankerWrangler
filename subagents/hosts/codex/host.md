@@ -37,7 +37,7 @@ Limits on Codex:
 
 Send follow-up fixes to the same Implementor with `send_input` and its agent ID, then `wait_agent`
 for the reply. If it was closed, `resume_agent` it first. If it cannot be resumed, start one new
-Implementor on the same route, seeded with a summary from the run log. Close read-only agents with
+Implementor on the same route, seeded with a summary of the work so far. Close read-only agents with
 `close_agent` once their reply is in; keep the Implementor open until handover.
 
 ## Tokens and observed settings

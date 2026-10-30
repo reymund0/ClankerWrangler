@@ -22,17 +22,6 @@ The run log SHALL record the run identity, chat kind, host, change, the model an
 - **WHEN** the user skips a `user-decision` finding
 - **THEN** an event records the finding ID and the `skip` decision
 
-### Requirement: Resume by replay
-On resume, the caller SHALL replay the run log to rebuild the gate, round, open findings, pending user decisions, functional cycles, and routes, and SHALL continue from that point.
-
-#### Scenario: Interrupted after a clean round
-- **WHEN** a run stops after a code-gate round with no findings
-- **THEN** replay shows that round complete and the resumed run proceeds to Functional Review
-
-#### Scenario: Interrupted with a pending user decision
-- **WHEN** a run stops while a `user-decision` finding awaits an answer
-- **THEN** the resumed run asks the user for that decision before the gate can pass
-
 ### Requirement: Run outcomes
 A run SHALL end with one outcome: `done`, `stopped-at-limit`, `blocked`, or `small-job-declined`.
 
@@ -48,7 +37,7 @@ The design chat's run SHALL end when the plan gate passes, with outcome `done`, 
 - **THEN** the design run ends with outcome `done` and its final rows are written
 
 ### Requirement: Final CSV tables built from the run log
-When a run ends, the caller SHALL append one row to `<repo>/.clanker/runs.csv` and one final row per finding to `<repo>/.clanker/findings.csv`, built by replaying the run log. The tables SHALL hold only final values.
+When a run ends, the caller SHALL append one row to `<repo>/.clanker/runs.csv` and one final row per finding to `<repo>/.clanker/findings.csv`, built from the run log. The tables SHALL hold only final values.
 
 #### Scenario: Implementation run completes
 - **WHEN** the orchestrator hands the thread to the user

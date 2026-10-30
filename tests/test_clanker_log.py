@@ -30,7 +30,7 @@ class LogTestCase(unittest.TestCase):
         self.assertEqual(clanker_log.main(["event", "--repo", str(self.repo), "--run", run, json.dumps(event)]), 0)
 
     def state(self, run):
-        return clanker_log.replay(clanker_log.read_events(clanker_log.log_path(self.repo, run)))
+        return clanker_log.summarize(clanker_log.read_events(clanker_log.log_path(self.repo, run)))
 
     def rows(self, name):
         with (self.repo / ".clanker" / name).open(newline="") as handle:
@@ -63,13 +63,6 @@ class RoutesTests(LogTestCase):
         run = self.start(chat="design", routes=path)
         self.assertEqual(set(self.state(run)["routes"]), {"reviewer", "cross-review"})
 
-    def test_resume_keeps_routes_recorded_at_start(self):
-        path = self.repo / "routes.jsonc"
-        path.write_text(TEMPLATE.read_text())
-        run = self.start(routes=path)
-        path.write_text(TEMPLATE.read_text().replace('"haiku"', '"opus"'))
-        self.assertEqual(self.state(run)["routes"]["implementor"]["model"], "haiku")
-
 
 class RunLogTests(LogTestCase):
     def test_append_never_rewrites_earlier_lines(self):
@@ -89,27 +82,6 @@ class RunLogTests(LogTestCase):
                                                '{"type": "usage", "role": "reviewer"}']), 1)
         self.assertFalse(clanker_log.log_path(self.repo, "missing").exists())
 
-    def test_replay_after_clean_round(self):
-        run = self.start()
-        self.event(run, type="round-start", gate="code", round=1)
-        self.event(run, type="round-end", gate="code", round=1, native="clean", cross="clean")
-        state = self.state(run)
-        self.assertEqual((state["gate"], state["round"], state["round_open"]), ("code", 1, False))
-        self.assertEqual((state["open_findings"], state["pending_decisions"]), ([], []))
-
-    def test_replay_with_pending_user_decision(self):
-        run = self.start()
-        self.event(run, type="round-start", gate="code", round=1)
-        self.event(run, type="finding", gate="code", round=1, id="N1", source="both", severity="major", summary="S")
-        self.event(run, type="triage", gate="code", round=1, id="N1", triage="user-decision", reason="adds a cache")
-        self.event(run, type="round-end", gate="code", round=1, native="changes_requested", cross="changes_requested")
-        state = self.state(run)
-        self.assertEqual([f["id"] for f in state["pending_decisions"]], ["N1"])
-        self.event(run, type="user-decision", gate="code", round=1, id="N1", decision="take")
-        state = self.state(run)
-        self.assertEqual(state["pending_decisions"], [])
-        self.assertEqual([f["id"] for f in state["open_findings"]], ["N1"])
-
     def test_fresh_code_gate_after_functional_cycle(self):
         run = self.start()
         for gate, number in (("code", 1), ("code", 2), ("functional", 1), ("code", 3), ("functional", 2)):
@@ -117,7 +89,7 @@ class RunLogTests(LogTestCase):
             self.event(run, type="round-end", gate=gate, round=number, native="clean", cross="clean")
         self.event(run, type="round-start", gate="code", round=4)
         state = self.state(run)
-        self.assertEqual((state["rounds"]["code"], state["gate_rounds"], state["functional_cycles"]), (4, 1, 1))
+        self.assertEqual((state["rounds"]["code"], state["functional_cycles"]), (4, 1))
 
 
 class FinalRowsTests(LogTestCase):
