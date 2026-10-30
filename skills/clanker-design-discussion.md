@@ -70,8 +70,7 @@ After the change's proposal, design, specs, and tasks are written, review them t
 2. Run `clanker-dual-review` with gate `plan`, the run ID, and the change's artifacts as scope.
    Accepted findings are fixed by this chat as artifact edits; re-run
    `openspec validate <change> --strict` after editing.
-3. End the run when the gate passes (`done`), stops at its round limit (`stopped-at-limit`), or
-   is blocked (`blocked`):
+3. End the run when the gate passes (`done`) or the user stops it (`blocked`):
    `python3 <clanker-dual-review dir>/scripts/clanker_log.py finish --run <run> --outcome <outcome>`.
    Report a failed write to the user.
 

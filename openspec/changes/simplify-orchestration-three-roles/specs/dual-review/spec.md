@@ -27,7 +27,7 @@ The dual review SHALL be used at three gates: `plan` (run from the design chat o
 
 #### Scenario: Refactor gate
 - **WHEN** the refactor gate runs
-- **THEN** the Reviewer applies the refactor-review criteria and the cross-review runs in its refactor phase
+- **THEN** the Reviewer applies the refactor-review criteria and the cross-review gets the same refactor-gate handoff
 
 ### Requirement: Consolidation and triage
 The caller SHALL merge duplicate findings, mark each finding's source as `native`, `cross`, or `both`, and triage each one as `accept`, `user-decision`, or `reject`. Each reject SHALL carry a one-line reason.
@@ -59,18 +59,22 @@ The caller SHALL triage as `user-decision`, not `accept`, any finding whose fix 
 - **THEN** it is triaged `user-decision` and shown to the user rather than fixed silently
 
 ### Requirement: User decisions before the gate passes
-At the end of each round, the caller SHALL present the `user-decision` findings and a count of accepted and rejected findings, and SHALL wait for the user's answers before the gate passes. A finding the user chooses to take SHALL be handled as accepted.
+At the end of each plan or code round, the caller SHALL present the `user-decision` findings and a count of accepted and rejected findings, and SHALL wait for the user's answers before the gate passes. A finding the user chooses to take SHALL be handled as accepted.
 
 #### Scenario: Pending user decision
 - **WHEN** a round produces a `user-decision` finding
 - **THEN** the gate does not pass until the user answers take or skip
 
-### Requirement: Gate passage
-A plan or code gate SHALL pass only when both reviewers completed the latest round, every accepted finding is fixed and checked, and every user decision is answered. The refactor gate SHALL pass once the user's accept or skip is recorded for every proposal; accepted proposals are resolved by being listed at handover. When either reviewer failed or was incomplete, no gate SHALL pass unless the user explicitly authorizes proceeding.
+#### Scenario: Refactor proposals presented
+- **WHEN** the refactor-gate round finishes
+- **THEN** the caller shows one merged table of accepted proposals with source, complexity, estimated gain, and recommendation, plus rejected proposals with reasons, and does not wait for answers
 
-#### Scenario: Refactor proposals decided
-- **WHEN** the user has accepted or skipped every refactor proposal
-- **THEN** the refactor gate passes without implementing the accepted proposals
+### Requirement: Gate passage
+A plan or code gate SHALL pass only when both reviewers completed the latest round, every accepted finding is fixed and checked, and every user decision is answered. The refactor gate SHALL pass once its proposal table is shown; proposals are not implemented during the run. When either reviewer failed or was incomplete, no gate SHALL pass unless the user explicitly authorizes proceeding.
+
+#### Scenario: Refactor proposals shown
+- **WHEN** the refactor proposal table has been shown
+- **THEN** the refactor gate passes without implementing the proposals
 
 #### Scenario: Cross-review preflight fails
 - **WHEN** the external reviewer's CLI is missing or not logged in and the native review is clean
@@ -81,11 +85,11 @@ A plan or code gate SHALL pass only when both reviewers completed the latest rou
 - **THEN** the gate passes
 
 ### Requirement: Round limits
-The plan and code gates SHALL run at most two rounds each. A second round SHALL review the fixes and the code they touched. When findings remain open after the second round, the caller SHALL stop with outcome `stopped-at-limit` and list them for the user, unless the user explicitly authorizes proceeding. A fix made after the second round SHALL be checked by the caller's own verification rather than a third round. The refactor gate SHALL run one round.
+The plan and code gates SHALL run at most two rounds each. A second round SHALL review the fixes and the code they touched. When findings remain open after the second round, the caller SHALL list them and ask the user how to proceed. A fix made after the second round SHALL be checked by the caller's own verification rather than a third round. The refactor gate SHALL run one round.
 
 #### Scenario: Findings remain after round two
 - **WHEN** the second code-gate round still has accepted findings open
-- **THEN** the caller stops with `stopped-at-limit` and lists them for the user
+- **THEN** the caller lists them and asks the user how to proceed
 
 #### Scenario: User takes a finding after round two
 - **WHEN** the user chooses to take a `user-decision` finding raised in round two

@@ -15,19 +15,17 @@ owns triage, fixes, the run log, and the user conversation; the reviewers only r
 - Cross-review launcher: `scripts/cross_review.py` in this skill's directory.
 - Run log helper: `scripts/clanker_log.py` in this skill's directory.
 - Routes: `<agent-root>/clanker/routes.jsonc` (`~/.claude/clanker/routes.jsonc` on Claude,
-  `~/.codex/clanker/routes.jsonc` on Codex). Use the `reviewer` and `cross-review` routes
-  recorded in the run's start event (the first line of `.clanker/runs/<run>.jsonl`), not the
-  file's current values.
+  `~/.codex/clanker/routes.jsonc` on Codex). Use its `reviewer` and `cross-review` routes.
 
 The caller has already started a run (`clanker_log.py start`) and passes its run ID.
 
 ## Gates
 
-| Gate | Caller | Scope | Reviewer criteria | Cross-review phase | Rounds |
-|---|---|---|---|---|---|
-| `plan` | design chat | the change's OpenSpec artifacts | plan criteria in the role file | `plan` | at most 2 |
-| `code` | orchestration chat | implementation against the base | `clanker-code-review`, caller-supplied scope | `implementation` | at most 2 per code gate |
-| `refactor` | orchestration chat | implementation against the base | `clanker-refactor-review`, caller-supplied scope | `refactor` | 1 |
+| Gate | Caller | Scope | Reviewer criteria | Rounds |
+|---|---|---|---|---|
+| `plan` | design chat | the change's OpenSpec artifacts | plan criteria in the role file | 2, then ask the user |
+| `code` | orchestration chat | implementation against the base | `clanker-code-review`, caller-supplied scope | 2, then ask the user |
+| `refactor` | orchestration chat | implementation against the base | `clanker-refactor-review`, caller-supplied scope | 1 |
 
 ## 1. Write the handoff
 
@@ -60,12 +58,11 @@ run for each gate, so a fresh code gate after a functional fix cycle continues t
 
 In the same turn, start both, and wait for both before going on:
 
-- **Cross-review**, as a background shell command with the routed model and effort. The phase
-  is `plan`, `implementation` (code gate), or `refactor`:
+- **Cross-review**, as a background shell command with the routed model and effort:
 
   ```bash
   python3 <skill-dir>/scripts/cross_review.py --provider <codex on Claude | claude on Codex> \
-    --phase <phase> --handoff .clanker/reviews/<run>/<gate>-<round>/handoff.md \
+    --handoff .clanker/reviews/<run>/<gate>-<round>/handoff.md \
     --out .clanker/reviews/<run>/<gate>-<round> \
     --model <cross-review model> --effort <cross-review effort>
   ```
@@ -108,8 +105,8 @@ by itself. For each finding, read the cited artifact or code and decide:
   and why it may be overengineering.
 - **reject** when you cannot confirm it or it is wrong, with a one-line reason.
 
-At the refactor gate, every confirmed proposal is a `user-decision` (the user accepts or skips
-it); unconfirmed proposals are rejected.
+At the refactor gate, accept each proposal you confirmed and reject the rest; there are no
+`user-decision` proposals.
 
 Log `{"type": "triage", "gate": G, "round": R, "id": ID, "triage": T, "reason": "..."}`.
 
@@ -117,7 +114,7 @@ Log `{"type": "triage", "gate": G, "round": R, "id": ID, "triage": T, "reason": 
 
 - **plan:** the design chat edits the artifacts itself.
 - **code:** small, understood fixes by the orchestrator; the rest by the Implementor.
-- **refactor:** nothing is fixed; accepted proposals are listed at handover.
+- **refactor:** nothing is fixed; accepted proposals go to the user (step 6).
 
 Check each fix (re-read the edit, run the relevant test) and log
 `{"type": "fixed", "gate": G, "round": R, "id": ID, "by": "orchestrator" | "implementor"}`.
@@ -134,6 +131,11 @@ Wait for take or skip on each. Log `{"type": "user-decision", "gate": G, "round"
 "decision": "take" | "skip"}`. A finding the user takes is handled as accepted: fix it, check
 it, and log `fixed`.
 
+At the refactor gate, show instead one merged table of the accepted proposals, with columns for
+source (`native`, `cross`, or `both`), complexity of the change, estimated gain, and your
+recommendation, followed by the rejected ones with one-line reasons. Do not wait for answers;
+the user acts on the list after handover.
+
 ## 7. Pass, repeat, or stop
 
 - **A reviewer failed or was incomplete** (for example a cross-review preflight that reports the
@@ -145,12 +147,11 @@ it, and log `fixed`.
 - **Round two:** if round one left accepted findings that were fixed, run one more round over the
   fixes (step 1, round two). Fixes the user takes after round two are checked by the caller's own
   verification, not a third round.
-- **Limit:** if findings are still open after round two, stop with outcome `stopped-at-limit`
-  and list them, unless the user explicitly authorizes proceeding.
-- **refactor gate** runs one round and passes once every proposal has a recorded accept (`take`)
-  or skip. Accepted proposals are listed at handover, not implemented.
+- **Limit:** if findings are still open after round two, list them and ask the user how to
+  proceed. If the user stops, the caller ends the run `blocked`.
+- **refactor gate** runs one round and passes once its proposal table is shown.
 
-Tell the caller the result: passed, stopped at the limit, or waiting on the user. Ending the
+Tell the caller the result: passed or waiting on the user. Ending the
 run (`clanker_log.py finish`) is the caller's job.
 
 ## Rules

@@ -1,7 +1,7 @@
 # Codex Host Reference
 
-How the orchestrator and `clanker-dual-review` dispatch on Codex. `host.json` names the host
-(`codex`) and the cross-review provider (`claude`).
+How the orchestrator and `clanker-dual-review` dispatch on Codex. The cross-review
+provider is `claude`.
 
 ## Native dispatch
 
@@ -18,8 +18,7 @@ Each custom agent points its subagent to the installed role file. Start each rol
 
 - `agent_type` from the table
 - the assignment as the message; for the Reviewer, only the path of the round's handoff file
-- `model` and `reasoning_effort` from the role's route, as recorded in the run's start event,
-  always explicitly; the routes file is the user's explicit model choice
+- `model` and `reasoning_effort` from the role's route in `routes.jsonc`, always explicitly; the routes file is the user's explicit model choice
 - `fork_context: false`, so the subagent starts from the assignment instead of this chat's history
 
 Codex checks each spawn: an unknown model or an effort the model does not support is rejected.
@@ -29,8 +28,7 @@ and tell the user to run the installer; do not substitute another agent type.
 Limits on Codex:
 
 - Subagents inherit this chat's sandbox, and a custom agent cannot change it, so Reviewer and
-  Functional Review are read-only by their instructions only. Check `git status` after each
-  read-only role returns and report any file it changed.
+  Functional Review are read-only by their instructions only.
 - Spawned agents can spawn their own agents; the custom agents and role files forbid it.
 
 ## Continuing the Implementor

@@ -19,19 +19,18 @@ your context clean and move bulk work to cheaper models, not to add hands.
 
 - Role instructions: `references/clanker-implementor.md`, `references/clanker-functional-review.md`
   in this skill's directory (the Reviewer's are in `clanker-dual-review`).
-- Host reference: `references/host.md` (native dispatch, model and effort, token capture) and
-  `host.json` in this skill's directory (the host name and cross-review provider).
+- Host reference: `references/host.md` in this skill's directory (native dispatch, model and
+  effort, token capture, and the cross-review provider).
 - Review procedure: the `clanker-dual-review` skill.
 - Run log helper: `scripts/clanker_log.py` in the `clanker-dual-review` skill's directory.
-- Routes: `<agent-root>/clanker/routes.jsonc`. Each role uses the model and effort recorded in
-  the run's start event (the first line of `.clanker/runs/<run>.jsonl`) for the whole run; only an explicit user request changes a route.
+- Routes: `<agent-root>/clanker/routes.jsonc`. Each role uses the model and effort in that file;
+  never switch a role's model on your own.
 
 Read `references/host.md` before dispatching anything.
 
 ## 1. Check the change is finalized
 
-The change must have `tasks.md` and pass `openspec validate <change> --strict`. If either is
-missing or failing, stop, name what is missing, and point the user to the design chat
+The change must have `tasks.md`. If it is missing, stop and point the user to the design chat
 (`clanker-design-discussion`), unless the user explicitly tells you to proceed.
 
 ## 2. Start the run
@@ -41,14 +40,7 @@ missing or failing, stop, name what is missing, and point the user to the design
 --orchestrator-model <your model/effort>`. If it reports an invalid route, show the message
 (it names the file and key) and stop; never substitute a model.
 
-## 3. Small-job check
-
-Before dispatching the Implementor, estimate the whole job. If you could finish it directly
-without filling your context (a handful of lines in one area), stop, recommend doing it without
-orchestration, and end the run with outcome `small-job-declined`. Continue only if the user
-explicitly asks.
-
-## 4. Implement
+## 3. Implement
 
 Start one Implementor thread with the routed model and effort (see the host reference). The
 assignment gives:
@@ -74,15 +66,13 @@ When the Implementor reports:
 five-line review fix, and log `fixed` with `by: "orchestrator"`. Delegate anything that would
 fill your context: wide code reading, long test/fix loops, browser sessions.
 
-## 5. Code gate
+## 4. Code gate
 
 Run `clanker-dual-review` with gate `code`, the run ID, and the base
 (`git merge-base <default branch> HEAD`). The scope is committed, staged, unstaged, and
 untracked work against that base. Accepted findings go to the Implementor, or to you when small.
-At most two rounds; if findings stay open after round two, the run ends `stopped-at-limit`
-unless the user authorizes proceeding.
 
-## 6. Functional Review
+## 5. Functional Review
 
 After the code gate passes:
 
@@ -96,43 +86,28 @@ Triage functional findings like review findings (`clanker-dual-review` step 4): 
 confirmed defects with the smallest obvious fix; escalate the rest as `user-decision`; reject
 unconfirmed ones with a reason.
 
-**Fix cycles:** each cycle sends accepted defects to the Implementor, then runs a fresh code
-gate (up to two rounds; round numbers keep counting), then a Functional Review recheck of the
-failed and affected flows (the next functional round). At most two cycles per run. If defects
-remain after the second recheck, stop, list them, and end the run `stopped-at-limit`.
+**Fixes:** send accepted defects to the Implementor, run a code gate over the fixes, then
+recheck the failed and affected flows (the next functional round). If defects remain after two
+rechecks, list them and ask the user how to proceed.
 
-## 7. Refactor gate
+## 6. Refactor gate
 
 After Functional Review passes or is skipped, run `clanker-dual-review` with gate `refactor`
-for one round. Present the consolidated proposals; the user accepts (`take`) or skips each, and
-every choice is logged. Do not implement accepted proposals.
+for one round. It ends with a table of proposals for the user. Do not implement them.
 
-## 8. Handover
+## 7. Handover
 
 - Check off the OpenSpec tasks you verified.
-- End the run: `clanker_log.py finish --run <run> --outcome done --notes "<short notes>"`. If a
-  write fails, say so.
+- End the run: `clanker_log.py finish --run <run> --outcome done --notes "<short notes>"`
+  (`blocked` if the user stopped it). If a write fails, say so.
 - Tell the user what changed, the checks and their results, anything left open, and the
-  accepted refactor proposals for them to act on.
+  refactor proposal table.
 
 Do not commit, push, or open a pull request; the thread is the user's from here.
 
 ## Run log
 
-The run log is `.clanker/runs/<run>.jsonl`, append-only, through `clanker_log.py`.
-`clanker-dual-review` logs its own rounds, findings, triage, fixes, and decisions. You log:
-
-- `start` (step 2) and `end` with the outcome: `done`, `stopped-at-limit`, `blocked`, or
-  `small-job-declined` (through `finish`)
-- `usage` for the Implementor and Functional Review, and for yourself if your runtime reports it
-- functional rounds, findings, triage, and decisions (step 6)
-- `fixed` for every fix, with `by: "implementor"` or `"orchestrator"`
-
-Record only values from runtime evidence; leave the rest out. Never log secrets, private
-payloads, or hidden reasoning.
-
-## Host differences
-
-The Claude and Codex hosts use this same procedure and the same role files. Only native
-dispatch and the external reviewer differ; `references/host.md` covers them. If the host cannot
-apply a routed model or effort, say so at run start instead of claiming the setting.
+The run log is `.clanker/runs/<run>.jsonl`, append-only, through `clanker_log.py`; its
+docstring lists the events. `clanker-dual-review` logs its own rounds; you log what the steps
+above say, plus `usage` for yourself if your runtime reports it. Record only values from
+runtime evidence. Never log secrets, private payloads, or hidden reasoning.

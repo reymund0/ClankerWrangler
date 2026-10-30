@@ -6,9 +6,9 @@
 {
   "host": "codex",
   "roles": {
-    "implementor":  {"model": "gpt-6-luna",    "effort": "medium"},
-    "reviewer":     {"model": "gpt-6.1-terra", "effort": "high"},
-    "functional":   {"model": "gpt-6.1-terra", "effort": "medium"},
+    "implementor":  {"model": "gpt-6-luna",    "effort": "xhigh"},
+    "reviewer":     {"model": "gpt-6.1-sol", "effort": "high"},
+    "functional":   {"model": "gpt-6.1-sol", "effort": "medium"},
     "cross-review": {"model": "opus",          "effort": "high"}
   }
 }

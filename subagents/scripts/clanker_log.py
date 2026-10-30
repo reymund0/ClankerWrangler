@@ -20,7 +20,7 @@ Events (every event also gets `at`, an ISO timestamp):
     fixed         gate, round, id, by (implementor|orchestrator)
     user-decision gate, round, id, decision (take|skip)
     usage         role, and any of tokens, seconds, model, effort (observed values only)
-    end           outcome (done|stopped-at-limit|blocked|small-job-declined)
+    end           outcome (done|blocked)
 
 Round numbers count up across a run for each gate, so a fresh code gate after a functional fix
 cycle continues the numbering. A finding is identified by its gate, round, and ID. Functional
@@ -40,7 +40,7 @@ from typing import Any
 ROLES = ("implementor", "reviewer", "functional", "cross-review")
 NEEDED_ROLES = {"design": ("reviewer", "cross-review"), "implementation": ROLES}
 GATES = ("plan", "code", "functional", "refactor")
-OUTCOMES = ("done", "stopped-at-limit", "blocked", "small-job-declined")
+OUTCOMES = ("done", "blocked")
 EVENT_TYPES = ("start", "round-start", "round-end", "finding", "triage", "fixed", "user-decision", "usage", "end")
 
 RUNS_COLUMNS = (

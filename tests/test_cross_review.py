@@ -2,8 +2,7 @@
 
 Failure modes kept from the old launcher tests (test_cross_review_*.py, test_codex_cross_review.py):
 
-1. Malformed or schema-invalid reviewer output yields `incomplete`, never `clean`, and no findings
-   are invented (old: test_malformed_or_missing_output_fails_without_a_clean_verdict).
+1. Unreadable reviewer output yields `incomplete`, never `clean`, and no findings are invented (old: test_malformed_or_missing_output_fails_without_a_clean_verdict).
 2. A review that outlives the time limit is stopped with its whole process tree and reported as
    `failed` with a timeout diagnostic (old: test_timeout_terminates_the_owned_process_tree).
 3. Model and effort are required, passed explicitly on the reviewer command line, and recorded as
@@ -26,7 +25,6 @@ import io
 import json
 import os
 import pathlib
-import subprocess
 import sys
 import tempfile
 import textwrap
@@ -92,10 +90,6 @@ def finding(id_="F1", severity="major"):
     return {"id": id_, "severity": severity, "location": "design.md:10", "summary": "Breaks X.", "remedy": "Do Y."}
 
 
-def git(repo, *args):
-    subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
-
-
 class ReviewTestCase(unittest.TestCase):
     provider, fake_cli = "codex", FAKE_CODEX
 
@@ -105,13 +99,7 @@ class ReviewTestCase(unittest.TestCase):
         self.root = pathlib.Path(temp.name).resolve()
         self.repo = self.root / "repo"
         self.repo.mkdir()
-        git(self.repo, "init", "-q", "-b", "main")
-        git(self.repo, "config", "user.email", "t@example.com")
-        git(self.repo, "config", "user.name", "T")
         (self.repo / "design.md").write_text("# Design\n")
-        (self.repo / "app.py").write_text("x = 1\n")
-        git(self.repo, "add", ".")
-        git(self.repo, "commit", "-q", "-m", "base")
         self.cli = self.root / self.provider
         self.cli.write_text(self.fake_cli.format(python=sys.executable))
         self.cli.chmod(0o755)
@@ -126,9 +114,9 @@ class ReviewTestCase(unittest.TestCase):
         self.handoff.parent.mkdir()
         self.handoff.write_text("# Review handoff\nGate: plan\nStart from: design.md\n")
 
-    def review(self, scenario, phase="plan", handoff=None, timeout_seconds=60):
+    def review(self, scenario, handoff=None, timeout_seconds=60):
         self.scenario_path.write_text(json.dumps(scenario))
-        report = cross_review.run_review(self.provider, phase, handoff or self.handoff, self.out, "gpt-test", "high",
+        report = cross_review.run_review(self.provider, handoff or self.handoff, self.out, "gpt-test", "high",
                                          self.repo, str(self.cli), timeout_seconds)
         self.assertEqual(json.loads((self.out / "report.json").read_text()), report)
         return report
@@ -144,13 +132,12 @@ class HandoffTests(ReviewTestCase):
     def test_prompt_points_at_the_handoff_with_schema_and_no_file_contents(self):
         # Failure mode 5.
         (self.repo / "design.md").write_text("SECRET DESIGN CONTENT\n")
-        report = self.review({"last_message": CLEAN, "events": COMPLETED}, phase="refactor")
+        report = self.review({"last_message": CLEAN, "events": COMPLETED})
         self.assertEqual(report["status"], "clean")
         self.assertEqual(report["handoff"], str(self.handoff))
         prompt = (self.out / "prompt.md").read_text()
         self.assertIn(f"Read the handoff at {self.handoff}", prompt)
-        self.assertIn('"enum": [\n', prompt)
-        self.assertIn('"proposal"', prompt)
+        self.assertIn('"findings"', prompt)
         self.assertNotIn("SECRET DESIGN CONTENT", prompt)
         self.assertNotIn("Gate: plan", prompt)
 
@@ -163,39 +150,14 @@ class HandoffTests(ReviewTestCase):
         self.assertEqual(self.calls(), [])
 
 
-class ValidationTests(unittest.TestCase):
-    def assert_incomplete(self, text, phase="implementation"):
-        with self.assertRaises(cross_review.ReviewError) as caught:
-            cross_review.validate_output(text, phase)
-        self.assertEqual(caught.exception.status, "incomplete")
-
-    def test_invalid_output_is_incomplete(self):
-        # Failure mode 1.
-        self.assert_incomplete("not json")
-        self.assert_incomplete(json.dumps({"findings": []}))
-        self.assert_incomplete(json.dumps({**CLEAN, "verdict": "clean"}))
-        self.assert_incomplete(json.dumps({**CLEAN, "findings": [finding(), finding()]}))
-        self.assert_incomplete(json.dumps({**CLEAN, "findings": [{**finding(), "remedy": ""}]}))
-        self.assert_incomplete(json.dumps({**CLEAN, "findings": [finding(severity="critical")]}))
-        self.assert_incomplete(json.dumps({**CLEAN, "findings": [finding(severity="major")]}), phase="refactor")
-        self.assert_incomplete(json.dumps({**CLEAN, "findings": [finding(severity="proposal")]}), phase="plan")
-
+class StatusTests(unittest.TestCase):
     def test_status_follows_coverage_and_severity(self):
-        status = lambda payload, phase="implementation": cross_review.review_status(
-            cross_review.validate_output(json.dumps(payload), phase))
+        status = lambda payload: cross_review.review_status(cross_review.parse_output(json.dumps(payload)))
         self.assertEqual(status(CLEAN), "clean")
         self.assertEqual(status({**CLEAN, "findings": [finding(severity="info")]}), "clean")
         self.assertEqual(status({**CLEAN, "findings": [finding(severity="minor")]}), "changes_requested")
-        self.assertEqual(status({**CLEAN, "findings": [finding(severity="proposal")]}, "refactor"), "changes_requested")
+        self.assertEqual(status({**CLEAN, "findings": [finding(severity="proposal")]}), "changes_requested")
         self.assertEqual(status({**CLEAN, "coverage": "partial"}), "incomplete")
-
-    def test_schema_is_strict_and_phase_specific(self):
-        schema = cross_review.output_schema("refactor")
-        item = schema["properties"]["findings"]["items"]
-        self.assertFalse(schema["additionalProperties"])
-        self.assertFalse(item["additionalProperties"])
-        self.assertEqual(sorted(item["required"]), sorted(item["properties"]))
-        self.assertEqual(item["properties"]["severity"]["enum"], ["proposal"])
 
 
 class CodexReviewTests(ReviewTestCase):
@@ -225,7 +187,7 @@ class CodexReviewTests(ReviewTestCase):
         for flag in ("--model", "--effort"):
             args = {"--model": "gpt-test", "--effort": "high", flag: "  "}
             with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-                cross_review.main(["--provider", "codex", "--phase", "plan", "--handoff", str(self.handoff), "--out", str(self.out),
+                cross_review.main(["--provider", "codex", "--handoff", str(self.handoff), "--out", str(self.out),
                                    "--cli", str(self.cli), "--repo", str(self.repo), *sum(args.items(), ())])
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.out / "report.json").exists())
@@ -235,7 +197,7 @@ class CodexReviewTests(ReviewTestCase):
         report = self.review({"last_message": "{\"findings\": [", "events": COMPLETED})
         self.assertEqual(report["status"], "incomplete")
         self.assertEqual(report["findings"], [])
-        self.assertIn("failed validation", report["diagnostic"])
+        self.assertIn("not JSON", report["diagnostic"])
         self.assertIsNotNone(report["usage"])
 
     def test_missing_final_message_does_not_reuse_a_stale_one(self):
@@ -256,7 +218,7 @@ class CodexReviewTests(ReviewTestCase):
     def test_missing_cli_fails_naming_the_prerequisite(self):
         # Failure mode 4.
         self.scenario_path.write_text("{}")
-        report = cross_review.run_review("codex", "plan", self.handoff, self.out, "gpt-test", "high", self.repo,
+        report = cross_review.run_review("codex", self.handoff, self.out, "gpt-test", "high", self.repo,
                                          str(self.root / "absent"))
         self.assertEqual(report["status"], "failed")
         self.assertIn("Codex CLI not found", report["diagnostic"])

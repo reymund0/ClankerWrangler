@@ -24,7 +24,7 @@ RETIRED_ROLE_NAMES=(clanker-architect clanker-backend-developer clanker-data-eng
     clanker-ux-designer clanker-documentation-writer clanker-product-engineer clanker-cross-review clanker-claude-cross-review)
 RETIRED_PATHS=(
     "skills/$ORCHESTRATION_NAME/scripts" "skills/$ORCHESTRATION_NAME/routing" "skills/$ORCHESTRATION_NAME/editor"
-    agents/clanker-orchestration-worker.md backups/orchestration-nation
+    agents/clanker-orchestration-worker.md backups/orchestration-nation "skills/$ORCHESTRATION_NAME/host.json"
 )
 
 copy_safe_file() {
@@ -205,8 +205,6 @@ install_orchestration_bundle() {
     done
     copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$references_dir/host.md" "host reference")" \
         "$HOSTS_SOURCE/$host_name/host.md"
-    copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/host.json" "host configuration")" \
-        "$HOSTS_SOURCE/$host_name/host.json"
     if [[ "$agent_name" == "Codex" ]]; then
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
@@ -307,7 +305,7 @@ if [[ ! -f "$GLOBAL_RULES_SOURCE" ]]; then
     exit 1
 fi
 
-orchestration_sources=("$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json")
+orchestration_sources=("$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/codex/host.md")
 for role in "${ROLE_NAMES[@]}"; do
     orchestration_sources+=("$SUBAGENTS_SOURCE/$role.md" "$SUBAGENTS_SOURCE/claude/$role.md" "$SUBAGENTS_SOURCE/codex/$role.toml")
 done

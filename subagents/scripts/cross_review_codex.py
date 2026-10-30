@@ -10,7 +10,6 @@ from __future__ import annotations
 import json
 import os
 import pathlib
-import re
 import shutil
 import subprocess
 from typing import Any
@@ -42,8 +41,6 @@ def preflight(cli: str, repo: pathlib.Path) -> None:
 def command(cli: str, repo: pathlib.Path, model: str, effort: str, schema_path: pathlib.Path,
             output_path: pathlib.Path) -> list[str]:
     """The review command; the prompt goes on standard input."""
-    if not re.fullmatch(r"[a-z][a-z0-9_-]*", effort):
-        raise ReviewError(f"Codex reasoning effort {effort!r} is not a valid effort name")
     return [cli, "exec", "--ephemeral", "--sandbox", "read-only", "--cd", str(repo),
             "--model", model, "--config", f'model_reasoning_effort="{effort}"',
             "--disable", "multi_agent", "--disable", "multi_agent_v2",

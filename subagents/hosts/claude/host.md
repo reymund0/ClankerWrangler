@@ -1,7 +1,7 @@
 # Claude Code Host Reference
 
-How the orchestrator and `clanker-dual-review` dispatch on Claude Code. `host.json` names the
-host (`claude`) and the cross-review provider (`codex`).
+How the orchestrator and `clanker-dual-review` dispatch on Claude Code. The cross-review
+provider is `codex`.
 
 ## Native dispatch
 
@@ -13,7 +13,7 @@ Start each role with the Agent tool and the installed agent definition:
 | Reviewer | `clanker-reviewer` | `reviewer` |
 | Functional Review | `clanker-functional-review` | `functional` |
 
-Pass the route's model and effort, as recorded in the run's start event, as the Agent call's
+Pass the route's model and effort from `routes.jsonc` as the Agent call's
 `model` and `effort` arguments, always explicitly. If the Agent tool does not accept the routed
 model or effort, report that at run start and do not claim the setting.
 

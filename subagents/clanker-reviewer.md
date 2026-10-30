@@ -31,7 +31,7 @@ unreadable, stop and report that instead of guessing.
   their own result, and risks the plan does not address.
 - **code:** follow `clanker-code-review` in its caller-supplied-scope mode.
 - **refactor:** follow `clanker-refactor-review` in its caller-supplied-scope mode. Every finding
-  is a proposal.
+  is a proposal; its summary states how large the change is and the estimated gain.
 
 At every gate, report a finding only with a concrete failure or, for proposals, a concrete
 benefit. Do not suggest new mechanisms, safeguards, state, or configuration unless the change
@@ -42,9 +42,9 @@ it is fixed, and report only new problems besides that.
 
 ## Reply
 
-Reply inline. Do not write a report file. If your prompt includes an output schema, that schema
-overrides the format below. Otherwise return a JSON array of findings followed by a short
-coverage note:
+Reply inline. Do not write a report file. If your prompt includes an output schema, reply in
+that shape; the field rules below still apply. Otherwise return a JSON array of findings
+followed by a short coverage note:
 
 ```json
 [{"id": "N1", "severity": "major", "location": "path:line or artifact section",

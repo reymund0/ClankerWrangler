@@ -54,20 +54,18 @@ CHAT 1  clanker-design-discussion
                                                v
                                       runs.csv row (chat=design, done)
 CHAT 2  clanker-orchestration-nation
-  finalized? (tasks.md, validate --strict) --no--> stop
-      |
-  size check --small--> recommend no orchestration, stop (user may insist)
+  finalized? (tasks.md) --no--> stop
       v
   Implementor --> clanker-dual-review (code, <=2 rounds) --fixes--> Implementor
                      | pass
                      v
                   Functional Review (if runnable)
-                     | defects: Implementor -> fresh code gate (<=2 rounds)
-                     |          -> recheck; <=2 such cycles
+                     | defects: Implementor -> code gate -> recheck;
+                     |          ask the user after 2 rechecks
                      v pass/skipped
-                  clanker-dual-review (refactor, 1 round) --> user accepts/skips
+                  clanker-dual-review (refactor, 1 round) --> proposal table
                      v
-                  final CSV rows --> handover with accepted proposals listed
+                  final CSV rows --> handover with the proposal table
 ```
 
 The roles are:
@@ -78,17 +76,11 @@ The roles are:
 - **Functional Review:** read-only toward source. It exercises the running app and writes evidence only under `.clanker/functional/<run>/`.
 - **No nesting:** subagents never start subagents.
 
-The Implementor profile includes a **high-risk areas** section covering:
-
-- security: authentication and access control, secrets, input validation, trust boundaries
-- migrations and data integrity
-- deploy and rollback
-
 *Alternative considered:* keeping two or three specialist checklists as optional lenses. Rejected because the ledger showed labels did not change outcomes.
 
 ### Small-work rule
 
-The orchestrator applies a fix itself when it is small and already understood, for example a five-line review fix. Before dispatching the Implementor, it estimates the whole job. If the job can be finished directly without filling the orchestrator's context, it stops and recommends doing it without orchestration; the user can tell it to continue anyway. The orchestrator delegates wide code reading, long test/fix loops, and browser sessions.
+The orchestrator applies a fix itself when it is small and already understood, for example a five-line review fix. The orchestrator delegates wide code reading, long test/fix loops, and browser sessions.
 
 ### Dual review as its own skill
 
@@ -110,10 +102,10 @@ Each round runs these steps:
 Rules for passing and rounds:
 
 - A plan or code gate passes only when both reviewers completed the latest round, every accepted finding is fixed and checked, and every user decision is answered.
-- The refactor gate passes once every proposal has a recorded accept or skip. Accepted proposals are listed at handover, not implemented.
+- The refactor gate passes once its proposal table is shown: one merged list with source, complexity, estimated gain, and recommendation. No take/skip is asked; proposals are not implemented.
 - If a reviewer failed or was incomplete, no gate passes unless the user explicitly authorizes proceeding.
 - The plan and code gates allow two rounds; round two covers the fixes and the code they touched. The refactor gate is one round.
-- If findings are still open after round two, the caller stops with `stopped-at-limit` unless the user authorizes proceeding. A fix the user takes after round two is checked by the caller's own verification, not a third round.
+- If findings are still open after round two, the caller lists them and asks the user how to proceed. A fix the user takes after round two is checked by the caller's own verification, not a third round.
 
 `clanker-refactor-review` and `clanker-code-review` gain a caller-supplied-scope mode. In that mode they review the supplied scope, including uncommitted work, and return their output inline instead of writing `.clanker/refactor/*.md`.
 
@@ -123,7 +115,7 @@ Rules for passing and rounds:
 
 If the change can't be exercised through a browser, CLI, or API, Functional Review is skipped with the reason. Functional findings are triaged like review findings.
 
-Each fix cycle runs Implementor → a fresh code gate (up to two rounds) → a Functional Review recheck. At most two cycles are allowed, so the worst case is six code rounds per run. If defects remain after the second recheck, the orchestrator stops with `stopped-at-limit`.
+Defects go Implementor → a code gate over the fixes → a Functional Review recheck. If defects remain after two rechecks, the orchestrator lists them and asks the user.
 
 ### Routes: one hand-edited file per host
 
@@ -163,12 +155,12 @@ The Codex host shares the role instruction files and `clanker-dual-review`. The 
 
 ### Cross-review launcher rewrite
 
-The launcher is a new, smaller Python core with two adapters, `codex` and `claude`, and three phases, `plan`, `implementation`, and `refactor`.
+The launcher is a new, smaller Python core with two adapters, `codex` and `claude`, and no phases; the handoff names the gate.
 
 - **Preflight:** the CLI is present and logged in; no login attempts or billing changes.
 - **Handoff:** no evidence packet and no built-in criteria. The caller writes one `handoff.md` per round naming the gate, the Reviewer role file and criteria skill, the base, the files to start from, and round-two notes. Both reviewers get the same one-line prompt, "Read the handoff at <path>", and read the diff and any further files from the repository themselves, starting from the listed files and ignoring `.clanker/`. The launcher adds only the read-only note and the output schema. Codex reads the role file from its own installed copy of `clanker-dual-review`, since the installers install it on both hosts. This follows the common pattern of starting a reviewer from the change and letting it explore narrowly, rather than pasting files into the prompt or letting it crawl the repository.
 - **Invocation:** read-only, with a 45-minute default limit.
-- **Findings:** validated JSON with IDs unique per report, severity `blocking`, `major`, `minor`, `info`, or `proposal`, a location, and a remedy.
+- **Findings:** JSON in the schema the reviewer CLI enforces, with severity `blocking`, `major`, `minor`, `info`, or `proposal`, a location, and a remedy.
 - **Report:** `report.json` with an honest status, plus requested and observed settings and usage.
 
 Before writing code, skim the old launcher tests for the 5–6 failure modes that matter most, such as malformed reviewer output, process timeouts, effort handling, and preflight diagnostics. Cover those with new tests.
@@ -183,11 +175,11 @@ Each run, design or orchestration, writes one append-only event log at `.clanker
 - `usage`
 - `end` (outcome)
 
-The design chat's run ends when its plan gate passes (`done`), stops at the limit, or is blocked.
+The design chat's run ends when its plan gate passes (`done`) or the user stops it (`blocked`).
 
-Roles use the routes recorded at start; a `routes.jsonc` edit applies only to new runs. A run that dies partway is not resumed; start a new run.
+Each dispatch reads `routes.jsonc`. A run that dies partway is not resumed; start a new run.
 
-Outcomes are `done`, `stopped-at-limit`, `blocked`, or `small-job-declined`.
+Outcomes are `done` or `blocked`.
 
 At the end, a helper script, `clanker_log.py`, reads the log and appends the final rows with Python's `csv` writer. If a write fails, it says so.
 
@@ -227,11 +219,10 @@ Cleanup uses a hard-coded list of retired installed names: old specialist refere
 
 - [A launcher rewrite reintroduces bugs the old tests caught] → Cover the handful of failure modes that matter most with new tests.
 - [Read-only roles still have Bash] → Edit tools are removed from their agent definitions, and their instructions forbid writes. An occasional stray edit would show up in review.
-- [Up to six code rounds per run is costly on hard changes] → The user chose a fresh budget per cycle; the two-cycle cap bounds it, and `runs.csv` shows actual round counts.
 - [The Implementor on a cheap model struggles] → The user can raise its route in `routes.jsonc`; the orchestrator never switches models mid-run.
 - [One writer is slower than parallel writers on large multi-area changes] → Accepted. Large independent pieces go to separate sessions.
 - [Deleting installed files removes user edits to them] → Accepted per user direction; the installer prints what it removed.
-- [The Codex host's native dispatch may not support per-subagent model, effort, or thread continuation] → Validate in the Codex task group. If unsupported, report the limitation at run start.
+- [The Codex host's native dispatch may not support per-subagent model, effort, or thread continuation] → Validate in the Codex task group.
 
 ## Migration Plan
 

@@ -11,26 +11,26 @@ Every design or orchestration chat run SHALL keep one append-only event log at `
 - **WHEN** a finding is recorded as accepted and later fixed by the Implementor
 - **THEN** the log has the original `finding` event and a later event recording the fix, and neither line is rewritten
 
-#### Scenario: Small job declined
-- **WHEN** the orchestrator stops at the small-job check
-- **THEN** the run log contains a start event and an end event with outcome `small-job-declined`
+#### Scenario: Run stopped by the user
+- **WHEN** the user stops a run after a gate's second round
+- **THEN** the run log contains a start event and an end event with outcome `blocked`
 
 ### Requirement: Logged run content
-The run log SHALL record the run identity, chat kind, host, change, the model and effort per role at start, gate and round starts and results, each finding and every change to its triage or resolution, user decisions, functional cycles, usage as it becomes available, and the end outcome.
+The run log SHALL record the run identity, chat kind, host, change, the model and effort per role at start, gate and round starts and results, each finding and every change to its triage or resolution, user decisions, functional rounds, usage as it becomes available, and the end outcome.
 
 #### Scenario: User decision recorded
 - **WHEN** the user skips a `user-decision` finding
 - **THEN** an event records the finding ID and the `skip` decision
 
 ### Requirement: Run outcomes
-A run SHALL end with one outcome: `done`, `stopped-at-limit`, `blocked`, or `small-job-declined`.
+A run SHALL end with one outcome: `done`, or `blocked` when the user stops it.
 
-#### Scenario: Round limit reached
-- **WHEN** a gate stops after its second round with findings open
-- **THEN** the run ends with outcome `stopped-at-limit`
+#### Scenario: User stops at the round limit
+- **WHEN** findings remain after a gate's second round and the user chooses to stop
+- **THEN** the run ends with outcome `blocked`
 
 ### Requirement: Design run ends at the plan gate
-The design chat's run SHALL end when the plan gate passes, with outcome `done`, or when it stops at its round limit or is blocked, with that outcome.
+The design chat's run SHALL end when the plan gate passes, with outcome `done`, or with `blocked` when the user stops it.
 
 #### Scenario: Plan gate passes
 - **WHEN** the plan gate passes in the design chat
@@ -60,9 +60,9 @@ The run table SHALL record each role's model and effort as `model/effort` from r
 ### Requirement: Findings table columns
 Each `findings.csv` row SHALL record the run, gate, round, finding ID, source, severity (`blocking`, `major`, `minor`, `info`, or `proposal`), summary, triage, the user's decision when asked, what fixed it, and the reject reason when rejected.
 
-#### Scenario: User skips a refactor proposal
-- **WHEN** the user skips a refactor proposal
-- **THEN** its row has severity `proposal`, triage `user-decision`, and `user_decision` `skip`
+#### Scenario: Refactor proposal accepted
+- **WHEN** the caller confirms a refactor proposal
+- **THEN** its row has severity `proposal`, triage `accept`, and no `user_decision`
 
 ### Requirement: Usage from runtime evidence
 Token and time values SHALL come from runtime evidence, such as subagent completion usage, transcripts, and cross-review reports. Values that are not available SHALL stay empty and SHALL NOT be estimated.

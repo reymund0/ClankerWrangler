@@ -109,7 +109,8 @@ class FinalRowsTests(LogTestCase):
         self.assertEqual(list(row), list(clanker_log.RUNS_COLUMNS))
         self.assertEqual((row["outcome"], row["code_rounds"], row["small_fixes_by_orchestrator"]), ("done", "1", "1"))
         self.assertEqual(row["reviewer_model"], "sonnet/high")
-        self.assertEqual(row["implementor_model"], "haiku/medium (req)")
+        route = clanker_log.read_routes(TEMPLATE, "claude", clanker_log.ROLES)["implementor"]
+        self.assertEqual(row["implementor_model"], f"{route['model']}/{route['effort']} (req)")
         self.assertEqual((row["cross_review_seconds"], row["cross_review_tokens"]), ("124.3", ""))
         findings = self.rows("findings.csv")
         self.assertEqual(list(findings[0]), list(clanker_log.FINDINGS_COLUMNS))
@@ -117,7 +118,7 @@ class FinalRowsTests(LogTestCase):
                          [("N1", "accept", "orchestrator", ""), ("N2", "reject", "", "Not reproducible")])
         self.assertEqual(findings[0]["summary"], 'Has "quotes", commas')
         second = self.start(change="other")
-        clanker_log.finish(self.repo, second, "small-job-declined")
+        clanker_log.finish(self.repo, second, "blocked")
         self.assertEqual([r["run"] for r in self.rows("runs.csv")], [run, second])
         with self.assertRaisesRegex(clanker_log.LogError, "already ended"):
             clanker_log.finish(self.repo, second, "done")

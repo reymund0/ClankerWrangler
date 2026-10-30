@@ -6,7 +6,7 @@
 {
   "host": "claude",
   "roles": {
-    "implementor":  {"model": "haiku",       "effort": "medium"},
+    "implementor":  {"model": "haiku",       "effort": "high"},
     "reviewer":     {"model": "sonnet",      "effort": "high"},
     "functional":   {"model": "sonnet",      "effort": "medium"},
     "cross-review": {"model": "gpt-6.1-sol", "effort": "high"}

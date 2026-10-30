@@ -23,22 +23,11 @@ A run SHALL have at most one active Implementor thread, and it SHALL be the only
 - **THEN** the orchestrator sends them to the existing Implementor thread instead of starting another writer
 
 ### Requirement: Finalized change required
-The orchestrator SHALL implement only an OpenSpec change that has `tasks.md` and passes `openspec validate --strict`. When either is missing, it SHALL stop and name what is missing, unless the user explicitly tells it to proceed.
+The orchestrator SHALL implement only an OpenSpec change that has `tasks.md`. When it is missing, the orchestrator SHALL stop, unless the user explicitly tells it to proceed.
 
 #### Scenario: No tasks yet
 - **WHEN** the user starts orchestration and the change has no `tasks.md`
 - **THEN** the orchestrator stops and points the user to the design chat
-
-### Requirement: Small-job check
-Before dispatching the Implementor, the orchestrator SHALL estimate the whole job. When the job is small enough to finish directly without filling its context, it SHALL stop and recommend implementing without orchestration, unless the user explicitly asks to continue.
-
-#### Scenario: Small change requested through orchestration
-- **WHEN** the finalized change touches a handful of lines in one area
-- **THEN** the orchestrator recommends doing it without orchestration, records the run as `small-job-declined`, and dispatches nothing
-
-#### Scenario: User insists
-- **WHEN** the orchestrator declines a small job and the user explicitly asks to continue
-- **THEN** the orchestrator proceeds with orchestration
 
 ### Requirement: Orchestrator handles small fixes
 The orchestrator SHALL apply a fix itself when it is small and already understood, such as a review finding needing a few lines. It SHALL delegate work that would fill its own context, including wide code reading, long test/fix loops, and browser sessions.
@@ -46,13 +35,6 @@ The orchestrator SHALL apply a fix itself when it is small and already understoo
 #### Scenario: Five-line review fix
 - **WHEN** an accepted finding needs a five-line change the orchestrator already understands
 - **THEN** the orchestrator applies it and records `fixed_by` as `orchestrator`
-
-### Requirement: Implementor high-risk guidance
-The Implementor instructions SHALL include a high-risk section covering security (authentication and access control, secrets, input validation, trust boundaries), migrations and data integrity, and deploy/rollback.
-
-#### Scenario: Change touches authentication
-- **WHEN** the Implementor's assignment touches access control
-- **THEN** its instructions direct it to apply the security guidance and report the security checks it ran
 
 ### Requirement: Worker handoff contract
 Each Implementor handoff SHALL state changed paths, exact checks and results, unrun checks with reasons, and open concerns. The orchestrator SHALL verify integrated results itself and SHALL NOT mark an OpenSpec task complete from a worker claim alone.
@@ -72,26 +54,26 @@ After the code gate passes, the orchestrator SHALL start Functional Review when 
 - **WHEN** the code gate passes for a UI change and the app can be started
 - **THEN** Functional Review exercises the affected flows and returns findings with steps, observations, and evidence paths
 
-### Requirement: Functional fix cycles
-Accepted Functional Review defects SHALL go to the Implementor, then through a fresh code gate of up to two rounds, then a Functional Review recheck. The run SHALL allow at most two such fix cycles; if defects remain after the second recheck, the orchestrator SHALL stop and report them to the user.
+### Requirement: Functional fixes
+Accepted Functional Review defects SHALL go to the Implementor, then through a code gate over the fixes, then a Functional Review recheck. If defects remain after two rechecks, the orchestrator SHALL list them and ask the user how to proceed.
 
-#### Scenario: One fix cycle
-- **WHEN** Functional Review finds a defect after the initial code gate used two rounds
-- **THEN** the fix goes through a new code gate with up to two rounds, then Functional Review rechecks the affected flows
+#### Scenario: Defect fixed
+- **WHEN** Functional Review finds a defect
+- **THEN** the fix goes through a code gate, then Functional Review rechecks the affected flows
 
-#### Scenario: Defects persist after two cycles
-- **WHEN** Functional Review still finds defects after the second fix cycle
-- **THEN** the orchestrator stops, lists the open defects, and records the run as `stopped-at-limit`
+#### Scenario: Defects persist after two rechecks
+- **WHEN** Functional Review still finds defects after the second recheck
+- **THEN** the orchestrator lists the open defects and asks the user how to proceed
 
 ### Requirement: Refactor gate and handover
-After Functional Review passes or is skipped, the orchestrator SHALL run one refactor-gate round, present the consolidated proposals for the user to accept or skip, record the choices, and hand the thread to the user with the accepted proposals listed. It SHALL NOT implement them, commit, push, or open a pull request.
+After Functional Review passes or is skipped, the orchestrator SHALL run one refactor-gate round and hand the thread to the user with the refactor proposal table. It SHALL NOT implement the proposals, commit, push, or open a pull request.
 
 #### Scenario: Run completes
-- **WHEN** the user has accepted or skipped each refactor proposal
-- **THEN** the orchestrator writes the final log rows and ends with the accepted proposals listed for the user to act on
+- **WHEN** the refactor gate has produced its proposal table
+- **THEN** the orchestrator writes the final log rows and hands over with the table, without waiting for decisions on the proposals
 
 ### Requirement: Shared role guidance across hosts
-The Claude and Codex hosts SHALL use the same orchestrator, role instructions, and dual-review procedure. Only native dispatch and the external reviewer SHALL differ by host. When a host cannot apply a routed model or effort, the orchestrator SHALL report the limitation rather than claim the setting.
+The Claude and Codex hosts SHALL use the same orchestrator, role instructions, and dual-review procedure. Only native dispatch and the external reviewer SHALL differ by host.
 
 #### Scenario: Codex-hosted run
 - **WHEN** the orchestrator runs under Codex

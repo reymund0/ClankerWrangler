@@ -26,7 +26,7 @@ $RetiredRoleNames = @("clanker-architect", "clanker-backend-developer", "clanker
     "clanker-performance-engineer", "clanker-qa-engineer", "clanker-test-engineer", "clanker-ui-developer", "clanker-ui-ux-reviewer",
     "clanker-ux-designer", "clanker-documentation-writer", "clanker-product-engineer", "clanker-cross-review", "clanker-claude-cross-review")
 $RetiredPaths = @("skills\$OrchestrationSkillName\scripts", "skills\$OrchestrationSkillName\routing", "skills\$OrchestrationSkillName\editor",
-    "agents\clanker-orchestration-worker.md", "backups\orchestration-nation")
+    "agents\clanker-orchestration-worker.md", "backups\orchestration-nation", "skills\$OrchestrationSkillName\host.json")
 
 function Copy-SafeFile {
     param(
@@ -216,8 +216,6 @@ function Install-OrchestrationNationBundle {
     }
     $hostReference = Assert-NoReparsePath -Path (Join-Path $referencesDirectory "host.md") -Root $bundleDirectory -Description "host reference"
     Copy-SafeFile -DestinationPath $hostReference -SourcePath (Join-Path $HostsSource "$hostName\host.md")
-    $hostConfiguration = Assert-NoReparsePath -Path (Join-Path $bundleDirectory "host.json") -Root $bundleDirectory -Description "host configuration"
-    Copy-SafeFile -DestinationPath $hostConfiguration -SourcePath (Join-Path $HostsSource "$hostName\host.json")
 
     if ($AgentName -eq "Codex") {
         New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
@@ -322,8 +320,7 @@ if (-not (Test-Path -LiteralPath $GlobalRulesSource -PathType Leaf)) {
     throw "Global rules file not found: $GlobalRulesSource"
 }
 
-$orchestrationSources = @((Join-Path $HostsSource "claude\host.md"), (Join-Path $HostsSource "claude\host.json"),
-    (Join-Path $HostsSource "codex\host.md"), (Join-Path $HostsSource "codex\host.json"))
+$orchestrationSources = @((Join-Path $HostsSource "claude\host.md"), (Join-Path $HostsSource "codex\host.md"))
 foreach ($role in $RoleNames) {
     $orchestrationSources += @((Join-Path $SubagentsSource "$role.md"), (Join-Path $SubagentsSource "claude\$role.md"),
         (Join-Path $SubagentsSource "codex\$role.toml"))

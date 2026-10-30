@@ -25,25 +25,25 @@ The reviewer SHALL run without permission to edit files, run delegated agents, o
 - **WHEN** the reviewer tries to write a repository file
 - **THEN** the CLI denies the write under the launcher's read-only settings
 
-### Requirement: Review phases
-The launcher SHALL support `plan`, `implementation`, and `refactor` phases. The criteria SHALL come from the Reviewer role file and criteria skill that the handoff names, read from the reviewer's own installed skills, not from criteria built into the launcher. `plan` SHALL evaluate artifacts without treating missing code as a defect; `implementation` SHALL evaluate correctness, regressions, requirement coverage, and security; `refactor` SHALL return improvement proposals rather than defects.
+### Requirement: Criteria from the handoff
+The launcher SHALL NOT take a phase or build in criteria. The gate and criteria SHALL come from the handoff and the Reviewer role file and criteria skill it names, read from the reviewer's own installed skills.
 
-#### Scenario: Refactor phase
-- **WHEN** the launcher runs with phase `refactor`
-- **THEN** the reviewer returns proposals with locations and rationale, and the report labels them as proposals
+#### Scenario: Refactor gate handoff
+- **WHEN** the handoff names the refactor gate
+- **THEN** the reviewer returns proposals with severity `proposal`, following the role file
 
 ### Requirement: Shared handoff file
-The launcher SHALL take the caller's handoff file by path (`--handoff`) and SHALL NOT build an evidence packet or its own scope description. Its prompt SHALL tell the reviewer to read the handoff at that path, plus the read-only note and the output schema it validates. The reviewer SHALL read the changes against the base from the repository itself, starting from the files the handoff lists, and MAY read other repository files as needed. When the handoff path is not a readable file, the launcher SHALL return `failed` naming the path and make no model call.
+The launcher SHALL take the caller's handoff file by path (`--handoff`) and SHALL NOT build an evidence packet or its own scope description. Its prompt SHALL tell the reviewer to read the handoff at that path, plus the read-only note and the output schema. The reviewer SHALL read the changes against the base from the repository itself, starting from the files the handoff lists, and MAY read other repository files as needed. When the handoff path is not a readable file, the launcher SHALL return `failed` naming the path and make no model call.
 
 #### Scenario: Diff against base with uncommitted work
 - **WHEN** an implementation review is requested with a handoff naming a base and the working tree has uncommitted and untracked changes
 - **THEN** the prompt points the reviewer at the handoff, and the reviewer inspects the committed diff from that base, the uncommitted diff, and the untracked files outside `.clanker/` itself
 
 ### Requirement: Structured findings and honest status
-The launcher SHALL validate reviewer output against a schema and write a `report.json` with a status of `clean`, `changes_requested`, `incomplete`, or `failed`, the findings, coverage limits, requested settings, and observed settings and usage when the CLI reports them. Each finding SHALL have an ID unique within the report, a severity of `blocking`, `major`, `minor`, `info`, or `proposal`, a location, and a suggested remedy. Invalid output SHALL produce `incomplete`, never `clean`.
+The launcher SHALL pass an output schema to the reviewer CLI, which enforces it, and write a `report.json` with a status of `clean`, `changes_requested`, `incomplete`, or `failed`, the findings, coverage limits, requested settings, and observed settings and usage when the CLI reports them. Each finding SHALL have an ID unique within the report, a severity of `blocking`, `major`, `minor`, `info`, or `proposal`, a location, and a suggested remedy. Output that is not JSON or has no findings list SHALL produce `incomplete`, never `clean`.
 
 #### Scenario: Malformed reviewer output
-- **WHEN** the reviewer returns output that fails schema validation
+- **WHEN** the reviewer returns output that is not JSON
 - **THEN** the report status is `incomplete` with a diagnostic, and no findings are invented
 
 #### Scenario: Unreported observed settings
