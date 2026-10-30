@@ -57,6 +57,7 @@
 - [x] 6.2 Confirm the current Codex collaboration-tool parameters for per-subagent model and effort and for thread continuation (the design's open question); record the answer in `subagents/hosts/codex/host.md`
 - [x] 6.3 Rewrite `subagents/hosts/codex/host.md` and `host.json` for the three roles, and add the Codex `routes.jsonc` template; verify by reading them against the design
 - [x] 6.4 Update the installers' Codex path to install both skills, the role references, and the Codex `routes.jsonc`; verify by installing to a temporary Codex root
+- [x] 6.5 Add the three Codex custom agents (`clanker-implementor`, `clanker-reviewer`, `clanker-functional-review`) mirroring the Claude agent definitions, install them to `<codex-root>/agents/`, and spawn by that name in the Codex host reference; verify by installing to a temporary Codex root and spawning one installed agent in a real Codex session
 
 ## 7. Integration
 

@@ -159,7 +159,7 @@ The installer writes `clanker-implementor`, `clanker-reviewer`, and `clanker-fun
 
 ### Codex host
 
-The Codex host shares the role instruction files and `clanker-dual-review`. Dispatch uses Codex's native collaboration tools, with the role instruction path passed in the assignment. The external reviewer is the Claude Code CLI adapter. It is built as the final task group.
+The Codex host shares the role instruction files and `clanker-dual-review`. The installer writes three thin Codex custom agents, `~/.codex/agents/clanker-{implementor,reviewer,functional-review}.toml`, mirroring the Claude agent definitions: each names the role and points to its installed role file. Dispatch uses Codex's native collaboration tools with that agent name and the routed model and effort. Codex subagents inherit the parent's sandbox and a custom agent cannot change it, so the read-only roles stay read-only by instruction on Codex. The external reviewer is the Claude Code CLI adapter. It is built as the final task group.
 
 ### Cross-review launcher rewrite
 
@@ -219,7 +219,7 @@ findings.csv run, gate (plan|code|functional|refactor), round, id,
 - `clanker-dual-review` with the launcher and `clanker_log.py`
 - the existing standalone skills
 - `routes.jsonc` if absent
-- on Claude, the three agent definitions
+- the three role agent definitions (Claude agent files, Codex custom agents)
 
 Cleanup uses a hard-coded list of retired installed names: old specialist references, `clanker-cross-review.md`, the `clanker-orchestration-worker` agent, the routing helpers and policy, the editor build, the old launchers, the legacy skills, and the old `backups/orchestration-nation` handling. The installer deletes those paths without backups and prints each one. The list is needed because the source files that drove the old cleanup are deleted.
 

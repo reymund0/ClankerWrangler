@@ -34,7 +34,7 @@ The orchestrator delegates to three roles only: the **Implementor** (the only co
 | Host | Native subagents | External review |
 | --- | --- | --- |
 | Claude Code | Agent tool with `clanker-implementor`, `clanker-reviewer`, `clanker-functional-review` | Codex CLI, logged in with ChatGPT |
-| Codex | Codex collaboration tools | Claude Code CLI |
+| Codex | `spawn_agent` with the same three roles as custom agents in `~/.codex/agents/`; read-only roles are enforced by instructions only | Claude Code CLI, logged in with `claude auth login` |
 
 Each subagent role's model and effort come from one hand-edited file per host, `<agent-root>/clanker/routes.jsonc` (for example `~/.claude/clanker/routes.jsonc`). The installer writes it only when it is missing and never overwrites your edits. The comments at its top hold the commands that list the models and efforts each CLI offers. The orchestrator itself runs on your session's model.
 

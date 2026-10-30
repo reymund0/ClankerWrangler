@@ -15,7 +15,7 @@ $OrchestrationCoordinatorSource = Join-Path $SubagentsSource "$OrchestrationSkil
 $GlobalRulesSource = Join-Path $RepoRoot "global_rules.md"
 $HostsSource = Join-Path $SubagentsSource "hosts"
 $DualReviewSkillName = "clanker-dual-review"
-# The three role references; on Claude each also has an agent definition in subagents\claude\.
+# The three role references; each also has an agent definition in subagents\claude\ (.md) and subagents\codex\ (.toml).
 $RoleNames = @("clanker-implementor", "clanker-reviewer", "clanker-functional-review")
 $DualReviewScripts = @("cross_review.py", "cross_review_codex.py", "cross_review_claude.py", "clanker_log.py")
 $ReviewerRoleSource = Join-Path $SubagentsSource "clanker-reviewer.md"
@@ -222,11 +222,10 @@ function Install-OrchestrationNationBundle {
     if ($AgentName -eq "Codex") {
         New-CodexOpenAIYaml -SkillDirectory $bundleDirectory -SkillName $OrchestrationSkillName
     }
-    if ($AgentName -eq "Claude Code") {
-        foreach ($role in $RoleNames) {
-            $agentDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "agents\$role.md") -Root $AgentRoot -Description "agent definitions"
-            Copy-SafeFile -DestinationPath $agentDestination -SourcePath (Join-Path $SubagentsSource "claude\$role.md")
-        }
+    foreach ($role in $RoleNames) {
+        $agentFile = if ($AgentName -eq "Claude Code") { "claude\$role.md" } else { "codex\$role.toml" }
+        $agentDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "agents\$([System.IO.Path]::GetFileName($agentFile))") -Root $AgentRoot -Description "agent definitions"
+        Copy-SafeFile -DestinationPath $agentDestination -SourcePath (Join-Path $SubagentsSource $agentFile)
     }
 }
 
@@ -326,7 +325,8 @@ if (-not (Test-Path -LiteralPath $GlobalRulesSource -PathType Leaf)) {
 $orchestrationSources = @((Join-Path $HostsSource "claude\host.md"), (Join-Path $HostsSource "claude\host.json"),
     (Join-Path $HostsSource "codex\host.md"), (Join-Path $HostsSource "codex\host.json"))
 foreach ($role in $RoleNames) {
-    $orchestrationSources += @((Join-Path $SubagentsSource "$role.md"), (Join-Path $SubagentsSource "claude\$role.md"))
+    $orchestrationSources += @((Join-Path $SubagentsSource "$role.md"), (Join-Path $SubagentsSource "claude\$role.md"),
+        (Join-Path $SubagentsSource "codex\$role.toml"))
 }
 foreach ($orchestrationSource in $orchestrationSources) {
     if (-not (Test-Path -LiteralPath $orchestrationSource -PathType Leaf)) {

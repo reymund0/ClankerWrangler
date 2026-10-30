@@ -5,25 +5,33 @@ How the orchestrator and `clanker-dual-review` dispatch on Codex. `host.json` na
 
 ## Native dispatch
 
-Use Codex's multi-agent tools. Start each role with `spawn_agent`, giving it:
+Use Codex's multi-agent tools and the installed custom agents in `~/.codex/agents/`:
 
-- the assignment as the message, starting with the absolute path of the role file to read:
-  `references/clanker-implementor.md` or `references/clanker-functional-review.md` in the installed
-  `clanker-orchestration-nation` skill (`~/.codex/skills/clanker-orchestration-nation/`), or for
-  the Reviewer only the path of the round's handoff file
+| Role | `agent_type` | Route |
+|---|---|---|
+| Implementor | `clanker-implementor` | `implementor` |
+| Reviewer | `clanker-reviewer` | `reviewer` |
+| Functional Review | `clanker-functional-review` | `functional` |
+
+Each custom agent points its subagent to the installed role file. Start each role with
+`spawn_agent`, giving it:
+
+- `agent_type` from the table
+- the assignment as the message; for the Reviewer, only the path of the round's handoff file
 - `model` and `reasoning_effort` from the role's route, as recorded in the run's start event,
   always explicitly; the routes file is the user's explicit model choice
 - `fork_context: false`, so the subagent starts from the assignment instead of this chat's history
 
 Codex checks each spawn: an unknown model or an effort the model does not support is rejected.
-Report that rejection and stop; never retry on another model.
+Report that rejection and stop; never retry on another model. If an agent type is unknown, stop
+and tell the user to run the installer; do not substitute another agent type.
 
 Limits on Codex:
 
-- There are no per-role agent definitions or per-agent sandboxes, so Reviewer and Functional Review
-  are read-only by their instructions only. Check `git status` after each read-only role returns
-  and report any file it changed.
-- Spawned agents can spawn their own agents; the role files forbid it.
+- Subagents inherit this chat's sandbox, and a custom agent cannot change it, so Reviewer and
+  Functional Review are read-only by their instructions only. Check `git status` after each
+  read-only role returns and report any file it changed.
+- Spawned agents can spawn their own agents; the custom agents and role files forbid it.
 
 ## Continuing the Implementor
 

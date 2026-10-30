@@ -102,7 +102,7 @@ The Claude and Codex hosts SHALL use the same orchestrator, role instructions, a
 - **THEN** it dispatches the same three roles with the same instructions and uses the Claude Code CLI for cross-review
 
 ### Requirement: Package installation
-Both installers SHALL install `clanker-orchestration-nation` with its three role references and `clanker-dual-review`. The Claude installer SHALL also install the three role agent definitions, omitting edit tools from the read-only roles. Installers SHALL delete the installed paths on a fixed list of retired names, without backups, and print each removed path.
+Both installers SHALL install `clanker-orchestration-nation` with its three role references and `clanker-dual-review`. Both installers SHALL also install the three role agent definitions: Claude agent files that omit edit tools from the read-only roles, and Codex custom agents under `~/.codex/agents/`. Installers SHALL delete the installed paths on a fixed list of retired names, without backups, and print each removed path.
 
 #### Scenario: Install over the old package
 - **WHEN** an installer runs where the old specialist references and worker agent are installed
@@ -111,3 +111,7 @@ Both installers SHALL install `clanker-orchestration-nation` with its three role
 #### Scenario: Fresh Claude install
 - **WHEN** the Claude installer runs against an empty agent root
 - **THEN** it installs both skills and three agent definitions, and the Reviewer and Functional Review definitions have no Edit, Write, or NotebookEdit tools
+
+#### Scenario: Fresh Codex install
+- **WHEN** the Codex installer runs against an empty agent root
+- **THEN** it installs both skills and three custom agents under `agents/`, each naming its role and pointing to its installed role file

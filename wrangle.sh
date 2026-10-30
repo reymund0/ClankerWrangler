@@ -12,7 +12,7 @@ ORCHESTRATION_NAME="clanker-orchestration-nation"
 GLOBAL_RULES_SOURCE="$REPO_ROOT/global_rules.md"
 HOSTS_SOURCE="$SUBAGENTS_SOURCE/hosts"
 DUAL_REVIEW_NAME="clanker-dual-review"
-# The three role references; on Claude each also has an agent definition in subagents/claude/.
+# The three role references; each also has an agent definition in subagents/claude/ (.md) and subagents/codex/ (.toml).
 ROLE_NAMES=(clanker-implementor clanker-reviewer clanker-functional-review)
 DUAL_REVIEW_SCRIPTS=(cross_review.py cross_review_codex.py cross_review_claude.py clanker_log.py)
 REVIEWER_ROLE_SOURCE="$SUBAGENTS_SOURCE/clanker-reviewer.md"
@@ -210,12 +210,12 @@ install_orchestration_bundle() {
     if [[ "$agent_name" == "Codex" ]]; then
         new_codex_openai_yaml "$bundle_dir" "$ORCHESTRATION_NAME"
     fi
-    if [[ "$agent_name" == "Claude Code" ]]; then
-        for role in "${ROLE_NAMES[@]}"; do
-            copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/$role.md" "agent definitions")" \
-                "$SUBAGENTS_SOURCE/claude/$role.md"
-        done
-    fi
+    local agent_file
+    for role in "${ROLE_NAMES[@]}"; do
+        if [[ "$agent_name" == "Claude Code" ]]; then agent_file="claude/$role.md"; else agent_file="codex/$role.toml"; fi
+        copy_safe_file "$(assert_safe_bundle_path "$agent_root" "$agent_root/agents/$(basename "$agent_file")" "agent definitions")" \
+            "$SUBAGENTS_SOURCE/$agent_file"
+    done
 }
 
 # The dual-review skill's SKILL.md comes from skills/; add its scripts, the Reviewer role,
@@ -309,7 +309,7 @@ fi
 
 orchestration_sources=("$HOSTS_SOURCE/claude/host.md" "$HOSTS_SOURCE/claude/host.json" "$HOSTS_SOURCE/codex/host.md" "$HOSTS_SOURCE/codex/host.json")
 for role in "${ROLE_NAMES[@]}"; do
-    orchestration_sources+=("$SUBAGENTS_SOURCE/$role.md" "$SUBAGENTS_SOURCE/claude/$role.md")
+    orchestration_sources+=("$SUBAGENTS_SOURCE/$role.md" "$SUBAGENTS_SOURCE/claude/$role.md" "$SUBAGENTS_SOURCE/codex/$role.toml")
 done
 for orchestration_source in "${orchestration_sources[@]}"; do
     if [[ ! -f "$orchestration_source" ]]; then
