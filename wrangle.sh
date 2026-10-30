@@ -217,7 +217,7 @@ install_orchestration_bundle() {
 }
 
 # The dual-review skill's SKILL.md comes from skills/; add its scripts, the Reviewer role,
-# and routes.jsonc (only when absent).
+# and the host's routes file from the repo root (`<host>.routes.jsonc`), overwritten every run.
 install_dual_review_bundle() {
     local agent_name="$1"
     local agent_root="$2"
@@ -232,13 +232,9 @@ install_dual_review_bundle() {
     copy_safe_file "$(assert_safe_bundle_path "$bundle_dir" "$bundle_dir/references/clanker-reviewer.md" "dual-review references")" \
         "$REVIEWER_ROLE_SOURCE"
 
-    routes_source="$HOSTS_SOURCE/$host_name/routes.jsonc"
+    routes_source="$REPO_ROOT/$host_name.routes.jsonc"
     routes_destination="$(assert_safe_bundle_path "$agent_root" "$agent_root/clanker/routes.jsonc" "routes file")"
-    if [[ -e "$routes_destination" || -L "$routes_destination" ]]; then
-        echo "Kept existing routes file: $routes_destination"
-    else
-        copy_safe_file "$routes_destination" "$routes_source"
-    fi
+    copy_safe_file "$routes_destination" "$routes_source"
 
 }
 
@@ -316,7 +312,7 @@ for orchestration_source in "${orchestration_sources[@]}"; do
     fi
 done
 
-for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$HOSTS_SOURCE/claude/routes.jsonc" "$HOSTS_SOURCE/codex/routes.jsonc" \
+for dual_review_source in "$SKILLS_SOURCE/$DUAL_REVIEW_NAME.md" "$REPO_ROOT/claude.routes.jsonc" "$REPO_ROOT/codex.routes.jsonc" \
     "${DUAL_REVIEW_SCRIPTS[@]/#/$SUBAGENTS_SOURCE/scripts/}"; do
     if [[ ! -f "$dual_review_source" ]]; then
         echo "Error: Dual-review source file not found: $dual_review_source" >&2

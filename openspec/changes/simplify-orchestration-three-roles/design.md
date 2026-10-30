@@ -119,7 +119,7 @@ Defects go Implementor → a code gate over the fixes → a Functional Review re
 
 ### Routes: one hand-edited file per host
 
-The routes file is installed as `<agent-root>/clanker/routes.jsonc`, written only when absent. It is JSON plus full-line `//` comments; readers drop comment lines before parsing. The comments carry copy-paste commands for listing the models and efforts each CLI offers locally. Both commands are metadata-only and make no model call:
+The routes file for each host lives at the repo root as `<host>.routes.jsonc` and is copied over `<agent-root>/clanker/routes.jsonc` on every install. It is JSON plus full-line `//` comments; readers drop comment lines before parsing. The comments carry copy-paste commands for listing the models and efforts each CLI offers locally. Both commands are metadata-only and make no model call:
 
 ```jsonc
 // List Codex models and reasoning efforts:

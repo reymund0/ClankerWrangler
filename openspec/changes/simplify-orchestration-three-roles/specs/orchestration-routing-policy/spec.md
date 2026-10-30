@@ -11,12 +11,12 @@ Each host SHALL read role routes from one hand-edited file at `<agent-root>/clan
 - **WHEN** the orchestrator starts the Implementor
 - **THEN** it passes the model and effort from the `implementor` entry of that host's routes file
 
-### Requirement: Installed defaults preserved on reinstall
-Installers SHALL write a default routes file only when none exists, and SHALL leave an existing routes file unchanged.
+### Requirement: Routes edited in the repo
+Each host's routes SHALL be edited in the repository at `<host>.routes.jsonc` in the repo root. Installers SHALL copy it over `<agent-root>/clanker/routes.jsonc` on every run.
 
-#### Scenario: Reinstall after editing routes
-- **WHEN** the user has edited `routes.jsonc` and runs the installer again
-- **THEN** the file is unchanged byte for byte
+#### Scenario: Reinstall after editing routes in the repo
+- **WHEN** the user edits `claude.routes.jsonc` and runs the installer
+- **THEN** `~/.claude/clanker/routes.jsonc` matches the edited file
 
 ### Requirement: Invalid routes block the affected role
 When the routes file is missing, unreadable, not valid JSON, has a `host` that differs from the running host, or has a role entry without a non-empty string `model` and `effort`, any role that needs that entry SHALL be blocked with a message naming the file and key. The orchestrator SHALL NOT substitute a different model silently.

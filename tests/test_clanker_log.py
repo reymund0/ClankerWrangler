@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "subagents" / "scripts"))
 
 import clanker_log  # noqa: E402
 
-TEMPLATE = ROOT / "subagents" / "hosts" / "claude" / "routes.jsonc"
+TEMPLATE = ROOT / "claude.routes.jsonc"
 
 
 class LogTestCase(unittest.TestCase):

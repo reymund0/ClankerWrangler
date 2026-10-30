@@ -247,13 +247,9 @@ function Install-DualReviewBundle {
     $roleDestination = Assert-NoReparsePath -Path (Join-Path $bundleDirectory "references\clanker-reviewer.md") -Root $bundleDirectory -Description "dual-review references"
     Copy-SafeFile -DestinationPath $roleDestination -SourcePath $ReviewerRoleSource
 
-    $routesSource = Join-Path $HostsSource "$hostName\routes.jsonc"
+    $routesSource = Join-Path $RepoRoot "$hostName.routes.jsonc"
     $routesDestination = Assert-NoReparsePath -Path (Join-Path $AgentRoot "clanker\routes.jsonc") -Root $AgentRoot -Description "routes file"
-    if ($null -ne (Get-Item -LiteralPath $routesDestination -Force -ErrorAction SilentlyContinue)) {
-        Write-Host "Kept existing routes file: $routesDestination"
-    } else {
-        Copy-SafeFile -DestinationPath $routesDestination -SourcePath $routesSource
-    }
+    Copy-SafeFile -DestinationPath $routesDestination -SourcePath $routesSource
 }
 
 function Install-AgentLinks {
@@ -331,7 +327,7 @@ foreach ($orchestrationSource in $orchestrationSources) {
     }
 }
 
-$dualReviewSources = @((Join-Path $SkillsSource "$DualReviewSkillName.md"), (Join-Path $HostsSource "claude\routes.jsonc"), (Join-Path $HostsSource "codex\routes.jsonc")) +
+$dualReviewSources = @((Join-Path $SkillsSource "$DualReviewSkillName.md"), (Join-Path $RepoRoot "claude.routes.jsonc"), (Join-Path $RepoRoot "codex.routes.jsonc")) +
     @($DualReviewScripts | ForEach-Object { Join-Path $SubagentsSource "scripts\$_" })
 foreach ($dualReviewSource in $dualReviewSources) {
     if (-not (Test-Path -LiteralPath $dualReviewSource -PathType Leaf)) {
